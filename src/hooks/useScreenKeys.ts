@@ -10,6 +10,7 @@ export function useScreenKeys(onKey: (key: TvKey, e: KeyboardEvent) => void, act
   useEffect(() => {
     if (!active) return;
     const handler = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       let key: TvKey = 'other';
       switch (e.keyCode) {
         case 38: key = 'up'; break;

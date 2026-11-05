@@ -24,7 +24,10 @@ const HeroShowcaseComponent: React.FC<HeroShowcaseProps> = ({
 }) => {
   if (!item) return null;
 
-  const bgUrl = item.backdrop || item.landscape || item.poster || 'assets/placeholder_landscape.png';
+  const rawBg = item.backdrop || item.landscape || item.poster || 'assets/placeholder_landscape.png';
+  const bgUrl = import.meta.env.DEV && /^https?:/.test(rawBg)
+    ? `${location.origin}/stream-proxy?url=${encodeURIComponent(rawBg)}`
+    : rawBg;
   const genres = item.genres && item.genres.length ? item.genres.slice(0, 3).join(' · ') : 'Película · Acción · Aventura';
   const year = item.year && item.year !== '—' ? item.year : '2024';
   const ratingBadge = 'Sin Calificación';

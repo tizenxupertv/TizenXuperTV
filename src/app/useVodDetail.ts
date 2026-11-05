@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { VodDetailFocus } from '../views/VodDetailView';
 import { VodItem } from '../types/vod';
 import { DetailEpisodes } from './types';
@@ -8,6 +8,11 @@ export interface DetailCounts {
   episodesCount: number;
   relatedCount: number;
   isSeries: boolean;
+}
+
+interface DetailHistoryEntry {
+  item: VodItem;
+  focus: VodDetailFocus;
 }
 
 /** VOD detail screen state and the related items shown on it */
@@ -29,7 +34,19 @@ export function useVodDetail(featuredItems: VodItem[], movieItems: VodItem[], se
 
   const [detailEpisodes, setDetailEpisodes] = useState<DetailEpisodes>({ episodes: [] });
 
+  const detailHistoryRef = useRef<DetailHistoryEntry[]>([]);
+  const currentDetailItemRef = useRef<VodItem | null>(null);
+  currentDetailItemRef.current = activeDetailItem;
+  const currentDetailFocusRef = useRef<VodDetailFocus>(detailFocus);
+  currentDetailFocusRef.current = detailFocus;
+
   const handleOpenDetail = useCallback((item: VodItem) => {
+    if (currentDetailItemRef.current && currentDetailItemRef.current.id !== item.id) {
+      detailHistoryRef.current.push({
+        item: currentDetailItemRef.current,
+        focus: currentDetailFocusRef.current
+      });
+    }
     setDetailEpisodes({ episodes: [] });
     setActiveDetailItem(item);
     setDetailFocus({
@@ -39,6 +56,22 @@ export function useVodDetail(featuredItems: VodItem[], movieItems: VodItem[], se
       episodeIndex: 0,
       relatedIndex: 0
     });
+  }, []);
+
+  const handleBackDetail = useCallback(() => {
+    if (detailHistoryRef.current.length > 0) {
+      const prev = detailHistoryRef.current.pop()!;
+      setDetailEpisodes({ episodes: [] });
+      setActiveDetailItem(prev.item);
+      setDetailFocus(prev.focus);
+    } else {
+      setActiveDetailItem(null);
+    }
+  }, []);
+
+  const closeDetail = useCallback(() => {
+    detailHistoryRef.current = [];
+    setActiveDetailItem(null);
   }, []);
 
   // Compute related items for active detail screen
@@ -59,6 +92,8 @@ export function useVodDetail(featuredItems: VodItem[], movieItems: VodItem[], se
     detailCounts,
     setDetailCounts,
     handleOpenDetail,
+    handleBackDetail,
+    closeDetail,
     currentRelatedItems,
     detailEpisodes,
     setDetailEpisodes

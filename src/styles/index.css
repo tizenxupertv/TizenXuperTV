@@ -2918,28 +2918,30 @@ html, body {
 }
 
 /* =============================================================================
-   Universal Search Modal (TV & VOD)
+   Universal Search View (Apple TV Cinema Full-Screen Style)
    ============================================================================= */
 
 .search-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(5, 8, 16, 0.88);
+  width: 100vw;
+  height: 100vh;
+  background: #07090e;
   z-index: 100010;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: min(40px, 4vh) min(60px, 4vw);
+  flex-direction: column;
+  padding: 0;
+  margin: 0;
   box-sizing: border-box;
 }
 
 .search-modal-container {
-  width: min(1360px, 94vw);
-  height: min(840px, 90vh);
-  background: rgba(14, 18, 28, 0.95);
-  border: 1.5px solid rgba(255, 255, 255, 0.14);
-  border-radius: 26px;
-  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.95);
+  width: 100vw;
+  height: 100vh;
+  background: #07090e;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2947,7 +2949,7 @@ html, body {
 }
 
 .search-modal-header {
-  padding: 24px 36px 18px;
+  padding: 24px min(48px, 3.5vw) 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3005,7 +3007,7 @@ html, body {
 }
 
 .search-input-wrapper {
-  margin: 20px 36px 14px;
+  margin: 16px min(48px, 3.5vw) 14px;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -3057,7 +3059,7 @@ html, body {
 .search-results-area {
   flex: 1;
   overflow-y: auto;
-  padding: 0 36px 28px;
+  padding: 0 min(48px, 3.5vw) 28px;
   display: flex;
   flex-direction: column;
 }
@@ -3622,7 +3624,29 @@ html, body {
 
 .pc-keyboard-col {
   width: 300px;
-  padding: 16px 12px 16px 20px;
+  padding: 14px 12px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pc-keyboard-col .pc-search {
+  width: 100%;
+  margin: 0;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.pc-keyboard-col .pc-search.is-focused {
+  border-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.08);
 }
 
 .osk {
@@ -3725,19 +3749,82 @@ html, body {
   border-color: #ffffff;
 }
 
-/* Global search: keyboard on the left, results on the right */
+/* Global search: left panel (input + keyboard), results on the right */
 .search-body {
   flex: 1;
   min-height: 0;
   display: flex;
-  gap: 24px;
+  gap: 28px;
   padding: 0 36px 24px;
 }
 
-.search-body .search-keyboard-wrap {
-  width: 330px;
+.search-left-panel {
+  width: 340px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.search-left-panel .search-input-wrapper {
+  width: 100%;
+  margin: 0;
+  height: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.search-left-panel .search-input-wrapper.is-focused {
+  border-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.06);
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.2);
+}
+
+.search-left-panel .search-keyboard-wrap {
+  width: 100%;
   margin: 0;
   flex-shrink: 0;
+}
+
+.search-placeholder-text {
+  color: #64748b;
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.search-input-submit-btn {
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: #00e5ff;
+  color: #000000;
+  border: none;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.search-input-submit-btn:hover {
+  background: #38bdf8;
+  transform: scale(1.05);
+}
+
+.search-typed-text {
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.pc-search-caret.search-caret-start {
+  margin-left: 0;
+  margin-right: 5px;
 }
 
 .search-body .search-results-area {
@@ -3747,11 +3834,20 @@ html, body {
 }
 
 .search-body .search-vod-grid {
-  grid-template-columns: repeat(4, 1fr);
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 1300px) {
+  .search-body .search-vod-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+  }
 }
 
 .search-body .osk-key {
-  height: 48px;
+  height: 46px;
 }
 
 .osk-key.is-on {
@@ -4337,28 +4433,57 @@ html.xuper-vod-avplay .app-root,
   z-index: 2;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 28px;
-  padding: 44px 60px 0;
+  padding: 38px min(60px, 4vw) 0;
 }
 
 .browse-heading {
   display: flex;
-  align-items: baseline;
-  gap: 18px;
+  flex-direction: column;
+  gap: 4px;
   min-width: 0;
 }
 
 .browse-title {
-  font-size: 40px;
+  font-size: 38px;
   font-weight: 800;
   letter-spacing: -0.5px;
+  color: #ffffff;
+  margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.browse-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.browse-count {
+  font-size: 15px;
+  color: #00e5ff;
+  font-weight: 700;
+}
+
+.browse-subtitle-dot {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.browse-subtitle-desc {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
 .browse-filters {
   display: flex;
+  align-items: center;
   gap: 14px;
   margin-left: auto;
   flex-shrink: 0;
@@ -4373,7 +4498,24 @@ html.xuper-vod-avplay .app-root,
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.08);
   border: 2px solid transparent;
+  cursor: pointer;
   transition: transform 0.15s ease-out, background 0.15s ease-out;
+}
+
+.browse-search-btn {
+  padding: 10px 20px;
+  gap: 8px;
+}
+
+.browse-search-icon {
+  opacity: 0.85;
+  color: #00e5ff;
+}
+
+.browse-filter.is-focused .browse-search-icon {
+  color: #000000;
+  stroke: #000000;
+  opacity: 1;
 }
 
 .browse-filter.is-active {
@@ -4474,3 +4616,372 @@ html.xuper-vod-avplay .app-root,
 .browse-grid.is-loading {
   opacity: 0.45;
 }
+
+/* Donations & Support in ProfileScreen */
+.pf-donate-view {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.pf-donate-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 48px;
+  margin-top: 18px;
+}
+
+.pf-donate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #ffffff;
+  padding: 16px;
+  border-radius: 24px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+  border: 3px solid transparent;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.pf-donate-card.is-focused {
+  border-color: #38bdf8;
+  transform: scale(1.03);
+}
+
+.pf-donate-qr {
+  width: 260px;
+  height: 260px;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.pf-donate-badge {
+  margin-top: 12px;
+  background: #0070ba;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 16px;
+  border-radius: 12px;
+  letter-spacing: 0.5px;
+}
+
+.pf-donate-info {
+  flex: 1;
+}
+
+.pf-donate-heading {
+  font-size: 26px;
+  font-weight: 800;
+  margin: 0 0 12px;
+  color: #ffffff;
+}
+
+.pf-donate-text {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #94a3b8;
+  margin-bottom: 24px;
+  max-width: 720px;
+}
+
+.pf-donate-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 26px;
+}
+
+.pf-donate-step {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 15px;
+  color: #e2e8f0;
+}
+
+.pf-step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.pf-donate-thanks {
+  font-size: 15px;
+  font-weight: 700;
+  color: #38bdf8;
+  margin-top: 8px;
+}
+
+/* Welcome Modal / First Run Guide */
+.welcome-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(12px);
+  animation: fadeIn 0.25s ease-out;
+}
+
+.welcome-modal-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 1040px;
+  max-width: 90vw;
+  background: linear-gradient(150deg, #161a24 0%, #0c0f16 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 32px;
+  padding: 44px 56px 40px;
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.85);
+}
+
+.welcome-modal-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.welcome-modal-logo-wrap {
+  margin-bottom: 14px;
+}
+
+.welcome-modal-logo {
+  width: 110px;
+  height: 110px;
+  object-fit: cover;
+  border-radius: 26px;
+  border: 2px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.welcome-modal-badge {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 4px 16px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.welcome-modal-title {
+  font-size: 42px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  margin: 0 0 10px;
+  color: #ffffff;
+}
+
+.welcome-modal-subtitle {
+  font-size: 17px;
+  line-height: 1.5;
+  color: #94a3b8;
+  margin: 0;
+  max-width: 760px;
+}
+
+/* 3 Navigation Cards Grid */
+.welcome-modal-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  width: 100%;
+  margin-bottom: 32px;
+}
+
+.welcome-nav-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 24px 20px;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.welcome-nav-card.welcome-nav-highlight {
+  background: rgba(56, 189, 248, 0.06);
+  border-color: rgba(56, 189, 248, 0.25);
+}
+
+.welcome-key-chip {
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 14px;
+  padding: 6px 16px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #e2e8f0;
+  letter-spacing: 0.5px;
+  margin-bottom: 14px;
+}
+
+.welcome-key-chip.welcome-key-ok {
+  background: #38bdf8;
+  color: #0b1120;
+  border-color: #38bdf8;
+}
+
+.welcome-card-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 8px;
+}
+
+.welcome-card-desc {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #94a3b8;
+  margin: 0;
+}
+
+/* Footer & Button */
+.welcome-modal-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.welcome-modal-privacy {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+}
+
+.welcome-modal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 320px;
+  height: 58px;
+  border-radius: 29px;
+  border: none;
+  background: #38bdf8;
+  color: #0b1120;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.welcome-btn-hint {
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.welcome-modal-btn.is-focused {
+  background: #ffffff;
+  color: #000000;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.5), 0 10px 30px rgba(0, 0, 0, 0.7);
+  transform: scale(1.04);
+}
+
+/* Welcome Modal Step 2 - Donation / Support */
+.welcome-donate-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 44px;
+  width: 100%;
+  margin-bottom: 28px;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.welcome-donate-qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #ffffff;
+  padding: 16px;
+  border-radius: 24px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  flex-shrink: 0;
+}
+
+.welcome-donate-qr-img {
+  width: 210px;
+  height: 210px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.welcome-donate-badge {
+  margin-top: 10px;
+  background: #0070ba;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 16px;
+  border-radius: 12px;
+  letter-spacing: 0.5px;
+}
+
+.welcome-donate-info {
+  flex: 1;
+  text-align: left;
+}
+
+.welcome-donate-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.welcome-donate-step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 16px;
+  color: #e2e8f0;
+}
+
+.welcome-step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  font-weight: 800;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.welcome-donate-note {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 12px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.welcome-donate-note strong {
+  color: #e2e8f0;
+}
+

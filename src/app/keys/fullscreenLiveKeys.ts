@@ -92,7 +92,12 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
       }
       if (key === 'up' || key === 'down' || key === 'left' || key === 'right') {
         const next = moveCursor(fullscreenKb, key);
-        if (next) setFullscreenKb(next);
+        if (next) {
+          setFullscreenKb(next);
+        } else if (key === 'right') {
+          setFullscreenGuideIndex(0);
+          setFullscreenGuideArea('channels');
+        }
         return true;
       }
       return false;

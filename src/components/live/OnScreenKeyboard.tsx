@@ -101,9 +101,10 @@ interface OnScreenKeyboardProps {
   state: KbState;
   focused: boolean;
   onPress?: (key: KbKey) => void;
+  okLabel?: string;
 }
 
-export const OnScreenKeyboard: React.FC<OnScreenKeyboardProps> = ({ state, focused, onPress }) => {
+export const OnScreenKeyboard: React.FC<OnScreenKeyboardProps> = ({ state, focused, onPress, okLabel = 'Buscar' }) => {
   const rows = kbRows(state.mode, state.caps);
   const label = (k: KbKey): string => {
     if (k === 'shift') return state.caps ? '⇩' : '⇧';
@@ -111,7 +112,7 @@ export const OnScreenKeyboard: React.FC<OnScreenKeyboardProps> = ({ state, focus
     if (k === 'space') return '␣';
     if (k === 'del') return '⌫';
     if (k === 'clear') return '✕';
-    if (k === 'ok') return 'OK';
+    if (k === 'ok') return okLabel;
     return k;
   };
   return (

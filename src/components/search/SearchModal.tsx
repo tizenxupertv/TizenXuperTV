@@ -11,6 +11,7 @@ import { allChannelEntries } from '../../lib/channelCache';
 
 export interface SearchModalProps {
   isOpen: boolean;
+  hidden?: boolean;
   currentTab: TabId;
   onClose: () => void;
   onSelectChannel: (channel: LiveChannel) => void;
@@ -18,8 +19,12 @@ export interface SearchModalProps {
   channels: LiveChannel[];
 }
 
+// Cached catalog items across search modal mounts for instant opening
+let cachedAllVodItems: VodItem[] | null = null;
+
 export const SearchModal: React.FC<SearchModalProps> = ({
   isOpen,
+  hidden = false,
   currentTab,
   onClose,
   onSelectChannel,
@@ -27,6 +32,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   channels
 }) => {
   const [query, setQuery] = useState<string>('');
+  const [submittedQuery, setSubmittedQuery] = useState<string>('');
   const [focusedResultIndex, setFocusedResultIndex] = useState<number>(0);
   const [focusArea, setFocusArea] = useState<'keyboard' | 'results'>('keyboard');
   const [kb, setKb] = useState<KbState>(KB_INITIAL);
@@ -34,9 +40,30 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
   const isTvSearch = currentTab === 'tv';
 
-  // All VOD items from catalog
-  const [allVodItems, setAllVodItems] = useState<VodItem[]>([]);
+  const submitSearch = (customQ?: string) => {
+    const targetQ = (customQ !== undefined ? customQ : query).trim();
+    setSubmittedQuery(targetQ);
+    setFocusedResultIndex(0);
+    setFocusArea('results');
+  };
+
+  // Responsive columns: 6 columns on 1080p/desktop (>=1300px), 5 on smaller screens (<1300px), 2 for live TV
+  const [vodCols, setVodCols] = useState<number>(() => {
+    return typeof window !== 'undefined' && window.innerWidth < 1300 ? 5 : 6;
+  });
+
   useEffect(() => {
+    const onResize = () => {
+      setVodCols(window.innerWidth < 1300 ? 5 : 6);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // All VOD items from catalog (cached across mounts for instant opening)
+  const [allVodItems, setAllVodItems] = useState<VodItem[]>(cachedAllVodItems || []);
+  useEffect(() => {
+    if (cachedAllVodItems && cachedAllVodItems.length > 0) return;
     catalogService.fetchCatalog().then(cat => {
       const all: VodItem[] = [
         ...(cat.featured || []),
@@ -52,14 +79,15 @@ export const SearchModal: React.FC<SearchModalProps> = ({
         seen.add(item.id);
         return true;
       });
+      cachedAllVodItems = unique;
       setAllVodItems(unique);
     });
   }, []);
 
   // Comprehensive list of ALL channels across all categories
   const allKnownChannels = useMemo(() => {
-    // Reading every cached category is expensive: only do it while the search is open
-    if (!isOpen) return [] as LiveChannel[];
+    // Reading every cached category is expensive: only do it while TV search is open
+    if (!isOpen || !isTvSearch) return [] as LiveChannel[];
     const list: LiveChannel[] = [...channels];
     const seen = new Set<string>(channels.map(c => String(c.id || c.code)));
 
@@ -89,10 +117,10 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     return list;
   }, [channels, isOpen]);
 
-  // Filtered Live Channels
+  // Filtered Live Channels (only recomputed on confirm, never per keystroke)
   const filteredChannels = useMemo(() => {
     if (!isTvSearch) return [];
-    const q = normalizeText(query.trim());
+    const q = normalizeText(submittedQuery.trim());
     if (!q) return allKnownChannels.slice(0, 30);
     return allKnownChannels.filter(ch => {
       const name = normalizeText(ch.name);
@@ -100,7 +128,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       const now = normalizeText(ch.now);
       return name.includes(q) || code.includes(q) || now.includes(q);
     });
-  }, [isTvSearch, query, allKnownChannels]);
+  }, [isTvSearch, submittedQuery, allKnownChannels]);
 
   // Normalised text of every home title, built once (not on every key press)
   const localHaystacks = useMemo(() => allVodItems.map(item => ({
@@ -109,13 +137,13 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     rest: normalizeText(`${Array.isArray(item.genres) ? item.genres.join(' ') : ''} ${item.actors || ''}`)
   })), [allVodItems]);
 
-  // Search the whole portal catalog (all movies and series), not only the titles on the home rows
+  // Search the whole portal catalog (only triggered on confirm, never per keystroke)
   const [remoteVod, setRemoteVod] = useState<VodItem[]>([]);
   const [remoteState, setRemoteState] = useState<'idle' | 'loading' | 'done' | 'failed'>('idle');
   const [remoteTotal, setRemoteTotal] = useState(0);
   useEffect(() => {
     if (isTvSearch || !isOpen) return;
-    const q = query.trim();
+    const q = submittedQuery.trim();
     if (q.length < 2) {
       setRemoteVod([]);
       setRemoteState('idle');
@@ -124,9 +152,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     }
     let alive = true;
     setRemoteState('loading');
-    // Wait for a pause in typing: every character is a portal request
     const timer = setTimeout(() => {
-      const client = window.MagisClient;
+      const client = (window as any).MagisClient;
       if (!client || typeof client.search !== 'function') {
         if (alive) setRemoteState('failed');
         return;
@@ -141,61 +168,75 @@ export const SearchModal: React.FC<SearchModalProps> = ({
         setRemoteTotal(res.total || (res.items || []).length);
         setRemoteState('done');
       }, { pageSize: 60 });
-    }, 450);
+    }, 200);
     return () => {
       alive = false;
       clearTimeout(timer);
     };
-  }, [query, isTvSearch, isOpen]);
+  }, [submittedQuery, isTvSearch, isOpen]);
 
   // Results: home titles that match show at once, the portal's results follow without repeats
   const filteredVod = useMemo(() => {
     if (isTvSearch) return [];
-    const q = normalizeText(query.trim());
+    const q = normalizeText(submittedQuery.trim());
     if (!q) return allVodItems.slice(0, 24);
     const local = localHaystacks.filter(h => h.title.includes(q) || h.rest.includes(q)).map(h => h.item);
     const seen = new Set(local.map(it => it.id));
     const remote = remoteVod.filter(it => !seen.has(it.id));
     return local.concat(remote).slice(0, 120);
-  }, [isTvSearch, query, allVodItems, localHaystacks, remoteVod]);
+  }, [isTvSearch, submittedQuery, allVodItems, localHaystacks, remoteVod]);
 
   const totalResults = isTvSearch ? filteredChannels.length : filteredVod.length;
 
-  // Auto-focus input when modal opens
+  // Auto-focus input only when search opens fresh (preserves query & results when returning from VOD detail view!)
+  const prevOpenRef = useRef(false);
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevOpenRef.current) {
       setQuery('');
+      setSubmittedQuery('');
       setFocusedResultIndex(0);
       setFocusArea('keyboard');
       setKb(KB_INITIAL);
     }
+    prevOpenRef.current = isOpen;
   }, [isOpen]);
 
   const typeKey = (k: string) => {
+    if (k === 'ok') {
+      submitSearch();
+      return;
+    }
+    if (k === 'clear') {
+      setQuery('');
+      setSubmittedQuery('');
+      setFocusedResultIndex(0);
+      return;
+    }
     const res = pressKey(k, query, kb, 40);
     setKb(res.state);
     if (res.ok) {
-      if (totalResults > 0) {
-        setFocusArea('results');
+      submitSearch(res.query);
+    } else {
+      setQuery(res.query);
+      if (!res.query.trim()) {
+        setSubmittedQuery('');
         setFocusedResultIndex(0);
       }
-    } else if (res.query !== query) {
-      setQuery(res.query);
-      setFocusedResultIndex(0);
     }
   };
 
   // Handle keyboard / remote navigation inside the modal (on-screen keyboard + results)
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || hidden) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const isBack = e.key === 'Escape' || e.keyCode === 10009 || e.keyCode === 461;
       const isBackspace = e.key === 'Backspace' || e.keyCode === 8;
-      const cols = isTvSearch ? 2 : 4;
+      const cols = isTvSearch ? 2 : vodCols;
 
       if (isBack) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         if (focusArea === 'results') setFocusArea('keyboard');
         else onClose();
         return;
@@ -204,31 +245,40 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       if (focusArea === 'keyboard') {
         if (isBackspace) {
           e.preventDefault();
+          e.stopImmediatePropagation();
           if (query) typeKey('del');
           else onClose();
           return;
         }
         if (/^[A-Za-z0-9\u00C0-\u024F ._\-'&@+]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
+          e.stopImmediatePropagation();
           typeKey(e.key === ' ' ? 'space' : e.key);
           return;
         }
         if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
           e.preventDefault();
+          e.stopImmediatePropagation();
           const dir = e.key === 'ArrowUp' ? 'up' : e.key === 'ArrowDown' ? 'down' : e.key === 'ArrowLeft' ? 'left' : 'right';
           const next = moveCursor(kb, dir);
           if (next) {
             setKb(next);
-          } else if (totalResults > 0) {
-            // → from the last key of a row moves to the results on the right
-            setFocusArea('results');
-            setFocusedResultIndex(0);
+          } else if (dir === 'right' && totalResults > 0) {
+            // → from the last key of a row confirms the search and moves into results!
+            submitSearch(query);
           }
           return;
         }
         if (e.key === 'Enter') {
           e.preventDefault();
-          typeKey(keyAt(kb));
+          e.stopImmediatePropagation();
+          const currentKey = keyAt(kb);
+          if (currentKey === 'ok') {
+            submitSearch(query);
+          } else {
+            typeKey(currentKey);
+          }
+          return;
         }
         return;
       }
@@ -236,20 +286,25 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       // Results area
       if (e.key === 'ArrowDown') {
         e.preventDefault();
+        e.stopImmediatePropagation();
         setFocusedResultIndex(prev => Math.min(totalResults - 1, prev + cols));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
+        e.stopImmediatePropagation();
         setFocusedResultIndex(prev => Math.max(0, prev - cols));
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
+        e.stopImmediatePropagation();
         // ← from the first column goes back to the keyboard on the left
         if (focusedResultIndex % cols === 0) setFocusArea('keyboard');
         else setFocusedResultIndex(prev => Math.max(0, prev - 1));
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
+        e.stopImmediatePropagation();
         setFocusedResultIndex(prev => Math.min(totalResults - 1, prev + 1));
       } else if (e.key === 'Enter' && totalResults > 0) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         if (isTvSearch) {
           const ch = filteredChannels[focusedResultIndex];
           if (ch) {
@@ -260,15 +315,15 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           const item = filteredVod[focusedResultIndex];
           if (item) {
             onSelectVodItem(item);
-            onClose();
+            // Search stays active underneath the detail view so Back returns here!
           }
         }
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, focusArea, focusedResultIndex, totalResults, isTvSearch, filteredChannels, filteredVod, query, kb, onClose, onSelectChannel, onSelectVodItem]);
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, [isOpen, hidden, focusArea, focusedResultIndex, totalResults, isTvSearch, filteredChannels, filteredVod, query, kb, vodCols, onClose, onSelectChannel, onSelectVodItem]);
 
   // Keep focused result in view
   useEffect(() => {
@@ -284,7 +339,11 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="search-modal-backdrop" onClick={onClose}>
+    <div
+      className="search-modal-backdrop search-view-full"
+      style={{ display: hidden ? 'none' : 'flex' }}
+      onClick={onClose}
+    >
       <div className="search-modal-container" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="search-modal-header">
@@ -312,47 +371,68 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           </button>
         </div>
 
-        {/* Search text (typed with the on-screen keyboard) */}
-        <div className={`search-input-wrapper ${focusArea === 'keyboard' ? 'is-focused' : ''}`}>
-          <svg className="search-input-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <div className={`search-input-text ${query ? '' : 'is-empty'}`}>
-            {query ||
-              (isTvSearch
-                ? 'Escribe el nombre del canal (ej. WIN Sports, Caracol, Cine)...'
-                : 'Escribe el título de la película o serie (ej. Ted Lasso, Halloween, Alien)...')}
-            {focusArea === 'keyboard' && <span className="pc-search-caret" />}
-          </div>
-        </div>
-
         <div className="search-body">
-        <div className="search-keyboard-wrap">
-          <OnScreenKeyboard
-            state={kb}
-            focused={focusArea === 'keyboard'}
-            onPress={k => typeKey(k)}
-          />
-        </div>
+          {/* Left panel: Search input (same width as keyboard) + on-screen keyboard */}
+          <div className="search-left-panel">
+            <div className={`search-input-wrapper ${focusArea === 'keyboard' ? 'is-focused' : ''}`}>
+              <svg className="search-input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <div className={`search-input-text ${query ? '' : 'is-empty'}`}>
+                {query ? (
+                  <>
+                    <span className="search-typed-text">{query}</span>
+                    {focusArea === 'keyboard' && <span className="pc-search-caret" />}
+                  </>
+                ) : (
+                  <>
+                    {focusArea === 'keyboard' && <span className="pc-search-caret search-caret-start" />}
+                    <span className="search-placeholder-text">Buscar...</span>
+                  </>
+                )}
+              </div>
+              {query && (
+                <button
+                  type="button"
+                  className="search-input-submit-btn"
+                  onClick={() => submitSearch(query)}
+                  title="Buscar"
+                >
+                  Buscar
+                </button>
+              )}
+            </div>
 
-        {/* Results Area */}
-        <div className="search-results-area">
+            <div className="search-keyboard-wrap">
+              <OnScreenKeyboard
+                state={kb}
+                focused={focusArea === 'keyboard'}
+                onPress={k => typeKey(k)}
+                okLabel="Buscar"
+              />
+            </div>
+          </div>
+
+          {/* Results Area */}
+          <div className="search-results-area">
           <div className="search-results-counter">
             <span>
-              Resultados: {totalResults} {isTvSearch ? 'canales' : 'títulos'}
+              {submittedQuery
+                ? `Resultados para "${submittedQuery}": ${totalResults} ${isTvSearch ? 'canales' : 'títulos'}`
+                : `Recomendados: ${totalResults} ${isTvSearch ? 'canales' : 'títulos'}`}
               {!isTvSearch && remoteState === 'loading' && ' · buscando en todo el catálogo…'}
               {!isTvSearch && remoteState === 'done' && remoteTotal > totalResults && ` · ${remoteTotal.toLocaleString('es')} en el catálogo`}
               {!isTvSearch && remoteState === 'failed' && ' · sin conexión con el catálogo completo'}
             </span>
-            <span className="search-nav-hint">▲ ▼ ◄ ► y OK · ► desde el teclado abre los resultados</span>
+            <span className="search-nav-hint">▲ ▼ ◄ ► y OK · Selecciona "Buscar" o ► para ver resultados</span>
           </div>
 
           {totalResults === 0 ? (
             <div className="search-empty-state">
               <div className="search-empty-icon">🔍</div>
               <div className="search-empty-title">
-                {!isTvSearch && remoteState === 'loading' ? `Buscando "${query}" en todo el catálogo…` : `No se encontraron resultados para "${query}"`}
+                {!isTvSearch && remoteState === 'loading' ? `Buscando "${submittedQuery}" en todo el catálogo…` : `No se encontraron resultados para "${submittedQuery}"`}
               </div>
               <div className="search-empty-desc">
                 {isTvSearch
@@ -412,7 +492,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                     className={`search-vod-card ${isFocused ? 'is-focused' : ''}`}
                     onClick={() => {
                       onSelectVodItem(item);
-                      onClose();
                     }}
                   >
                     <div className="svc-poster-wrap">

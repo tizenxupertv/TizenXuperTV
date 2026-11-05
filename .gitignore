@@ -15,6 +15,7 @@ signature1.xml
 *.log
 .vscode/
 .idea/
+.claude/
 
 # Local env
 .env

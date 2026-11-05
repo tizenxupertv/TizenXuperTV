@@ -94,6 +94,7 @@ interface LiveTvViewProps {
   onChannelsLoaded?: (channels: LiveChannel[]) => void;
   onCategoriesLoaded?: (categories: LiveCategory[]) => void;
   onSelectCategory?: (catIndex: number) => void;
+  onOpenDrawerSearch?: () => void;
 }
 
 // Global in-memory cache for ultra-fast instant category switching
@@ -119,6 +120,22 @@ function filterLockedChannels(list: LiveChannel[], cats: LiveCategory[], activeI
 }
 const globalChannelMasterCache: Record<string, LiveChannel> = {};
 
+// Fast, zero-reflow nearest scroll for TV list containers: replaces scrollIntoView / getBoundingClientRect
+function fastScrollIntoView(container: HTMLElement, target: HTMLElement, pad = 12) {
+  const itemTop = target.offsetTop;
+  const itemHeight = target.offsetHeight;
+  const itemBottom = itemTop + itemHeight;
+  const cTop = container.scrollTop;
+  const cHeight = container.clientHeight;
+  const cBottom = cTop + cHeight;
+
+  if (itemTop < cTop + pad) {
+    container.scrollTop = Math.max(0, itemTop - pad);
+  } else if (itemBottom > cBottom - pad) {
+    container.scrollTop = itemBottom - cHeight + pad;
+  }
+}
+
 const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   focus,
   isActiveTab = true,
@@ -143,7 +160,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   onToggleOsd,
   onChannelsLoaded,
   onCategoriesLoaded,
-  onSelectCategory
+  onSelectCategory,
+  onOpenDrawerSearch
 }) => {
   useRenderCount('LiveTvView');
   const savedCatIdx = useMemo(() => {
@@ -188,7 +206,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Fast direct scrolling without animation lag - native nearest scroll
+  // Fast direct scrolling without animation lag - zero-reflow fastScrollIntoView
   useEffect(() => {
     if (!isFullscreen && isFocusActive && focus.area === 'cats' && catListRef.current) {
       const container = catListRef.current;
@@ -201,19 +219,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         return;
       }
       const target = container.children[focus.catIndex] as HTMLElement;
-      if (target) {
-        if (typeof target.scrollIntoView === 'function') {
-          target.scrollIntoView({ block: 'nearest' });
-        } else {
-          const i = target.getBoundingClientRect();
-          const a = container.getBoundingClientRect();
-          if (i.top < a.top + 8) {
-            container.scrollTop -= (a.top - i.top + 16);
-          } else if (i.bottom > a.bottom - 8) {
-            container.scrollTop += (i.bottom - a.bottom + 16);
-          }
-        }
-      }
+      if (target) fastScrollIntoView(container, target, 8);
     }
   }, [isFullscreen, isFocusActive, focus.area, focus.catIndex, categories.length]);
 
@@ -229,19 +235,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         return;
       }
       const target = container.children[focus.channelIndex] as HTMLElement;
-      if (target) {
-        if (typeof target.scrollIntoView === 'function') {
-          target.scrollIntoView({ block: 'nearest' });
-        } else {
-          const i = target.getBoundingClientRect();
-          const a = container.getBoundingClientRect();
-          if (i.top < a.top + 8) {
-            container.scrollTop -= (a.top - i.top + 16);
-          } else if (i.bottom > a.bottom - 8) {
-            container.scrollTop += (i.bottom - a.bottom + 16);
-          }
-        }
-      }
+      if (target) fastScrollIntoView(container, target, 8);
     }
   }, [isFullscreen, isFocusActive, focus.area, focus.channelIndex, channels.length]);
 
@@ -257,19 +251,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         return;
       }
       const target = container.children[drawerFocusIndex] as HTMLElement;
-      if (target) {
-        if (typeof target.scrollIntoView === 'function') {
-          target.scrollIntoView({ block: 'nearest' });
-        } else {
-          const i = target.getBoundingClientRect();
-          const a = container.getBoundingClientRect();
-          if (i.top < a.top + 12) {
-            container.scrollTop -= (a.top - i.top + 20);
-          } else if (i.bottom > a.bottom - 12) {
-            container.scrollTop += (i.bottom - a.bottom + 20);
-          }
-        }
-      }
+      if (target) fastScrollIntoView(container, target, 12);
     }
   }, [isFullscreen, showChannelsDrawer, drawerFocusIndex, channels.length]);
 
@@ -745,7 +727,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             <div className={`player-channels ${showChannelsDrawer ? 'is-active' : ''}`}>
               <div className="pc-head">
                 <div>
-                  <div className="pc-title">{drawerSearching ? 'RESULTADOS' : activeCategory.name.toUpperCase()}</div>
+                  <div className="pc-title">{drawerSearching ? `BÚSQUEDA: "${drawerQuery.trim().toUpperCase()}"` : activeCategory.name.toUpperCase()}</div>
                   <div className="pc-counter">{drawerChannels.length} canales</div>
                 </div>
                 {drawerArea !== 'search' && !drawerSearching && (
@@ -753,6 +735,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                     className={`pc-search-btn ${drawerArea === 'searchbtn' ? 'is-focused' : ''}`}
                     title="Buscar canal"
                     aria-label="Buscar canal"
+                    onClick={() => onOpenDrawerSearch && onOpenDrawerSearch()}
                   >
                     ⌕
                   </div>
@@ -760,20 +743,26 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
               </div>
               <div className="pc-div" />
 
-              {(drawerArea === 'search' || drawerSearching) && (
-                <div className={`pc-search ${drawerArea === 'search' ? 'is-focused' : ''}`}>
-                  <span className="pc-search-icon">⌕</span>
-                  <div className={`pc-search-text ${drawerQuery ? '' : 'is-empty'}`}>
-                    {drawerQuery || 'Buscar canal en todas las categorías…'}
-                    {drawerArea === 'search' && <span className="pc-search-caret" />}
-                  </div>
-                </div>
-              )}
-
               <div className="pc-body">
               {drawerArea === 'search' ? (
                 <div className="pc-cats pc-keyboard-col">
-                  <OnScreenKeyboard state={drawerKb} focused />
+                  <div className={`pc-search ${drawerArea === 'search' ? 'is-focused' : ''}`}>
+                    <span className="pc-search-icon">⌕</span>
+                    <div className={`pc-search-text ${drawerQuery ? '' : 'is-empty'}`}>
+                      {drawerQuery ? (
+                        <>
+                          <span className="search-typed-text">{drawerQuery}</span>
+                          {drawerArea === 'search' && <span className="pc-search-caret" />}
+                        </>
+                      ) : (
+                        <>
+                          {drawerArea === 'search' && <span className="pc-search-caret search-caret-start" />}
+                          <span className="search-placeholder-text">Buscar canal...</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <OnScreenKeyboard state={drawerKb} focused okLabel="Buscar" />
                 </div>
               ) : (
               <div className={`pc-cats ${drawerArea === 'cats' ? 'is-active-col' : ''}`} ref={drawerCatsRef}>

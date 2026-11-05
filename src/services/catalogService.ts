@@ -1,5 +1,6 @@
 import { kvGet, kvSet } from '../lib/kvStore';
 import { VodItem, VodEpisode, VodSeason } from '../types/vod';
+import { organizeCatalogItems, belongsToSection } from '../lib/catalogOrganizer';
 
 declare global {
   interface Window {
@@ -226,7 +227,10 @@ class CatalogService {
     return this.getDemoCatalog();
   }
 
-  private categorize(items: VodItem[]) {
+  private categorize(rawItems: VodItem[]) {
+    // 1. Group series seasons and filter adult content
+    const items = organizeCatalogItems(rawItems);
+
     const featured: VodItem[] = [];
     const movies: VodItem[] = [];
     const series: VodItem[] = [];
@@ -240,32 +244,20 @@ class CatalogService {
         rowsByGroup[item.row].push(item);
       }
 
-      const cat = (item.category || '').toLowerCase();
-      const kind = (item.kind || '').toLowerCase();
-      const row = (item.row || '').toLowerCase();
-
-      const isFeatured = (
-        cat.includes('destacado') ||
-        kind.includes('destacado') ||
-        row.includes('top15') ||
-        row.includes('2026') ||
-        row.includes('premio') ||
-        row.includes('halloween')
-      );
-      if (isFeatured) {
+      if (belongsToSection(item, 'featured')) {
         featured.push(item);
       }
 
-      if (item.isSeries || cat.includes('serie') || kind.includes('serie') || row.includes('series')) {
+      if (belongsToSection(item, 'series')) {
         series.push(item);
-      } else {
+      } else if (belongsToSection(item, 'movies')) {
         movies.push(item);
       }
 
-      if (cat.includes('infantil') || cat.includes('kids') || row.includes('kids') || row.includes('niños')) {
+      if (belongsToSection(item, 'kids')) {
         kids.push(item);
       }
-      if (cat.includes('anime') || cat.includes('animacion') || row.includes('anime')) {
+      if (belongsToSection(item, 'anime')) {
         anime.push(item);
       }
     }

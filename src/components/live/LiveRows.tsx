@@ -25,6 +25,7 @@ export const ChannelRow = React.memo<ChannelRowProps>(({ ch, idx, focused, tuned
           className="live-ch-logo"
           src={ch.logo}
           alt={ch.name}
+          loading="lazy"
           decoding="async"
           onError={(e) => {
             (e.target as HTMLElement).style.display = 'none';

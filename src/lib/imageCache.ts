@@ -49,9 +49,9 @@ function run(job) {
 const memory = new Map<string, string>(); // key -> object URL (or the original URL)
 const pending = new Map<string, Promise<string>>();
 const callbacks = new Map<number, (res: any) => void>();
-// One image at a time, and only while the remote is idle: decoding a 1920 px image takes the
-// TV's CPU for a while, and navigation must never wait for it
-const KEY_IDLE_MS = 700;
+// One image at a time with a gentle idle window (180ms) so held keys don't compete with the worker,
+// but the background pipeline begins quickly once key repeat pauses
+const KEY_IDLE_MS = 180;
 const jobs: { id: number; src: string; w: number; h: number }[] = [];
 let workerBusy = false;
 let lastKeyAt = 0;
@@ -157,16 +157,6 @@ function shrink(url: string, w: number, h: number): Promise<any> {
   });
 }
 
-/** Natural size of an image (downloads it; browsers decode only when it is drawn) */
-function probeSize(url: string): Promise<{ w: number; h: number } | null> {
-  return new Promise(resolve => {
-    const img = new Image();
-    img.onload = () => resolve(img.naturalWidth ? { w: img.naturalWidth, h: img.naturalHeight } : null);
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
-}
-
 /** Card-size copy of `url` for a box of w x h px; resolves to the original URL when it cannot be made */
 export function optimizedImage(url: string, w: number, h: number): Promise<string> {
   if (!/^https?:/.test(url) || disabled) return Promise.resolve(url);
@@ -180,15 +170,8 @@ export function optimizedImage(url: string, w: number, h: number): Promise<strin
     if (cached === ORIGINAL) return url;
     if (cached instanceof Blob) return URL.createObjectURL(cached);
     const t0 = Date.now();
-    // Most posters are already card size: the size is known once downloaded (no decoding),
-    // and those are used as they are without waiting for the worker
-    return probeSize(url).then(size => {
-      if (size && Math.max(w / size.w, h / size.h) >= 0.8) {
-        dbPut(key, ORIGINAL);
-        return { small: true };
-      }
-      return shrink(url, w, h);
-    }).then(res => {
+    // Worker fetches once, scales in OffscreenCanvas, and detects small images directly (no double download!)
+    return shrink(url, w, h).then(res => {
       if (res.small) {
         dbPut(key, ORIGINAL);
         return url;
@@ -217,10 +200,15 @@ export function optimizedImage(url: string, w: number, h: number): Promise<strin
   return p;
 }
 
-/** Image for a card: null until the card-size copy is ready (show the placeholder meanwhile) */
+/** Image for a card: returns cached thumbnail if ready, or the direct URL as instant fallback so cards never get stuck on placeholders */
 export function useCardImage(url: string, w: number, h: number, enabled = true): string | null {
   const key = `${url}@${w}x${h}`;
-  const [src, setSrc] = useState<string | null>(() => memory.get(key) || null);
+  const directUrl = import.meta.env.DEV && /^https?:/.test(url)
+    ? `${location.origin}/stream-proxy?url=${encodeURIComponent(url)}`
+    : url;
+
+  const [src, setSrc] = useState<string | null>(() => memory.get(key) || (enabled ? directUrl : null));
+
   useEffect(() => {
     if (!enabled || !url) return;
     const hit = memory.get(key);
@@ -228,9 +216,12 @@ export function useCardImage(url: string, w: number, h: number, enabled = true):
       setSrc(hit);
       return;
     }
+    // Instant display while worker prepares the cached copy
+    setSrc(directUrl);
     let alive = true;
     optimizedImage(url, w, h).then(s => { if (alive) setSrc(s); });
     return () => { alive = false; };
-  }, [key, enabled]);
-  return enabled ? src : null;
+  }, [key, enabled, directUrl]);
+
+  return enabled ? (src || directUrl) : null;
 }

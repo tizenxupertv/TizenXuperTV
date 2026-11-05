@@ -15,6 +15,8 @@ import { TabId } from '../components/layout/TopNavbar';
 
 interface ProfileScreenProps {
   isTop: boolean;
+  hidden?: boolean;
+  isSearchOpen?: boolean;
   initialSection?: number;
   liveCategories: LiveCategory[];
   catalogItems: VodItem[];
@@ -34,6 +36,7 @@ const SECTIONS = [
   { id: 'playback', label: 'Configuración global', icon: '<rect x="4" y="6" width="24" height="20" rx="3"/><path d="M13 11l8 5-8 5z"/>' },
   { id: 'parental', label: 'Bloqueo', icon: '<rect x="7" y="14" width="18" height="14" rx="2"/><path d="M11 14V10a5 5 0 0 1 10 0v4"/><path d="M16 19v4"/>' },
   { id: 'diag', label: 'Diagnóstico', icon: '<path d="M3 13a19 19 0 0 1 26 0"/><path d="M8 18a12 12 0 0 1 16 0"/><path d="M13 23a6 6 0 0 1 6 0"/><circle cx="16" cy="27.5" r="1.2"/>' },
+  { id: 'donate', label: 'Apoyo y Donaciones', icon: '<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>' },
   { id: 'about', label: 'Sobre nosotros', icon: '<circle cx="16" cy="16" r="12"/><path d="M16 14v8M16 10h.1"/>' }
 ];
 
@@ -72,6 +75,8 @@ function formatTime(sec: number): string {
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   isTop,
+  hidden = false,
+  isSearchOpen = false,
   initialSection = 0,
   liveCategories,
   catalogItems,
@@ -191,6 +196,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       }
     } else if (id === 'diag') {
       r.push([{ id: 'run', onActivate: runDiag }]);
+    } else if (id === 'donate') {
+      r.push([{ id: 'donate-qr', onActivate: () => {} }]);
     }
     return r;
   })();
@@ -240,7 +247,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const cell = rows[focus.r] && rows[focus.r][focus.c];
       if (cell) cell.onActivate();
     }
-  }, isTop);
+  }, isTop && !hidden && !isSearchOpen);
 
   // Keep focus inside the grid when its shape changes (e.g. switching list tab)
   useEffect(() => {
@@ -427,6 +434,47 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       );
     }
 
+    if (id === 'donate') {
+      return (
+        <div className="pf-donate-view">
+          <h2 className="pf-title">Donaciones y Apoyo al Proyecto</h2>
+          <div className="pf-hr" />
+          <div className="pf-donate-content">
+            <div className={`pf-donate-card ${isF('donate-qr') ? 'is-focused' : ''}`}>
+              <img
+                src="assets/paypal-donation-qr.png"
+                alt="Código QR de Donación PayPal"
+                className="pf-donate-qr"
+              />
+              <div className="pf-donate-badge">PayPal Oficial</div>
+            </div>
+            <div className="pf-donate-info">
+              <h3 className="pf-donate-heading">Apoya el desarrollo de TizenXuper TV</h3>
+              <p className="pf-donate-text">
+                TizenXuper TV es un proyecto comunitario optimizado para televisores Samsung Tizen.
+                Tu aporte voluntario nos permite costear la infraestructura de servidores, mantener las listas y guías actualizadas, y seguir desarrollando mejoras y nuevas funciones.
+              </p>
+              <div className="pf-donate-steps">
+                <div className="pf-donate-step">
+                  <span className="pf-step-num">1</span>
+                  <span>Abre la cámara de tu teléfono móvil o lector de códigos QR.</span>
+                </div>
+                <div className="pf-donate-step">
+                  <span className="pf-step-num">2</span>
+                  <span>Apunta directamente al código QR en la pantalla del televisor.</span>
+                </div>
+                <div className="pf-donate-step">
+                  <span className="pf-step-num">3</span>
+                  <span>Ingresa de forma segura a PayPal para realizar tu contribución voluntaria.</span>
+                </div>
+              </div>
+              <p className="pf-donate-thanks">¡Muchas gracias por apoyar a la comunidad de TizenXuper TV!</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="pf-about">
         <h2 className="pf-title">Sobre nosotros</h2>
@@ -437,7 +485,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           estable, diversa y siempre actualizada, además de contenidos gratuitos para disfrutar.
         </p>
         <div className="pf-about-port">TizenXuperTV · v{(pkg as any).version}</div>
-        <div className="pf-about-mail">escuchamos-tv@outlook.com</div>
         <h3 className="pf-subtitle">Compartir la app</h3>
         <p className="pf-about-body">
           Para instalar XuperTV en otro televisor Samsung necesitas el paquete .wgt de la app. El historial de este perfil

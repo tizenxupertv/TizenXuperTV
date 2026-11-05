@@ -8,6 +8,7 @@ interface BrowseScreenProps {
   isTop: boolean;
   /** Hidden (and inactive) while a detail opened from here is on screen */
   hidden: boolean;
+  isSearchOpen?: boolean;
   root: BrowseRoot;
   title: string;
   initialTag?: string;
@@ -16,6 +17,7 @@ interface BrowseScreenProps {
   fixedItems?: VodItem[];
   onClose: () => void;
   onOpenVod: (item: VodItem) => void;
+  onOpenSearch?: () => void;
 }
 
 type Area = 'bar' | 'menu' | 'grid';
@@ -90,13 +92,15 @@ function loadPage(root: BrowseRoot, tag: string, year: string, pageNum: number, 
 export const BrowseScreen: React.FC<BrowseScreenProps> = ({
   isTop,
   hidden,
+  isSearchOpen = false,
   root,
   title,
   initialTag = '',
   initialYear = '',
   fixedItems,
   onClose,
-  onOpenVod
+  onOpenVod,
+  onOpenSearch
 }) => {
   const [tags, setTags] = useState<string[]>([]);
   const [years, setYears] = useState<string[]>([]);
@@ -107,7 +111,7 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [area, setArea] = useState<Area>('grid');
-  const [barIndex, setBarIndex] = useState(0); // 0 = genre, 1 = year
+  const [barIndex, setBarIndex] = useState(0); // 0 = genre, 1 = year, 2 = search
   const [menuCursor, setMenuCursor] = useState(0);
   const [cursor, setCursor] = useState(0);
   const pageRef = useRef(0);
@@ -186,6 +190,17 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
     if (gridRef.current) gridRef.current.style.transform = `translateY(${-Math.max(0, focusRow - 1) * ROW_HEIGHT}px)`;
   }, [focusRow]);
 
+  // Virtual windowing: only render cards within a visible window (2 rows above, 5 rows below)
+  // This prevents mounting hundreds/thousands of DOM nodes on Samsung TV, keeping controls 100% responsive
+  const totalRows = Math.ceil(items.length / COLS);
+  const startRow = Math.max(0, focusRow - 2);
+  const endRow = Math.min(totalRows, focusRow + 5);
+  const startIndex = startRow * COLS;
+  const endIndex = Math.min(items.length, endRow * COLS);
+  const visibleItems = items.slice(startIndex, endIndex);
+  const paddingTop = startRow * ROW_HEIGHT;
+  const paddingBottom = Math.max(0, (totalRows - endRow) * ROW_HEIGHT);
+
   const tagOptions = ['', ...tags];
   const yearOptions = ['', ...years];
   const menuFilter: Filter = barIndex === 0 ? 'tag' : 'year';
@@ -213,10 +228,12 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
   useScreenKeys(key => {
     if (key === 'back') {
-      // Back climbs one level at a time: menu -> filter buttons, grid -> filter buttons, then leaves
-      if (area === 'menu') setArea('bar');
-      else if (area === 'grid') setArea('bar');
-      else onClose();
+      // If a dropdown menu is open, close the menu to bar; otherwise exit BrowseScreen to return to previous page
+      if (area === 'menu') {
+        setArea('bar');
+      } else {
+        onClose();
+      }
       return;
     }
     if (area === 'grid') {
@@ -233,10 +250,16 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
       return;
     }
     if (area === 'bar') {
-      if (key === 'left') setBarIndex(0);
-      else if (key === 'right') setBarIndex(1);
+      if (key === 'left') setBarIndex(c => Math.max(0, c - 1));
+      else if (key === 'right') setBarIndex(c => Math.min(2, c + 1));
       else if (key === 'down' && items.length) setArea('grid');
-      else if (key === 'enter') openMenu();
+      else if (key === 'enter') {
+        if (barIndex === 2) {
+          if (onOpenSearch) onOpenSearch();
+        } else {
+          openMenu();
+        }
+      }
       return;
     }
     // Open menu: ▲ ▼ choose, OK applies, ◄ / Back close
@@ -249,7 +272,7 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
       else setYear(value);
       setArea('grid');
     }
-  }, isTop && !hidden);
+  }, isTop && !hidden && !isSearchOpen);
 
   const menuStart = Math.min(Math.max(0, menuCursor - Math.floor(MENU_VISIBLE / 2)), Math.max(0, menuOptions.length - MENU_VISIBLE));
 
@@ -286,15 +309,37 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
     <div className="browse-screen" style={hidden ? { display: 'none' } : undefined}>
       <div className="browse-head">
         <div className="browse-heading">
-          <div className="browse-title">{sectionTitle}</div>
-          <div className="browse-count">
-            {total ? `${total.toLocaleString('es')} títulos` : loading ? 'Cargando…' : ''}
+          <h1 className="browse-title">{sectionTitle}</h1>
+          <div className="browse-subtitle">
+            <span className="browse-count">
+              {total ? `${total.toLocaleString('es')} títulos disponibles` : loading ? 'Cargando títulos…' : 'Catálogo completo'}
+            </span>
+            <span className="browse-subtitle-dot">•</span>
+            <span className="browse-subtitle-desc">Filtra por género o año, o busca por título</span>
           </div>
         </div>
-        {/* Fixed on the right, whatever the title length */}
+        {/* Fixed on the right: Filters + Search button */}
         <div className="browse-filters">
           {filterButton(0, 'tag', tag)}
           {filterButton(1, 'year', year)}
+          <div
+            className={`browse-filter browse-search-btn ${area !== 'grid' && barIndex === 2 ? 'is-focused' : ''}`}
+            onClick={() => onOpenSearch && onOpenSearch()}
+          >
+            <svg
+              className="browse-search-icon"
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <span className="browse-filter-value">Buscar</span>
+          </div>
         </div>
       </div>
 
@@ -302,17 +347,25 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
         <div
           className={`browse-grid ${loading && pageRef.current === 0 && items.length ? 'is-loading' : ''}`}
           ref={gridRef}
-          style={{ gridTemplateColumns: `repeat(${cols}, ${CARD_W}px)` }}
+          style={{
+            gridTemplateColumns: `repeat(${cols}, ${CARD_W}px)`,
+            paddingTop: `${paddingTop}px`,
+            paddingBottom: `${paddingBottom}px`,
+            boxSizing: 'content-box'
+          }}
         >
-          {items.map((it, i) => (
-            <PosterCard
-              key={`${it.id}-${i}`}
-              item={it}
-              isFocused={area === 'grid' && i === cursor}
-              showImage={Math.abs(Math.floor(i / COLS) - focusRow) <= IMAGE_ROWS_AHEAD}
-              onActivate={onOpenVod}
-            />
-          ))}
+          {visibleItems.map((it, idx) => {
+            const i = startIndex + idx;
+            return (
+              <PosterCard
+                key={`${it.id}-${i}`}
+                item={it}
+                isFocused={area === 'grid' && i === cursor}
+                showImage={true}
+                onActivate={onOpenVod}
+              />
+            );
+          })}
         </div>
         {!loading && !items.length && (
           <div className="browse-empty">{failed ? 'No se pudo cargar el catálogo. Atrás para volver.' : 'No hay títulos con estos filtros.'}</div>

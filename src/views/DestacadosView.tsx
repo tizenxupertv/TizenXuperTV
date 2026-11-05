@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { useRenderCount } from '../debug/renderCount';
 import { setTrackOffset } from '../utils/scrollHelper';
 import { VodItem } from '../types/vod';
@@ -65,7 +65,34 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
   const trackRef = useRef<HTMLDivElement>(null);
   const currentHero = heroItems[activeHeroIndex] || heroItems[0];
 
-  // Vertical framing: the page track moves with a GPU transform (see scrollHelper)
+  // Zero-Reflow Vertical Framing: row offsets are measured and cached once (or on resize),
+  // completely eliminating Layout Thrashing (offsetTop / querySelectorAll) during Up/Down navigation.
+  const rowOffsetsRef = useRef<number[]>([]);
+  const cachedMaxYRef = useRef<number>(0);
+
+  const updateRowMetrics = useCallback(() => {
+    const track = trackRef.current;
+    const container = containerRef.current;
+    if (!track || !container) return;
+    const sections = track.querySelectorAll('.content-section');
+    const offsets: number[] = [];
+    sections.forEach(s => {
+      offsets.push((s as HTMLElement).offsetTop);
+    });
+    rowOffsetsRef.current = offsets;
+    cachedMaxYRef.current = Math.max(0, track.scrollHeight - container.clientHeight + 60);
+  }, []);
+
+  useEffect(() => {
+    // Schedule one initial measure after layout settles
+    const t = setTimeout(updateRowMetrics, 60);
+    window.addEventListener('resize', updateRowMetrics, { passive: true });
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('resize', updateRowMetrics);
+    };
+  }, [updateRowMetrics]);
+
   useEffect(() => {
     const track = trackRef.current;
     const container = containerRef.current;
@@ -74,12 +101,19 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
     if (focus.area === 'hero') {
       setTrackOffset(track, 'y', 0);
     } else if (focus.area === 'row') {
-      const sections = track.querySelectorAll('.content-section');
-      const secEl = sections[focus.rowIndex] as HTMLElement | undefined;
-      if (secEl) {
-        const max = Math.max(0, track.offsetHeight - container.clientHeight + 60);
-        setTrackOffset(track, 'y', Math.min(max, Math.max(0, secEl.offsetTop - 24)));
+      let targetY = rowOffsetsRef.current[focus.rowIndex];
+      if (targetY === undefined) {
+        const sections = track.querySelectorAll('.content-section');
+        const secEl = sections[focus.rowIndex] as HTMLElement | undefined;
+        if (secEl) {
+          targetY = secEl.offsetTop;
+          rowOffsetsRef.current[focus.rowIndex] = targetY;
+        } else {
+          targetY = 0;
+        }
       }
+      const max = cachedMaxYRef.current || Math.max(0, track.scrollHeight - container.clientHeight + 60);
+      setTrackOffset(track, 'y', Math.min(max, Math.max(0, targetY - 24)));
     }
   }, [isFocusActive, focus.area, focus.rowIndex]);
 

@@ -58,7 +58,7 @@
   if (isTizen) {
     if (window.tizen && tizen.tvinputdevice) {
       try {
-        var mediaKeys = ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaStop', 'MediaFastForward', 'MediaRewind'];
+        var mediaKeys = ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaStop', 'MediaFastForward', 'MediaRewind', 'Info', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
         mediaKeys.forEach(function(k) {
           try { tizen.tvinputdevice.registerKey(k); } catch(e) {}
         });
@@ -531,10 +531,36 @@
       return false;
     },
 
+    _recoverLive: function () {
+      var self = this;
+      if (self.kind !== 'live' || self._recoveringLive || (self._liveRecoveryAttempts || 0) >= 2) return false;
+      self._recoveringLive = true;
+      self._liveRecoveryAttempts = (self._liveRecoveryAttempts || 0) + 1;
+      console.log('[XuperAVPlay] Auto-recovering live stream, attempt #' + self._liveRecoveryAttempts);
+      var meta = window.__xuperCurrentStreamMeta;
+      var code = meta && (meta.code || meta.id || meta.channelCode);
+      if (code && window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
+        window.MagisClient.resolveLive(code, function (err, newMeta) {
+          self._recoveringLive = false;
+          if (!err && newMeta && newMeta.url && self.videoEl) {
+            window.__xuperCurrentStreamMeta = newMeta;
+            self._openAndPrepareStream(newMeta.url, newMeta.headers, self.videoEl);
+            return;
+          }
+          self.isActive = false;
+          if (self.videoEl && self.videoEl.onerror) self.videoEl.onerror();
+        });
+        return true;
+      }
+      self._recoveringLive = false;
+      return false;
+    },
+
     playStream: function (url, headers, videoEl) {
       var self = this;
       if (!isTizen || !window.webapis || !webapis.avplay) return false;
       self._backupIdx = 0;
+      self._liveRecoveryAttempts = 0;
       self.isPreviewActive = false;
       self.kind = self._nextKind || 'vod';
       self._nextKind = null;
@@ -563,6 +589,12 @@
         webapis.avplay.setDisplayMethod(self._displayMethod());
         self._applyHeaders(headers);
 
+        var isLive = self.kind === 'live';
+        try {
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 2 : 4);
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 2 : 8);
+        } catch (bufErr) {}
+
         webapis.avplay.setListener({
           onbufferingstart: function () {
             if (self.videoEl && self.videoEl.onwaiting) self.videoEl.onwaiting();
@@ -582,6 +614,7 @@
           onerror: function (type) {
             console.error('[XuperAVPlay] AVPlay error:', type);
             if (self._tryNextBackup()) return;
+            if (self.kind === 'live' && self._recoverLive()) return;
             self.isActive = false;
             if (self.videoEl && self.videoEl.onerror) self.videoEl.onerror();
           },
@@ -660,6 +693,35 @@
       document.body.style.backgroundColor = '#000000';
     },
 
+    getAudioTracks: function () {
+      if (!isTizen || !window.webapis || !webapis.avplay || !webapis.avplay.getTotalTrackInfo) return [];
+      try {
+        var all = webapis.avplay.getTotalTrackInfo() || [];
+        return all.filter(function (entry) { return entry && entry.type === 'AUDIO'; })
+          .map(function (entry, index) {
+            var extra = {};
+            try { extra = JSON.parse(entry.extra_info || '{}'); } catch (e) {}
+            return {
+              index: index,
+              nativeIndex: entry.index,
+              language: extra.language || extra.lang || ('Pista ' + (index + 1)),
+              code: extra.language || extra.lang || ''
+            };
+          });
+      } catch (e) { return []; }
+    },
+
+    selectAudioTrack: function (nativeIndex) {
+      if (!isTizen || !window.webapis || !webapis.avplay || !webapis.avplay.setSelectTrack) return false;
+      try {
+        webapis.avplay.setSelectTrack('AUDIO', nativeIndex);
+        return true;
+      } catch (e) {
+        console.error('[XuperAVPlay] selectAudioTrack error:', e);
+        return false;
+      }
+    },
+
     playPreview: function (url, videoEl) {
       var self = this;
       if (!isTizen || !window.webapis || !webapis.avplay || !url) return false;
@@ -689,10 +751,15 @@
         var cleanUrl = String(url).replace(/^https:\/\//i, 'http://');
         webapis.avplay.open(cleanUrl);
         self.syncDisplayRect();
-        webapis.avplay.setDisplayMethod(self._displayMethod());
+        webapis.avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
 
         var meta = window.__xuperCurrentStreamMeta || {};
         self._applyHeaders(meta.headers);
+
+        try {
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 2);
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 2);
+        } catch (bufErr) {}
 
         function markPlaying() {
           self.syncDisplayRect();

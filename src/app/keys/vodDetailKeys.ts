@@ -10,6 +10,7 @@ export interface VodDetailKeysCtx {
   setActiveVodPlayer: Setter<VodPlayerState | null>;
   activeDetailItem: VodItem;
   setActiveDetailItem: Setter<VodItem | null>;
+  handleBackDetail?: () => void;
   detailFocus: VodDetailFocus;
   setDetailFocus: Setter<VodDetailFocus>;
   detailCounts: DetailCounts;
@@ -74,8 +75,13 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
     return true;
   }
 
+  const doBack = () => {
+    if (ctx.handleBackDetail) ctx.handleBackDetail();
+    else setActiveDetailItem(null);
+  };
+
   if (key === 'back') {
-    setActiveDetailItem(null);
+    doBack();
     return true;
   }
 
@@ -85,7 +91,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
       return true;
     }
     if (key === 'enter') {
-      setActiveDetailItem(null);
+      doBack();
       return true;
     }
     return true;

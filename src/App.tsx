@@ -9,6 +9,7 @@ import { SearchModal } from './components/search/SearchModal';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { BrowseScreen } from './screens/BrowseScreen';
 import { PinDialog } from './screens/PinDialog';
+import { WelcomeModal } from './components/common/WelcomeModal';
 import { playerService } from './services/playerService';
 import { favoritesService } from './services/favoritesService';
 import { useTvRemote, TvKey } from './hooks/useTvRemote';
@@ -83,6 +84,7 @@ export const App: React.FC = () => {
     setShowFullscreenGuide,
     fullscreenGuideIndex,
     fullscreenGuideArea,
+    setFullscreenGuideArea,
     fullscreenQuery,
     fullscreenKb,
     drawerResultsRef,
@@ -166,6 +168,11 @@ export const App: React.FC = () => {
       }
     }
 
+    if (urlParams.get('profile') === '1') {
+      const sec = parseInt(urlParams.get('sec') || '0', 10);
+      push({ id: 'profile', section: sec });
+    }
+
     const scrollParam = urlParams.get('scrollTop');
     if (scrollParam) {
       setTimeout(() => {
@@ -185,6 +192,31 @@ export const App: React.FC = () => {
     [selectedTab, historyItems, seriesItems, movieItems, featuredItems, kidsItems, animeItems, catalog.catalogRows]
   );
   const totalRows = currentRows.length;
+
+  // Auto-rotate Hero showcase every 6 seconds when user is browsing rows or header
+  useEffect(() => {
+    if (selectedTab === 'tv' || activeVodPlayer || isFullscreenLive || isSearchOpen || activeDetailItem || stack.length > 0) return;
+    if (focusDomain === 'content' && destacadosFocus.area === 'hero') return;
+    const heroCount = Math.min(10, currentHeroItems.length);
+    if (heroCount <= 1) return;
+
+    const timer = setInterval(() => {
+      setActiveHeroIndex(prev => {
+        const next = (prev + 1) % heroCount;
+        const upcoming = currentHeroItems[(next + 1) % heroCount];
+        const nextBg = upcoming && (upcoming.backdrop || upcoming.landscape || upcoming.poster);
+        if (nextBg) {
+          try {
+            const img = new Image();
+            img.src = nextBg;
+          } catch (_) {}
+        }
+        return next;
+      });
+    }, 6000);
+
+    return () => clearInterval(timer);
+  }, [selectedTab, activeVodPlayer, isFullscreenLive, isSearchOpen, activeDetailItem, stack.length, focusDomain, destacadosFocus.area, currentHeroItems]);
 
   // Splash (index.html): a real loading screen, see lib/splash.ts
   useEffect(() => { startSplash(); }, []);
@@ -372,6 +404,7 @@ export const App: React.FC = () => {
     },
     onToggleFavorite: (ch: LiveChannel) => toggleLiveFavorite(ch),
     onToggleChannelsDrawer: () => setShowFullscreenGuide(prev => !prev),
+    onOpenDrawerSearch: () => setFullscreenGuideArea('search'),
     onToggleOsd: () => setShowFullscreenOsd(prev => !prev),
     onChannelsLoaded: (chs: LiveChannel[]) => {
       setLiveChannels(chs);
@@ -482,7 +515,7 @@ export const App: React.FC = () => {
           focus={detailFocus}
           isFavorite={favoritesService.isFavorite(activeDetailItem.id)}
           relatedItems={currentRelatedItems}
-          onBack={() => setActiveDetailItem(null)}
+          onBack={detail.handleBackDetail}
           onPlay={(it, ep, isTrailer) => playFromDetail(it, ep, isTrailer)}
           onEpisodesChange={data => setDetailEpisodes(data)}
           onToggleFavorite={it => favoritesService.toggleFavorite(it.id)}
@@ -526,6 +559,8 @@ export const App: React.FC = () => {
             <ProfileScreen
               key={`profile-${idx}`}
               isTop={isTop}
+              hidden={!!activeDetailItem || !!activeVodPlayer}
+              isSearchOpen={isSearchOpen}
               initialSection={screen.section}
               liveCategories={liveCategories}
               catalogItems={[...featuredItems, ...movieItems, ...seriesItems, ...kidsItems, ...animeItems]}
@@ -550,6 +585,7 @@ export const App: React.FC = () => {
               key={`browse-${idx}`}
               isTop={isTop}
               hidden={!!activeDetailItem || !!activeVodPlayer}
+              isSearchOpen={isSearchOpen}
               root={screen.root}
               title={screen.title}
               initialTag={screen.tag}
@@ -557,6 +593,7 @@ export const App: React.FC = () => {
               fixedItems={screen.items}
               onClose={pop}
               onOpenVod={it => handleOpenDetail(it)}
+              onOpenSearch={() => setIsSearchOpen(true)}
             />
           );
         }
@@ -575,9 +612,10 @@ export const App: React.FC = () => {
         return null;
       })}
 
-      {/* Universal Search Modal (TV & VOD) */}
+      {/* Universal Search View (TV & VOD) - Stays alive under detail view so Back returns to search */}
       <SearchModal
         isOpen={isSearchOpen}
+        hidden={!!activeDetailItem || !!activeVodPlayer}
         currentTab={selectedTab}
         onClose={() => setIsSearchOpen(false)}
         onSelectChannel={ch => {
@@ -604,10 +642,13 @@ export const App: React.FC = () => {
         }}
         onSelectVodItem={item => {
           handleOpenDetail(item);
-          setIsSearchOpen(false);
+          // Do not close search! It stays alive underneath the detail view.
         }}
         channels={liveChannels}
       />
+
+      {/* First-Run Welcome & Remote Control Guide */}
+      <WelcomeModal />
     </div>
   );
 };
