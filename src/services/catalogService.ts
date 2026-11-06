@@ -977,3 +977,60 @@ class CatalogService {
 }
 
 export const catalogService = new CatalogService();
+
+// ---------- Portal category tree (the official app's sidebar)
+// v3/getColumnContents gives the children of a column (Netflix, Hulu, Acción…), v3/getShelveData
+// the titles of one of them, page by page. The tree is saved, so the sidebar shows at once next time
+// (and when the portal does not answer).
+
+export interface PortalColumn {
+  id: number;
+  code: string;
+  name: string;
+  free: boolean;
+  sequence: number;
+}
+
+/** Portal column id of a root ('movies', 'series', 'kids', 'anime', 'featured', 'explorar') */
+export function portalRootId(root: string): number | undefined {
+  const ids = window.MagisClient?.rootIds as Record<string, number> | undefined;
+  return ids ? ids[root] : undefined;
+}
+
+export function getPortalColumns(columnId: number): Promise<PortalColumn[]> {
+  const key = `xuper_columns_v1_${columnId}`;
+  return new Promise<PortalColumn[]>((resolve, reject) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.columns !== 'function') return reject(new Error('no portal client'));
+    client.columns(columnId, (err: any, list: PortalColumn[]) => (err ? reject(err) : resolve(list || [])));
+  }).then(
+    list => {
+      if (list.length) kvSet(key, list);
+      return list;
+    },
+    async err => {
+      const saved = await kvGet<PortalColumn[]>(key);
+      if (saved && saved.length) return saved;
+      throw err;
+    }
+  );
+}
+
+export function getPortalColumnPage(
+  columnId: number,
+  pageNum: number,
+  pageSize: number
+): Promise<{ items: VodItem[]; total: number }> {
+  return new Promise((resolve, reject) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.columnPage !== 'function') return reject(new Error('no portal client'));
+    client.columnPage(columnId, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
+      if (err) return reject(err);
+      const offset = (pageNum - 1) * pageSize;
+      resolve({
+        items: (res.items || []).map((raw, i) => normalizeItem(raw, offset + i)),
+        total: res.total || 0
+      });
+    });
+  });
+}

@@ -296,7 +296,7 @@ export const App: React.FC = () => {
       const seen = new Set<string>();
       const items = [...(catalog.catalogRows[target.column] || []), ...(row.items as VodItem[])]
         .filter(it => (seen.has(it.id) ? false : (seen.add(it.id), true)));
-      push({ id: 'browse', root: target.root, title: row.title, items, category });
+      push({ id: 'browse', root: target.root, title: row.title, items, category, column: target.column });
       return;
     }
     push({ id: 'browse', root: target.root, title: row.title, tag: target.tag, year: target.year, category });
@@ -391,9 +391,10 @@ export const App: React.FC = () => {
         playFromDetail(activeDetailItem, undefined, true);
         return true;
       }
-      if (!activeDetailItem && !activeVodPlayer && stack.length === 0) {
+      // The stack always holds the home screen: length 1 means nothing is open on top of it
+      if (!activeDetailItem && !activeVodPlayer && stack.length <= 1) {
         // Universal category exploration gives access to the full combined catalog
-        push({ id: 'browse', root: 'featured', title: 'Explorar Categorías', category: 'all' });
+        push({ id: 'browse', root: 'explorar', title: 'Explorar', category: 'all' });
         return true;
       }
     }
@@ -729,7 +730,8 @@ export const App: React.FC = () => {
               title={screen.title}
               initialTag={screen.tag}
               initialYear={screen.year}
-              initialCategory={(screen as any).category}
+              initialCategory={screen.category}
+              initialColumn={screen.column}
               fixedItems={screen.items}
               catalogRows={catalog.catalogRows}
               catalogItems={[...featuredItems, ...movieItems, ...seriesItems, ...kidsItems, ...animeItems]}

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useReducer } from 'react';
 import { VodItem } from '../types/vod';
+import { PortalColumn, portalRootId, getPortalColumns, getPortalColumnPage } from '../services/catalogService';
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { PosterCard } from '../components/vod/PosterCard';
 import { BrowseRoot } from '../lib/screenStack';
@@ -243,6 +244,7 @@ export function resolveCategoryIdForRow(titleOrRow: string): string {
   return 'all';
 }
 
+
 function fastScrollList(container: HTMLElement, targetIndex: number, itemPitch: number, pad = 12) {
   const targetTop = targetIndex * itemPitch;
   const cTop = container.scrollTop;
@@ -252,6 +254,49 @@ function fastScrollList(container: HTMLElement, targetIndex: number, itemPitch: 
   } else if (targetTop + itemPitch > cTop + cHeight - pad) {
     container.scrollTop = targetTop + itemPitch - cHeight + pad;
   }
+}
+
+function plain(text: string): string {
+  return (text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+}
+
+/** Portal column names that answer to each app category (used when a row opens the catalog) */
+const CATEGORY_COLUMN_PATTERNS: Record<string, RegExp> = {
+  all: /^(all|todos|todas)$/,
+  netflix: /netf?l?ix/,
+  hbo: /hbo/,
+  disney: /disney/,
+  prime_paramount: /prime|paramount/,
+  apple_hulu: /apple|hulu/,
+  action: /accion|aventura/,
+  horror: /horror|terror|suspenso/,
+  comedy: /comedia/,
+  drama: /drama/,
+  scifi: /ciencia|fantast/,
+  crime: /crimen|misterio/,
+  family: /familia|ninos|infantil/,
+  anime: /anime/,
+  history: /historia|guerra/,
+  romance: /romant/,
+  western: /occidental|western/,
+  sports: /deporte|sport/,
+  releases2026: /2026/,
+  trailers: /trailer/
+};
+
+const PLATFORM_CATEGORIES = ['netflix', 'hbo', 'disney', 'prime_paramount', 'apple_hulu'];
+
+/**
+ * Column a row opens on: the row's own name, then its portal column ("Netflix Series"), then the
+ * column of its app category ("HBO: Series Exclusivas" -> "HBO Series"). -1 when none is here.
+ */
+function findInitialColumn(cols: PortalColumn[], title: string, column: string | undefined, category: string): number {
+  const byTitle = title ? cols.findIndex(c => plain(c.name) === plain(title)) : -1;
+  if (byTitle !== -1) return byTitle;
+  const byColumn = column ? cols.findIndex(c => plain(c.name) === plain(column)) : -1;
+  if (byColumn !== -1) return byColumn;
+  const pattern = CATEGORY_COLUMN_PATTERNS[category];
+  return pattern ? cols.findIndex(c => pattern.test(plain(c.name))) : -1;
 }
 
 import { setTrackOffset } from '../utils/scrollHelper';
@@ -267,6 +312,8 @@ interface BrowseScreenProps {
   initialTag?: string;
   initialYear?: string;
   initialCategory?: string;
+  /** Portal column of the row that opened the screen (e.g. "Netflix Series") */
+  initialColumn?: string;
   fixedItems?: VodItem[];
   catalogRows?: Record<string, VodItem[]>;
   catalogItems?: VodItem[];
@@ -277,17 +324,44 @@ interface BrowseScreenProps {
 
 type BrowseArea = 'cats' | 'grid' | 'search';
 
+/** One sidebar entry: a portal column, the opening row's own titles, or an app category (offline) */
+interface SideEntry {
+  key: string;
+  name: string;
+  icon?: string;
+  count?: number;
+  colId?: number;
+}
+
+interface ColumnData {
+  items: VodItem[];
+  /** -1 until the first page arrives */
+  total: number;
+  pages: number;
+  loading: boolean;
+  error: boolean;
+}
+
 const CARD_H = 250;
 const GAP_Y = 16;
 const ROW_HEIGHT = CARD_H + GAP_Y;
 const COLS = 7;
+/** Titles asked to the portal at a time (6 rows) */
+const PAGE_SIZE = 42;
+/** Rows kept in the DOM around the focused row */
+const ROWS_BEFORE = 2;
+const ROWS_AFTER = 4;
+/** Wait for the sidebar to stop moving before asking for a column's titles */
+const SELECT_DEBOUNCE_MS = 220;
+const FIXED_KEY = 'row';
 
 const ROOT_LABEL: Record<BrowseRoot, string> = {
   featured: 'Catálogo de Destacados',
   movies: 'Catálogo de Películas',
   series: 'Catálogo de Series',
   kids: 'Catálogo Infantil y Familiar',
-  anime: 'Catálogo de Anime'
+  anime: 'Catálogo de Anime',
+  explorar: 'Explorar'
 };
 
 export const BrowseScreen: React.FC<BrowseScreenProps> = ({
@@ -297,6 +371,7 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
   root,
   title,
   initialCategory,
+  initialColumn,
   fixedItems,
   catalogItems,
   onClose,
@@ -309,7 +384,70 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
   const gridTrackRef = useRef<HTMLDivElement>(null);
   const [maxLoadedRow, setMaxLoadedRow] = useState(2);
 
-  // Pool of items for this section (both full un-segmented pool and section pool)
+  const wantedCat = initialCategory || resolveCategoryIdForRow(title);
+
+  // ---------- Portal tree: the official sidebar (null while loading; 'offline' -> app categories)
+  const [portalCols, setPortalCols] = useState<PortalColumn[] | null | 'offline'>(() =>
+    portalRootId(root) === undefined ? 'offline' : null
+  );
+  useEffect(() => {
+    const rootId = portalRootId(root);
+    if (rootId === undefined) {
+      setPortalCols('offline');
+      return;
+    }
+    let alive = true;
+    setPortalCols(null);
+    getPortalColumns(rootId)
+      .then(async list => {
+        // A platform row whose platform has no column in this section opens Explorar, which has them all
+        const explorarId = portalRootId('explorar');
+        if (
+          root !== 'explorar' && explorarId !== undefined && PLATFORM_CATEGORIES.includes(wantedCat) &&
+          findInitialColumn(list, title, initialColumn, wantedCat) === -1
+        ) {
+          const alt = await getPortalColumns(explorarId).catch(() => null);
+          if (alt && findInitialColumn(alt, title, initialColumn, wantedCat) !== -1) return alt;
+        }
+        return list;
+      })
+      .then(
+        list => { if (alive) setPortalCols(list.length ? list : 'offline'); },
+        () => { if (alive) setPortalCols('offline'); }
+      );
+    return () => { alive = false; };
+    // The opening row only matters for the first load of this screen
+  }, [root]);
+  const isPortal = Array.isArray(portalCols);
+
+  // Titles of each portal column, loaded page by page
+  const dataRef = useRef<Record<number, ColumnData>>({});
+  const [dataVersion, bumpData] = useReducer((x: number) => x + 1, 0);
+  const aliveRef = useRef(true);
+  useEffect(() => () => { aliveRef.current = false; }, []);
+
+  const loadNextPage = useCallback((colId: number) => {
+    const map = dataRef.current;
+    const d = map[colId] || (map[colId] = { items: [], total: -1, pages: 0, loading: false, error: false });
+    if (d.loading || (d.total >= 0 && d.items.length >= d.total)) return;
+    d.loading = true;
+    d.error = false;
+    const page = d.pages + 1;
+    getPortalColumnPage(colId, page, PAGE_SIZE).then(
+      res => {
+        d.items = d.items.concat(res.items);
+        d.pages = page;
+        // An empty page ends the column even if the total says otherwise
+        d.total = res.items.length ? Math.max(res.total, d.items.length) : d.items.length;
+      },
+      () => { d.error = true; }
+    ).then(() => {
+      d.loading = false;
+      if (aliveRef.current) bumpData();
+    });
+  }, []);
+
+  // ---------- Offline pool (bundled / saved catalog) for the app's own categories
   const { fullPool, allPool } = useMemo(() => {
     const list: VodItem[] = [];
     const seen = new Set<string>();
@@ -363,62 +501,93 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
     return { fullPool: list, allPool: filtered };
   }, [fixedItems, catalogItems, root]);
 
-  // Compute counts for all defined categories (platform brands and sports draw from full pool)
-  const categoriesWithCounts = useMemo(() => {
-    const isPlatformOrCross = (id: string) =>
-      ['netflix', 'hbo', 'disney', 'prime_paramount', 'apple_hulu', 'sports'].includes(id);
+  const isPlatformOrCross = (id: string) =>
+    ['netflix', 'hbo', 'disney', 'prime_paramount', 'apple_hulu', 'sports'].includes(id);
 
+  // App categories with their counts (platform brands and sports draw from the full pool)
+  const categoriesWithCounts = useMemo(() => {
+    if (isPortal) return [];
     return VOD_CATEGORIES.map(cat => {
-      let count = 0;
       const pool = isPlatformOrCross(cat.id) ? fullPool : allPool;
-      if (cat.id === 'all') {
-        count = allPool.length;
-      } else {
-        count = pool.filter(cat.matcher).length;
-      }
+      const count = cat.id === 'all' ? allPool.length : pool.filter(cat.matcher).length;
       return { ...cat, count };
     }).filter(c => c.count > 0 || c.id === 'all');
-  }, [allPool, fullPool]);
+  }, [isPortal, allPool, fullPool]);
 
-  // Determine initial selected category
-  const resolvedInitialCat = useMemo(() => {
-    if (initialCategory) return initialCategory;
-    return resolveCategoryIdForRow(title);
-  }, [initialCategory, title]);
+  const fixedList = useMemo(() => {
+    const seen = new Set<string>();
+    return (fixedItems || []).filter(it => (seen.has(it.id) ? false : (seen.add(it.id), true)));
+  }, [fixedItems]);
 
-  const initialCatIndex = useMemo(() => {
-    const at = categoriesWithCounts.findIndex(c => c.id === resolvedInitialCat);
-    return at !== -1 ? at : 0;
-  }, [categoriesWithCounts, resolvedInitialCat]);
+  // ---------- Sidebar entries and the one the screen opens on
+  const { entries, initialIndex } = useMemo((): { entries: SideEntry[]; initialIndex: number } => {
+    if (!isPortal) {
+      const list: SideEntry[] = categoriesWithCounts.map(c => ({ key: c.id, name: c.name, icon: c.icon, count: c.count }));
+      const at = list.findIndex(e => e.key === wantedCat);
+      return { entries: list, initialIndex: at !== -1 ? at : 0 };
+    }
+    const cols = portalCols as PortalColumn[];
+    const list: SideEntry[] = cols.map(c => ({ key: `col-${c.id}`, name: c.name, colId: c.id }));
+    const at = findInitialColumn(cols, title, initialColumn, wantedCat);
+    if (at !== -1) return { entries: list, initialIndex: at };
+    // A curated row with no column here keeps its own titles as the first entry
+    if (fixedList.length) {
+      return { entries: [{ key: FIXED_KEY, name: title, count: fixedList.length }, ...list], initialIndex: 0 };
+    }
+    return { entries: list, initialIndex: 0 };
+  }, [isPortal, portalCols, categoriesWithCounts, fixedList, wantedCat, initialColumn, title]);
 
-  const [selectedCatId, setSelectedCatId] = useState<string>(
-    categoriesWithCounts[initialCatIndex]?.id || 'all'
-  );
-  const [catIndex, setCatIndex] = useState<number>(initialCatIndex);
+  const [catIndex, setCatIndex] = useState<number>(initialIndex);
   const [area, setArea] = useState<BrowseArea>('grid');
   const [gridIndex, setGridIndex] = useState<number>(0);
 
-  // Synchronize category selection if initialCatIndex changes
+  // A new list of entries (the portal tree arrived) starts on its initial entry; the same list
+  // recomputed by a parent render keeps the user's place
+  const entriesSignature = `${entries.map(e => e.key).join('|')}#${initialIndex}`;
   useEffect(() => {
-    if (categoriesWithCounts[initialCatIndex]) {
-      setSelectedCatId(categoriesWithCounts[initialCatIndex].id);
-      setCatIndex(initialCatIndex);
-    }
-  }, [initialCatIndex, categoriesWithCounts]);
+    setCatIndex(initialIndex);
+    setGridIndex(0);
+  }, [entriesSignature]);
 
-  // Items currently displayed in the grid
-  const activeCategory = useMemo(() => {
-    return categoriesWithCounts.find(c => c.id === selectedCatId) || categoriesWithCounts[0] || VOD_CATEGORIES[0];
-  }, [selectedCatId, categoriesWithCounts]);
+  const activeEntry: SideEntry | undefined = entries[catIndex] || entries[0];
+  const activeColId = activeEntry?.colId;
 
-  const activeItems = useMemo(() => {
-    if (!activeCategory || activeCategory.id === 'all') {
-      return allPool;
+  // First page of the selected column, once the sidebar stops moving (again after a failed first page)
+  useEffect(() => {
+    if (activeColId === undefined) return;
+    const d = dataRef.current[activeColId];
+    if (d && !(d.error && d.total < 0)) return;
+    const timer = setTimeout(() => loadNextPage(activeColId), SELECT_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [activeColId, loadNextPage]);
+
+  // Titles in the grid, and how many the category has in all (null: not known yet)
+  const { gridItems, gridTotal, gridState } = useMemo(() => {
+    if (!activeEntry) return { gridItems: [] as VodItem[], gridTotal: 0, gridState: 'ready' };
+    if (activeEntry.key === FIXED_KEY) return { gridItems: fixedList, gridTotal: fixedList.length, gridState: 'ready' };
+    if (activeEntry.colId !== undefined) {
+      const d = dataRef.current[activeEntry.colId];
+      if (!d || (d.total < 0 && !d.error)) return { gridItems: [] as VodItem[], gridTotal: null, gridState: 'loading' };
+      if (d.total < 0 && d.error) return { gridItems: [] as VodItem[], gridTotal: 0, gridState: 'error' };
+      return { gridItems: d.items, gridTotal: d.total, gridState: 'ready' };
     }
-    const isPlatformOrCross = ['netflix', 'hbo', 'disney', 'prime_paramount', 'apple_hulu', 'sports'].includes(activeCategory.id);
-    const pool = isPlatformOrCross ? fullPool : allPool;
-    return pool.filter(activeCategory.matcher);
-  }, [activeCategory, allPool, fullPool]);
+    const cat = VOD_CATEGORIES.find(c => c.id === activeEntry.key);
+    if (!cat || cat.id === 'all') return { gridItems: allPool, gridTotal: allPool.length, gridState: 'ready' };
+    const pool = isPlatformOrCross(cat.id) ? fullPool : allPool;
+    const list = pool.filter(cat.matcher);
+    return { gridItems: list, gridTotal: list.length, gridState: 'ready' };
+    // dataVersion: the column data lives in a ref
+  }, [activeEntry, fixedList, allPool, fullPool, dataVersion]);
+
+  // Next page when the focus gets near the last loaded row
+  useEffect(() => {
+    if (activeColId === undefined || area !== 'grid') return;
+    const d = dataRef.current[activeColId];
+    if (!d || d.total < 0 || d.items.length >= d.total) return;
+    const focusRow = Math.floor(gridIndex / COLS);
+    const loadedRows = Math.ceil(d.items.length / COLS);
+    if (focusRow >= loadedRows - 3) loadNextPage(activeColId);
+  }, [activeColId, area, gridIndex, dataVersion, loadNextPage]);
 
   // Zero-reflow category list scrolling
   useEffect(() => {
@@ -433,7 +602,7 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
     if (gridTrackRef.current) {
       setTrackOffset(gridTrackRef.current, 'y', 0, false);
     }
-  }, [selectedCatId]);
+  }, [activeEntry?.key]);
 
   // Hardware-accelerated GPU track scrolling & progressive image windowing
   useEffect(() => {
@@ -448,16 +617,17 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
     }
   }, [area, gridIndex]);
 
+  const selectEntry = (next: number) => {
+    setCatIndex(next);
+    setGridIndex(0);
+  };
+
   // TV Remote Key Handler
   useScreenKeys(key => {
     if (key === 'back') {
-      if (area === 'grid') {
-        // Return from grid to categories column
-        setArea('cats');
-      } else if (area === 'search') {
+      if (area === 'grid' || area === 'search') {
         setArea('cats');
       } else {
-        // Exit BrowseScreen back to previous screen
         onClose();
       }
       return;
@@ -465,23 +635,12 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
     if (area === 'cats') {
       if (key === 'up') {
-        if (catIndex === 0) {
-          setArea('search');
-        } else {
-          const next = catIndex - 1;
-          setCatIndex(next);
-          setSelectedCatId(categoriesWithCounts[next].id);
-          setGridIndex(0);
-        }
+        if (catIndex === 0) setArea('search');
+        else selectEntry(catIndex - 1);
       } else if (key === 'down') {
-        if (catIndex < categoriesWithCounts.length - 1) {
-          const next = catIndex + 1;
-          setCatIndex(next);
-          setSelectedCatId(categoriesWithCounts[next].id);
-          setGridIndex(0);
-        }
+        if (catIndex < entries.length - 1) selectEntry(catIndex + 1);
       } else if (key === 'right' || key === 'enter') {
-        if (activeItems.length > 0) {
+        if (gridItems.length > 0) {
           setArea('grid');
           setGridIndex(0);
         }
@@ -490,46 +649,53 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
     }
 
     if (area === 'grid') {
-      const total = activeItems.length;
+      const total = gridItems.length;
+      if (total === 0) {
+        if (key === 'left' || key === 'up') setArea('cats');
+        return;
+      }
       if (key === 'left') {
-        if (gridIndex % COLS === 0) {
-          // On leftmost card column: jump seamlessly back to categories column
-          setArea('cats');
-        } else {
-          setGridIndex(i => Math.max(0, i - 1));
-        }
+        if (gridIndex % COLS === 0) setArea('cats');
+        else setGridIndex(i => Math.max(0, i - 1));
       } else if (key === 'right') {
-        if (gridIndex % COLS !== COLS - 1 && gridIndex + 1 < total) {
-          setGridIndex(i => i + 1);
-        }
+        if (gridIndex % COLS !== COLS - 1 && gridIndex + 1 < total) setGridIndex(i => i + 1);
       } else if (key === 'up') {
-        if (gridIndex < COLS) {
-          setArea('cats');
-        } else {
-          setGridIndex(i => i - COLS);
-        }
+        if (gridIndex < COLS) setArea('cats');
+        else setGridIndex(i => i - COLS);
       } else if (key === 'down') {
-        if (gridIndex + COLS < total) {
-          setGridIndex(i => i + COLS);
-        }
+        // Into the last, shorter row: land on its last card
+        const lastRowStart = Math.floor((total - 1) / COLS) * COLS;
+        if (gridIndex + COLS < total) setGridIndex(i => i + COLS);
+        else if (gridIndex < lastRowStart) setGridIndex(total - 1);
       } else if (key === 'enter') {
-        const it = activeItems[gridIndex];
+        const it = gridItems[gridIndex];
         if (it) onOpenVod(it);
       }
       return;
     }
 
     if (area === 'search') {
-      if (key === 'down') {
-        setArea('cats');
-      } else if (key === 'enter') {
-        if (onOpenSearch) onOpenSearch();
-      }
-      return;
+      if (key === 'down') setArea('cats');
+      else if (key === 'enter' && onOpenSearch) onOpenSearch();
     }
   }, isTop && !hidden && !isSearchOpen);
 
   const screenTitle = title && title !== 'browse' ? title : ROOT_LABEL[root] || 'Catálogo';
+  const entryName = activeEntry ? activeEntry.name : '';
+  const totalLabel = gridTotal === null ? 'Cargando títulos…' : `${gridTotal} títulos en esta categoría`;
+
+  // Only the rows around the focus are in the DOM (a column can have thousands of titles); a spacer
+  // keeps the rendered rows at their real place on the track
+  const focusRow = Math.floor(gridIndex / COLS);
+  const firstRow = Math.max(0, focusRow - ROWS_BEFORE);
+  const lastRow = focusRow + ROWS_AFTER;
+  const windowItems = gridItems.slice(firstRow * COLS, (lastRow + 1) * COLS);
+
+  const entryCount = (e: SideEntry): number | undefined => {
+    if (e.colId === undefined) return e.count;
+    const d = dataRef.current[e.colId];
+    return d && d.total >= 0 ? d.total : undefined;
+  };
 
   return (
     <div className="browse-screen" style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
@@ -541,9 +707,9 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
           <div className="browse-heading">
             <h1 className="browse-title">{screenTitle}</h1>
             <div className="browse-subtitle">
-              <span className="browse-count">{activeCategory.name}</span>
+              <span className="browse-count">{entryName}</span>
               <span className="browse-subtitle-dot">•</span>
-              <span className="browse-subtitle-desc">{activeItems.length} títulos en esta categoría</span>
+              <span className="browse-subtitle-desc">{totalLabel}</span>
             </div>
           </div>
         </div>
@@ -576,31 +742,28 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
         <div className="browse-col-cats">
           <div className="browse-col-header">
             <span className="browse-col-title">CATEGORÍAS</span>
-            <span className="browse-col-count">{categoriesWithCounts.length}</span>
+            <span className="browse-col-count">{portalCols === null ? '…' : entries.length}</span>
           </div>
 
           <div className="browse-cat-vlist" ref={catListRef}>
-            {categoriesWithCounts.map((cat, idx) => {
-              const isCur = cat.id === selectedCatId;
+            {entries.map((entry, idx) => {
+              const isCur = idx === catIndex;
               const isFoc = area === 'cats' && idx === catIndex;
+              const count = entryCount(entry);
               return (
                 <div
-                  key={cat.id}
+                  key={entry.key}
                   className={`browse-cat-vrow ${isCur ? 'is-active-cat' : ''} ${isFoc ? 'is-focused' : ''}`}
                   onClick={() => {
-                    setSelectedCatId(cat.id);
-                    setCatIndex(idx);
+                    selectEntry(idx);
                     setArea('grid');
-                    setGridIndex(0);
                   }}
                 >
                   <div className="browse-cat-info">
-                    <span className="browse-cat-icon">{cat.icon}</span>
-                    <span className="browse-cat-vname">{cat.name}</span>
+                    {entry.icon && <span className="browse-cat-icon">{entry.icon}</span>}
+                    <span className="browse-cat-vname">{entry.name}</span>
                   </div>
-                  {cat.count !== undefined && (
-                    <span className="browse-cat-vcount">{cat.count}</span>
-                  )}
+                  {count !== undefined && <span className="browse-cat-vcount">{count}</span>}
                 </div>
               );
             })}
@@ -610,11 +773,23 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
         {/* Right Column: Cards Grid */}
         <div className="browse-col-grid" ref={gridContainerRef}>
           <div className="browse-grid-subhead">
-            <h2 className="browse-category-name">{activeCategory.name}</h2>
-            <span className="browse-category-total">{activeItems.length} títulos disponibles</span>
+            <h2 className="browse-category-name">{entryName}</h2>
+            <span className="browse-category-total">
+              {gridTotal === null ? 'Cargando…' : `${gridTotal} títulos disponibles`}
+            </span>
           </div>
 
-          {activeItems.length === 0 ? (
+          {portalCols === null || gridState === 'loading' ? (
+            <div className="browse-empty-category">
+              <div className="browse-empty-icon">⏳</div>
+              <div className="browse-empty-text">Cargando títulos…</div>
+            </div>
+          ) : gridState === 'error' ? (
+            <div className="browse-empty-category">
+              <div className="browse-empty-icon">⚠️</div>
+              <div className="browse-empty-text">No se pudieron cargar los títulos. Elige la categoría otra vez para reintentar.</div>
+            </div>
+          ) : gridItems.length === 0 ? (
             <div className="browse-empty-category">
               <div className="browse-empty-icon">🎬</div>
               <div className="browse-empty-text">No hay títulos disponibles en esta categoría.</div>
@@ -622,16 +797,18 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
           ) : (
             <div className="browse-cards-grid-track" ref={gridTrackRef}>
               <div className="browse-cards-grid">
-                {activeItems.map((item, idx) => {
-                  const isFocusedCard = area === 'grid' && idx === gridIndex;
+                {firstRow > 0 && (
+                  <div style={{ gridColumn: '1 / -1', height: firstRow * ROW_HEIGHT - GAP_Y }} />
+                )}
+                {windowItems.map((item, i) => {
+                  const idx = firstRow * COLS + i;
                   const cardRow = Math.floor(idx / COLS);
-                  const isCardShown = cardRow <= maxLoadedRow;
                   return (
                     <PosterCard
                       key={`${item.id}-${idx}`}
                       item={item}
-                      isFocused={isFocusedCard}
-                      showImage={isCardShown}
+                      isFocused={area === 'grid' && idx === gridIndex}
+                      showImage={cardRow <= maxLoadedRow}
                       onActivate={onOpenVod}
                     />
                   );

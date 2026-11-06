@@ -1539,8 +1539,65 @@
     movies: 76177,
     series: 76178,
     kids: 76783,
-    anime: 76180
+    anime: 76180,
+    explorar: 76784
   };
+
+  // Category tree (v3/getColumnContents): children of a column, as the official app's sidebar.
+  // Sorted by the portal's `sequence`; restricted (adult) columns are left out.
+  var columnCache = {};
+  function columns(columnId, callback, opts) {
+    var key = String(columnId);
+    var hit = columnCache[key];
+    if (hit && Date.now() - hit.at < TREE_TTL) return callback(null, hit.list);
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      call('v3/getColumnContents', { columnId: columnId, pageNum: 1, pageSize: 1000 }, { low: !!(opts && opts.low) }, function (cErr, cRes) {
+        if (cErr) return callback(cErr);
+        var raw = cRes && cRes.childColumnList || [];
+        var list = [];
+        for (var i = 0; i < raw.length; i++) {
+          var c = raw[i];
+          if (!c || !c.id || String(c.restricted) === '1') continue;
+          list.push({ id: c.id, code: text(c.code), name: text(c.name), free: String(c.free) === '1', sequence: parseInt(c.sequence, 10) || 0 });
+        }
+        list.sort(function (a, b) { return a.sequence - b.sequence; });
+        columnCache[key] = { at: Date.now(), list: list };
+        callback(null, list);
+      });
+    });
+  }
+
+  // Titles of one column, page by page (v3/getShelveData). Kept for the `freshTime` the portal sends.
+  var shelfCache = {};
+  var shelfCount = 0;
+  function columnPage(columnId, pageNum, pageSize, callback, opts) {
+    pageNum = Math.max(1, parseInt(pageNum, 10) || 1);
+    pageSize = pageSize || 42;
+    var key = columnId + ':' + pageNum + ':' + pageSize;
+    var hit = shelfCache[key];
+    if (hit && Date.now() < hit.until) return callback(null, { items: hit.items, total: hit.total, cached: true });
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      call('v3/getShelveData', { columnId: columnId, columnType: '2', pageNum: pageNum, pageSize: pageSize }, { low: !!(opts && opts.low) }, function (sErr, sRes) {
+        if (sErr) return callback(sErr);
+        var list = sRes && sRes.assetList || [];
+        var items = [];
+        for (var i = 0; i < list.length; i++) {
+          var it = itemFromAsset(list[i], '', null);
+          if (it) items.push(it);
+        }
+        var total = parseInt(sRes && sRes.assetListTotalSize, 10) || items.length;
+        var fresh = parseInt(sRes && sRes.freshTime, 10) || 600;
+        if (++shelfCount > 120) {
+          shelfCache = {};
+          shelfCount = 0;
+        }
+        shelfCache[key] = { until: Date.now() + fresh * 1000, items: items, total: total };
+        callback(null, { items: items, total: total, cached: false });
+      });
+    });
+  }
 
   // Full catalog of a root, page by page; filters: { tags, year, originalCountry } (portal values, in English)
   // opts.low: prefetch, waits behind every other request
@@ -1635,6 +1692,9 @@
     home: home,
     browse: browse,
     browseFilters: browseFilters,
+    columns: columns,
+    columnPage: columnPage,
+    rootIds: ROOT_IDS,
     search: search,
     getLiveCategories: getLiveCategories,
     getLiveChannels: getLiveChannels,
