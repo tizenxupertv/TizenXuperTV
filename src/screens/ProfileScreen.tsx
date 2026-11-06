@@ -10,8 +10,7 @@ import { settingsService } from '../services/settingsService';
 import { parentalService } from '../services/parentalService';
 import { diagnosticService, DiagReport } from '../services/diagnosticService';
 import { useScreenKeys } from '../hooks/useScreenKeys';
-import { Header } from '../components/layout/Header';
-import { TabId } from '../components/layout/TopNavbar';
+import { ScreenHeader, BackIcon } from '../components/layout/Header';
 
 interface ProfileScreenProps {
   isTop: boolean;
@@ -205,6 +204,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const focusedId = area === 'panel' && rows[focus.r] && rows[focus.r][focus.c] ? rows[focus.r][focus.c].id : '';
   const isF = (cellId: string) => focusedId === cellId;
 
+  // Mouse / pointer: a click focuses the cell and activates it, like OK on the remote
+  const tap = (cellId: string) => () => {
+    for (let r = 0; r < rows.length; r++) {
+      const c = rows[r].findIndex(cell => cell.id === cellId);
+      if (c !== -1) {
+        setArea('panel');
+        setFocus({ r, c });
+        rows[r][c].onActivate();
+        return;
+      }
+    }
+  };
+
   useEffect(() => {
     if (!focusedId || !panelRef.current) return;
     const el = panelRef.current.querySelector('.is-focused') as HTMLElement | null;
@@ -270,7 +282,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       <div className="pf-row-label">{label}</div>
       <div className="pf-row-opts">
         {opts.map((o, i) => (
-          <div key={i} className={`pf-opt ${i === selected ? 'is-checked' : ''} ${isF(`${group}-${i}`) ? 'is-focused' : ''}`}>
+          <div key={i} className={`pf-opt ${i === selected ? 'is-checked' : ''} ${isF(`${group}-${i}`) ? 'is-focused' : ''}`} onClick={tap(`${group}-${i}`)}>
             <span className="pf-radio" />
             <span className={group === 'style' ? `pf-style-${i}` : ''}>{o}</span>
           </div>
@@ -297,8 +309,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </div>
           <div className="pf-hr" />
           <div className="pf-tabs">
-            <div className={`pf-tab ${listTab === 'history' ? 'is-selected' : ''} ${isF('tab-history') ? 'is-focused' : ''}`}>Historial</div>
-            <div className={`pf-tab ${listTab === 'favs' ? 'is-selected' : ''} ${isF('tab-favs') ? 'is-focused' : ''}`}>Mis favoritos</div>
+            <div className={`pf-tab ${listTab === 'history' ? 'is-selected' : ''} ${isF('tab-history') ? 'is-focused' : ''}`} onClick={tap('tab-history')}>Historial</div>
+            <div className={`pf-tab ${listTab === 'favs' ? 'is-selected' : ''} ${isF('tab-favs') ? 'is-focused' : ''}`} onClick={tap('tab-favs')}>Mis favoritos</div>
             <div className="pf-total">Total <span>{listItems.length}</span></div>
           </div>
           {listItems.length === 0 ? (
@@ -306,7 +318,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           ) : (
             <div className="pf-grid">
               {listItems.map(it => (
-                <div key={it.key} className={`pf-card-item ${isF('card-' + it.key) ? 'is-focused' : ''}`}>
+                <div key={it.key} className={`pf-card-item ${isF('card-' + it.key) ? 'is-focused' : ''}`} onClick={tap('card-' + it.key)}>
                   <div className="pf-poster">
                     <img src={it.poster || 'assets/placeholder_vertical.png'} alt="" loading="lazy" />
                   </div>
@@ -331,7 +343,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <h3 className="pf-subtitle">Subtítulos</h3>
           <div className="pf-row">
             <div className="pf-row-label">Activar subtítulos</div>
-            <div className={`pf-switch ${settings.subtitle ? 'on' : 'off'} ${isF('subtitle') ? 'is-focused' : ''}`}>
+            <div className={`pf-switch ${settings.subtitle ? 'on' : 'off'} ${isF('subtitle') ? 'is-focused' : ''}`} onClick={tap('subtitle')}>
               <span className="pf-switch-knob" />
             </div>
           </div>
@@ -351,7 +363,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               Crea un PIN de 4 dígitos para proteger las categorías de TV en vivo y las pestañas de contenido que elijas.
               Si lo olvidas, deberás reinstalar la app.
             </p>
-            <div className={`pf-btn ${isF('create') ? 'is-focused' : ''}`}>Crear PIN</div>
+            <div className={`pf-btn ${isF('create') ? 'is-focused' : ''}`} onClick={tap('create')}>Crear PIN</div>
           </div>
         );
       }
@@ -362,13 +374,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             Las categorías marcadas piden el PIN al abrirlas. Tras desbloquear, no se vuelve a pedir hasta cerrar la app.
           </p>
           <div className="pf-btn-row">
-            <div className={`pf-btn ${isF('change') ? 'is-focused' : ''}`}>Cambiar PIN</div>
-            <div className={`pf-btn pf-btn-danger ${isF('disable') ? 'is-focused' : ''}`}>Desactivar bloqueo</div>
+            <div className={`pf-btn ${isF('change') ? 'is-focused' : ''}`} onClick={tap('change')}>Cambiar PIN</div>
+            <div className={`pf-btn pf-btn-danger ${isF('disable') ? 'is-focused' : ''}`} onClick={tap('disable')}>Desactivar bloqueo</div>
           </div>
           <h3 className="pf-subtitle">Canales en vivo</h3>
           <div className="pf-lock-grid">
             {lockCats.map(c => (
-              <div key={String(c.id)} className={`pf-lock-item ${isF('live-' + c.id) ? 'is-focused' : ''}`}>
+              <div key={String(c.id)} className={`pf-lock-item ${isF('live-' + c.id) ? 'is-focused' : ''}`} onClick={tap('live-' + c.id)}>
                 <span>{c.name}</span>
                 <span className={`pf-lock-badge ${parentalService.isLiveCatMarked(c.id) ? 'on' : ''}`}>
                   {parentalService.isLiveCatMarked(c.id) ? 'Bloqueada' : 'Libre'}
@@ -379,7 +391,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <h3 className="pf-subtitle">Pestañas de contenido</h3>
           <div className="pf-lock-grid">
             {VOD_TABS.map(t => (
-              <div key={t.id} className={`pf-lock-item ${isF('tab-' + t.id) ? 'is-focused' : ''}`}>
+              <div key={t.id} className={`pf-lock-item ${isF('tab-' + t.id) ? 'is-focused' : ''}`} onClick={tap('tab-' + t.id)}>
                 <span>{t.label}</span>
                 <span className={`pf-lock-badge ${parentalService.isVodTabMarked(t.id) ? 'on' : ''}`}>
                   {parentalService.isVodTabMarked(t.id) ? 'Bloqueada' : 'Libre'}
@@ -400,7 +412,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             Comprueba si el televisor llega a los servidores de XuperTV. Prueba el DNS seguro, el portal y los servidores de video.
           </p>
           <div className="pf-diag-top">
-            <div className={`pf-btn ${isF('run') ? 'is-focused' : ''}`}>
+            <div className={`pf-btn ${isF('run') ? 'is-focused' : ''}`} onClick={tap('run')}>
               {diagRunning ? 'Analizando…' : report ? 'Analizar de nuevo' : 'Analizar red'}
             </div>
             <div className={`pf-diag-summary ${verdict ? verdict.cls : ''}`}>
@@ -440,7 +452,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <h2 className="pf-title">Donaciones y Apoyo al Proyecto</h2>
           <div className="pf-hr" />
           <div className="pf-donate-content">
-            <div className={`pf-donate-card ${isF('donate-qr') ? 'is-focused' : ''}`}>
+            <div className={`pf-donate-card ${isF('donate-qr') ? 'is-focused' : ''}`} onClick={tap('donate-qr')}>
               <img
                 src="assets/paypal-donation-qr.png"
                 alt="Código QR de Donación PayPal"
@@ -496,14 +508,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   return (
     <div className="profile-screen" style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
-      <Header
-        selectedTab={'' as TabId}
-        focusedIndex={null}
-        profileActive
-        onSelectTab={() => {}}
-        onSearchClick={() => {}}
-        onFilterClick={() => {}}
-        onProfileClick={() => {}}
+      <ScreenHeader
+        title="Perfil"
+        actions={[{ id: 'back', title: 'Volver', icon: BackIcon, onClick: onClose }]}
       />
       <div className="profile-body">
       <aside className="pf-menu">
@@ -512,6 +519,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <div
             key={s.id}
             className={`pf-menu-item ${i === section ? 'is-selected' : ''} ${area === 'menu' && i === section ? 'is-focused' : ''}`}
+            onClick={() => {
+              setSection(i);
+              setArea('menu');
+            }}
           >
             <svg viewBox="0 0 32 32" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4"
               dangerouslySetInnerHTML={{ __html: s.icon }} />

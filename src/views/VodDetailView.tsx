@@ -5,12 +5,12 @@ import { PosterCard } from '../components/vod/PosterCard';
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { historyService } from '../services/historyService';
 import { favoritesService } from '../services/favoritesService';
-import { BrandLogo } from '../components/common/BrandLogo';
-import { settingsService, PREFERRED_LANGUAGES, SUBTITLE_CHOICES, subtitleChoiceIndex } from '../services/settingsService';
+import { ScreenHeader, BackIcon } from '../components/layout/Header';
+import { settingsService, PREFERRED_LANGUAGES, SUBTITLE_CHOICES, subtitleChoiceIndex, QUALITY_OPTIONS } from '../services/settingsService';
 import { getResumeTarget, getEpisodeStatus, EpisodeStatus } from '../lib/vodResume';
 import { useViewProfiler } from '../lib/perfMonitor';
 
-export type DetailFocusArea = 'back' | 'actions' | 'seasons' | 'episodes' | 'related' | 'audioModal';
+export type DetailFocusArea = 'back' | 'actions' | 'seasons' | 'seasonMenu' | 'epRanges' | 'episodes' | 'related' | 'audioModal';
 
 export interface VodDetailFocus {
   area: DetailFocusArea;
@@ -18,11 +18,18 @@ export interface VodDetailFocus {
   seasonIndex: number;
   episodeIndex: number;
   relatedIndex: number;
+  /** Season highlighted in the open season list (the season loads only when picked) */
+  seasonMenuIndex?: number;
+  /** Range of 20 episodes focused in the ranges row ("1-20", "21-40"…) */
+  rangeIndex?: number;
   modalCol?: 'audio' | 'subs';
   modalIndex?: number;
 }
 
 const NO_EPISODES: VodEpisode[] = [];
+
+/** Episodes per range, as the official app: long series stay light and quick to cross */
+export const EP_RANGE = 20;
 
 export const AUDIO_OPTIONS = PREFERRED_LANGUAGES;
 export const SUB_OPTIONS = SUBTITLE_CHOICES;
@@ -37,10 +44,13 @@ interface VodDetailViewProps {
   onToggleFavorite: (item: VodItem) => void;
   onSelectSeason?: (seasonIndex: number) => void;
   onSelectEpisode?: (episodeIndex: number) => void;
+  /** Opens the season list (mouse) */
+  onOpenSeasonMenu?: () => void;
   onSelectRelated?: (item: VodItem) => void;
   onDetailLoaded?: (counts: { seasonsCount: number; episodesCount: number; relatedCount: number; isSeries: boolean; hasTrailer?: boolean }) => void;
   onEpisodesChange?: (data: { episodes: VodEpisode[]; seasonId: string; seasonNumber?: number; activeEpisodeIndex?: number }) => void;
-  onOpenAudioModal?: () => void;
+  /** Opens the list under the Audio or Subtítulos button */
+  onOpenAudioModal?: (col: 'audio' | 'subs') => void;
   onCloseAudioModal?: () => void;
   onSelectAudioOption?: (audio: string) => void;
   onSelectSubOption?: (sub: string) => void;
@@ -56,6 +66,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   onToggleFavorite,
   onSelectSeason,
   onSelectEpisode,
+  onOpenSeasonMenu,
   onSelectRelated,
   onDetailLoaded,
   onEpisodesChange,
@@ -90,7 +101,6 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   const prefs = settingsService.get();
   const currentAudio = AUDIO_OPTIONS[prefs.audio] || AUDIO_OPTIONS[0];
   const currentSub = SUB_OPTIONS[subtitleChoiceIndex(prefs)] || SUB_OPTIONS[0];
-  const audioShortName = currentAudio;
 
   const episodesSliderRef = useRef<HTMLDivElement>(null);
   const relatedSliderRef = useRef<HTMLDivElement>(null);
@@ -228,9 +238,10 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
       }
       if (episodesSliderRef.current && activeEpisodeIdx > 0) {
         const container = episodesSliderRef.current;
-        const target = container.children[activeEpisodeIdx] as HTMLElement;
+        const local = activeEpisodeIdx % EP_RANGE;
+        const target = container.children[local] as HTMLElement;
         if (target) {
-          scrollHorizontalSlider(container, target, activeEpisodeIdx, 48, 180);
+          scrollHorizontalSlider(container, target, local, 0, 180);
         }
       }
     }
@@ -265,10 +276,31 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   useEffect(() => {
     if (focus.area === 'episodes' && episodesSliderRef.current) {
       const container = episodesSliderRef.current;
-      const target = container.children[focus.episodeIndex] as HTMLElement;
-      scrollHorizontalSlider(container, target, focus.episodeIndex, 48, 180);
+      const local = focus.episodeIndex % EP_RANGE;
+      const target = container.children[local] as HTMLElement;
+      scrollHorizontalSlider(container, target, local, 0, 180);
     }
   }, [focus.area, focus.episodeIndex, episodes]);
+
+  const seriesSectionRef = useRef<HTMLElement>(null);
+  const seasonMenuRef = useRef<HTMLDivElement>(null);
+  // Long season lists: the highlighted season stays in view inside the panel
+  useEffect(() => {
+    if (focus.area !== 'seasonMenu' || !seasonMenuRef.current) return;
+    const opt = seasonMenuRef.current.querySelector('.vod-action-option.is-focused') as HTMLElement | null;
+    if (opt && opt.scrollIntoView) opt.scrollIntoView({ block: 'nearest' });
+  }, [focus.area, focus.seasonMenuIndex]);
+
+  // Ranges row follows the visible range (long series have dozens of ranges)
+  const rangesRef = useRef<HTMLDivElement>(null);
+  const visibleRangeForScroll = focus.area === 'epRanges' && focus.rangeIndex !== undefined
+    ? focus.rangeIndex
+    : Math.floor(Math.max(0, focus.episodeIndex) / EP_RANGE);
+  useEffect(() => {
+    const track = rangesRef.current;
+    const target = track && (track.children[visibleRangeForScroll] as HTMLElement | undefined);
+    if (track && target) scrollHorizontalSlider(track, target, visibleRangeForScroll, 0, 160);
+  }, [visibleRangeForScroll, episodes.length]);
 
   // Auto-scroll horizontal related slider with comfortable threshold
   useEffect(() => {
@@ -284,14 +316,27 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     if (!rootScrollRef.current) return;
     if (focus.area === 'back' || focus.area === 'actions') {
       rootScrollRef.current.scrollTop = 0;
-    } else if (focus.area === 'seasons' || focus.area === 'episodes') {
-      rootScrollRef.current.scrollTop = 280;
+    } else if (focus.area === 'seasons' || focus.area === 'seasonMenu' || focus.area === 'epRanges' || focus.area === 'episodes') {
+      // The whole series section (selector, ranges, tiles) just under the header
+      const sec = seriesSectionRef.current;
+      rootScrollRef.current.scrollTop = sec ? Math.max(0, sec.offsetTop - 90) : 280;
     } else if (focus.area === 'related') {
       rootScrollRef.current.scrollTop = rootScrollRef.current.scrollHeight;
     }
   }, [focus.area]);
 
   const backdropUrl = currentItem.backdrop || currentItem.landscape || currentItem.poster || 'assets/placeholder_landscape.png';
+
+  // Visible range of episodes: the focused one in the ranges row, else the focused/current episode's
+  const visibleRange = focus.area === 'epRanges' && focus.rangeIndex !== undefined
+    ? focus.rangeIndex
+    : Math.floor(Math.max(0, focus.episodeIndex) / EP_RANGE);
+  const rangeStart = Math.min(visibleRange * EP_RANGE, Math.max(0, episodes.length - 1) - (Math.max(0, episodes.length - 1) % EP_RANGE));
+  const captionIdx = focus.area === 'episodes' ? focus.episodeIndex : Math.min(episodes.length - 1, Math.max(0, focus.episodeIndex));
+  const captionEp = episodes[captionIdx];
+  // Range of the episode to continue (marked with a dot in the ranges row)
+  const currentEpIdx = episodeStatuses.findIndex(st => !!st && st.isCurrent);
+  const currentRange = currentEpIdx >= 0 ? Math.floor(currentEpIdx / EP_RANGE) : -1;
   const genres = currentItem.genres && currentItem.genres.length ? currentItem.genres : ['Película', 'Acción'];
   const score = currentItem.score || '8.5';
   const year = currentItem.year && currentItem.year !== '—' ? currentItem.year : '2024';
@@ -310,16 +355,11 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
       </div>
       <div className="vod-detail-overlay-vignette" />
 
-      {/* Top Navigation Row: Back Button & Brand Logo */}
-      <header className="vod-detail-top-bar">
-        <button
-          className={`vod-back-btn ${focus.area === 'back' ? 'is-focused' : ''}`}
-          onClick={onBack}
-        >
-          <span className="back-arrow">←</span> Volver al catálogo
-        </button>
-        <BrandLogo />
-      </header>
+      {/* Same bar as the home; Back is the icon on the right (focus area 'back') */}
+      <ScreenHeader
+        actions={[{ id: 'back', title: 'Volver', icon: BackIcon, onClick: onBack }]}
+        focusedAction={focus.area === 'back' ? 0 : null}
+      />
 
       {/* Main Metadata Section */}
       <main className="vod-detail-main">
@@ -389,19 +429,53 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
             <span className="btn-icon">{isFav ? '★' : '☆'}</span>
           </button>
 
-          {/* Action 2: Audio & Subtitles */}
+          {/* Actions 2 and 3: Audio / Subtítulos, each with its list under the button (as in the player) */}
+          {(['audio', 'subs'] as const).map((col, k) => {
+            const options = col === 'audio' ? AUDIO_OPTIONS : SUB_OPTIONS;
+            const current = col === 'audio' ? currentAudio : currentSub;
+            const isOpen = focus.area === 'audioModal' && (focus.modalCol || 'audio') === col;
+            return (
+              <div key={col} className="vod-action-wrap">
+                <button
+                  className={`vod-action-btn secondary-btn ${
+                    (focus.area === 'actions' && focus.actionIndex === 2 + k) || isOpen ? 'is-focused' : ''
+                  }`}
+                  onClick={() => onOpenAudioModal && onOpenAudioModal(col)}
+                >
+                  <span>{col === 'audio' ? 'Audio' : 'Subtítulos'} · {current}</span>
+                  <span className="vod-action-caret">▾</span>
+                </button>
+                {isOpen && (
+                  <div className="vod-action-menu">
+                    {options.map((opt, i) => (
+                      <div
+                        key={opt}
+                        className={`vod-action-option ${opt === current ? 'is-active' : ''} ${(focus.modalIndex || 0) === i ? 'is-focused' : ''}`}
+                        onClick={() => (col === 'audio' ? onSelectAudioOption : onSelectSubOption)?.(opt)}
+                      >
+                        <span>{opt}</span>
+                        {opt === current && <span className="vod-season-check">✓</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Action 4: Resolution (OK cycles Auto / 1080p / 720p / 480p; used when the title has several) */}
           <button
-            className={`vod-action-btn secondary-btn ${focus.area === 'actions' && focus.actionIndex === 2 ? 'is-focused' : ''}`}
-            onClick={() => onOpenAudioModal && onOpenAudioModal()}
+            className={`vod-action-btn secondary-btn ${focus.area === 'actions' && focus.actionIndex === 4 ? 'is-focused' : ''}`}
+            onClick={() => settingsService.set({ quality: (prefs.quality + 1) % QUALITY_OPTIONS.length })}
           >
-            <span className="btn-icon">🌐</span>
-            <span>Idioma · {audioShortName}</span>
+            <span className="btn-icon">⚙</span>
+            <span>Resolución · {QUALITY_OPTIONS[prefs.quality] || QUALITY_OPTIONS[0]}</span>
           </button>
 
-          {/* Action 3: Trailer (Only if trailer exists) */}
+          {/* Action 5: Trailer (Only if trailer exists) */}
           {hasTrailer && (
             <button
-              className={`vod-action-btn secondary-btn ${focus.area === 'actions' && focus.actionIndex === 3 ? 'is-focused' : ''}`}
+              className={`vod-action-btn secondary-btn ${focus.area === 'actions' && focus.actionIndex === 5 ? 'is-focused' : ''}`}
               onClick={() => onPlay(currentItem, undefined, true)}
             >
               <span className="btn-icon">🎬</span>
@@ -412,46 +486,68 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
 
         {/* Series Section: Seasons Selector + Episodes Slider */}
         {isSeries && (
-          <section className="vod-detail-series-section">
+          <section className="vod-detail-series-section" ref={seriesSectionRef}>
             <div className="vod-series-header">
               <h2 className="section-title">Episodios</h2>
 
-              {/* Seasons Selector Pills */}
+              {/* Season selector: same button and list as Audio / Subtítulos (the season loads when picked) */}
               {seasons.length > 1 && (
-                <div className="vod-seasons-row">
-                  {seasons.map((s, sIdx) => {
-                    const isSeasonFocused = focus.area === 'seasons' && focus.seasonIndex === sIdx;
-                    const isSeasonActive = focus.seasonIndex === sIdx;
-
-                    return (
-                      <button
-                        key={s.id || sIdx}
-                        className={`season-pill-btn ${isSeasonActive ? 'is-active' : ''} ${isSeasonFocused ? 'is-focused' : ''}`}
-                        onClick={() => onSelectSeason && onSelectSeason(sIdx)}
-                      >
-                        {s.name}
-                      </button>
-                    );
-                  })}
+                <div className="vod-action-wrap">
+                  <button
+                    className={`vod-action-btn secondary-btn ${focus.area === 'seasons' || focus.area === 'seasonMenu' ? 'is-focused' : ''}`}
+                    onClick={() => onOpenSeasonMenu && onOpenSeasonMenu()}
+                  >
+                    <span>{(seasons[focus.seasonIndex] || seasons[0]).name}</span>
+                    <span className="vod-action-caret">▾</span>
+                  </button>
+                  {focus.area === 'seasonMenu' && (
+                    <div className="vod-action-menu is-scrollable" ref={seasonMenuRef}>
+                      {seasons.map((s, sIdx) => (
+                        <div
+                          key={s.id || sIdx}
+                          className={`vod-action-option ${sIdx === focus.seasonIndex ? 'is-active' : ''} ${
+                            sIdx === focus.seasonMenuIndex ? 'is-focused' : ''
+                          }`}
+                          onClick={() => onSelectSeason && onSelectSeason(sIdx)}
+                        >
+                          <span>{s.name}</span>
+                          {sIdx === focus.seasonIndex && <span className="vod-season-check">✓</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Horizontal Episodes Slider */}
-            <div className="vod-episodes-slider" ref={episodesSliderRef}>
+            {/* Ranges of 20 ("1-20", "21-40"…) when the season is longer */}
+            {episodes.length > EP_RANGE && !(isLoading || seasonLoading) && (
+              <div className="vod-ep-ranges-clip">
+              <div className="vod-ep-ranges" ref={rangesRef}>
+                {Array.from({ length: Math.ceil(episodes.length / EP_RANGE) }, (_, r) => {
+                  const from = r * EP_RANGE + 1;
+                  const to = Math.min(episodes.length, (r + 1) * EP_RANGE);
+                  return (
+                    <div
+                      key={r}
+                      className={`vod-ep-range ${r === visibleRange ? 'is-active' : ''} ${r === currentRange ? 'has-current' : ''} ${
+                        focus.area === 'epRanges' && focus.rangeIndex === r ? 'is-focused' : ''
+                      }`}
+                      onClick={() => onSelectEpisode && onSelectEpisode(r * EP_RANGE)}
+                    >
+                      {from}-{to}
+                    </div>
+                  );
+                })}
+              </div>
+              </div>
+            )}
+
+            {/* Numbered tiles of the visible range: episodes almost never have their own picture */}
+            <div className="vod-episodes-slider is-tiles" ref={episodesSliderRef}>
               {(isLoading || seasonLoading) ? (
-                [1, 2, 3, 4, 5].map(n => (
-                  <div key={`ep-skel-${n}`} className="vod-episode-card is-skeleton">
-                    <div className="episode-card-thumb skeleton-shimmer">
-                      <div className="episode-badge-num skeleton-pill" />
-                    </div>
-                    <div className="episode-card-body">
-                      <div className="skeleton-line skeleton-title-line" />
-                      <div className="skeleton-line skeleton-meta-line" />
-                      <div className="skeleton-line skeleton-desc-line" />
-                      <div className="skeleton-line skeleton-desc-short" />
-                    </div>
-                  </div>
+                [1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                  <div key={`ep-skel-${n}`} className="vod-ep-tile is-skeleton skeleton-shimmer" />
                 ))
               ) : loadError ? (
                 <div className="vod-episodes-empty-card">
@@ -464,57 +560,38 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                   <div className="vod-episodes-empty-text">No hay episodios disponibles para esta temporada.</div>
                 </div>
               ) : (
-                episodes.map((ep, epIdx) => {
+                episodes.slice(rangeStart, rangeStart + EP_RANGE).map((ep, j) => {
+                  const epIdx = rangeStart + j;
                   const isEpFocused = focus.area === 'episodes' && focus.episodeIndex === epIdx;
-                  const epPic = ep.picture || backdropUrl;
                   const st = episodeStatuses[epIdx];
-
                   return (
                     <div
                       key={ep.id || epIdx}
-                      className={`vod-episode-card ${isEpFocused ? 'is-focused' : ''} ${st?.isWatched ? 'is-watched' : ''} ${st?.isCurrent ? 'is-current' : ''}`}
+                      className={`vod-ep-tile ${isEpFocused ? 'is-focused' : ''} ${st?.isWatched ? 'is-watched' : ''} ${st?.isCurrent ? 'is-current' : ''}`}
                       onClick={() => onPlay(currentItem, ep)}
                     >
-                      <div className="episode-card-thumb">
-                        <img
-                          className="episode-card-thumb-img"
-                          src={epPic}
-                          decoding="async"
-                          loading="lazy"
-                          onLoad={e => e.currentTarget.classList.add('is-loaded')}
-                          alt=""
-                        />
-                        <div className="episode-badge-num">
-                          EP. {ep.number || epIdx + 1}
-                          {st?.isWatched && <span className="episode-check-icon"> ✓</span>}
+                      {st?.isCurrent && <span className="vod-ep-tile-play">▶</span>}
+                      <span className="vod-ep-tile-num">{ep.number || epIdx + 1}</span>
+                      {st?.isWatched && <span className="vod-ep-tile-check">✓</span>}
+                      {st && !st.isWatched && st.progressPercent > 0 && (
+                        <div className="vod-ep-tile-progress">
+                          <div style={{ width: `${st.progressPercent}%` }} />
                         </div>
-                        <div className="episode-play-overlay">
-                          <span className="play-triangle">▶</span>
-                        </div>
-                        {st && (st.progressPercent > 0 || st.isWatched) && (
-                          <div className="cw-progress-track">
-                            <div
-                              className="cw-progress-fill"
-                              style={{ width: `${st.isWatched ? 100 : st.progressPercent}%` }}
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="episode-card-body">
-                        <div className="episode-card-title">{ep.title || `Capítulo ${ep.number || epIdx + 1}`}</div>
-                        <div className="episode-card-meta">
-                          <span>{ep.duration || ''}</span>
-                          <span>·</span>
-                          <span className="badge-tag-mini">{ep.quality || 'FHD'}</span>
-                        </div>
-                        <p className="episode-card-desc">{ep.description}</p>
-                      </div>
+                      )}
                     </div>
                   );
                 })
               )}
             </div>
+
+            {/* The focused (or current) episode */}
+            {captionEp && !(isLoading || seasonLoading) && (
+              <div className="vod-ep-caption">
+                <span className="vod-ep-caption-num">Episodio {captionEp.number || captionIdx + 1}</span>
+                {captionEp.title && <span className="vod-ep-caption-title">{captionEp.title}</span>}
+                {captionEp.duration && <span className="vod-ep-caption-meta">{captionEp.duration}</span>}
+              </div>
+            )}
           </section>
         )}
 
@@ -539,73 +616,6 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         )}
       </main>
 
-      {/* Audio & Subtitles Selection Modal (Apple TV Glass Panel) */}
-      {focus.area === 'audioModal' && (
-        <div className="audio-modal-backdrop" onClick={onCloseAudioModal}>
-          <div className="audio-modal-card" onClick={e => e.stopPropagation()}>
-            <div className="audio-modal-header">
-              <span className="audio-modal-icon">🌐</span>
-              <h2 className="audio-modal-title">Idioma: audio y subtítulos</h2>
-              <button className="audio-modal-close-btn" onClick={onCloseAudioModal}>✕</button>
-            </div>
-
-            <div className="audio-modal-columns">
-              {/* Column 1: Audio */}
-              <div className="audio-modal-col">
-                <h3 className="audio-col-title">IDIOMA DE AUDIO</h3>
-                <div className="audio-options-list">
-                  {AUDIO_OPTIONS.map((opt, aIdx) => {
-                    const isSelected = currentAudio === opt;
-                    const isFocused = (focus.modalCol || 'audio') === 'audio' && (focus.modalIndex || 0) === aIdx;
-
-                    return (
-                      <button
-                        key={opt}
-                        className={`audio-option-btn ${isSelected ? 'is-selected' : ''} ${isFocused ? 'is-focused' : ''}`}
-                        onClick={() => onSelectAudioOption && onSelectAudioOption(opt)}
-                      >
-                        <span className="opt-check">{isSelected ? '✓' : ''}</span>
-                        <span className="opt-label">{opt}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Column 2: Subtitles */}
-              <div className="audio-modal-col">
-                <h3 className="audio-col-title">SUBTÍTULOS</h3>
-                <div className="audio-options-list">
-                  {SUB_OPTIONS.map((sub, sIdx) => {
-                    const isSelected = currentSub === sub;
-                    const isFocused = focus.modalCol === 'subs' && (focus.modalIndex || 0) === sIdx;
-
-                    return (
-                      <button
-                        key={sub}
-                        className={`audio-option-btn ${isSelected ? 'is-selected' : ''} ${isFocused ? 'is-focused' : ''}`}
-                        onClick={() => onSelectSubOption && onSelectSubOption(sub)}
-                      >
-                        <span className="opt-check">{isSelected ? '✓' : ''}</span>
-                        <span className="opt-label">{sub}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <div className="audio-modal-footer">
-              <button
-                className="audio-modal-done-btn"
-                onClick={onCloseAudioModal}
-              >
-                Listo (Volver)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

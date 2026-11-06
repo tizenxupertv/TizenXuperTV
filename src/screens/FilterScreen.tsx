@@ -6,7 +6,7 @@ import { FilterRoot } from '../lib/screenStack';
 import { FilterOptions, FilterValues, getFilterOptions, getFilteredPage } from '../services/catalogService';
 import { setTrackOffset } from '../utils/scrollHelper';
 import { useViewProfiler } from '../lib/perfMonitor';
-import { BrandLogo } from '../components/common/BrandLogo';
+import { ScreenHeader, SearchIcon } from '../components/layout/Header';
 
 /**
  * Filter screen of the official app: Tipo / Género / Año / País / Audio over the full catalog of a
@@ -77,6 +77,7 @@ interface FilterScreenProps {
   initialRoot: FilterRoot;
   onClose: () => void;
   onOpenVod: (item: VodItem) => void;
+  onOpenSearch?: () => void;
 }
 
 export const FilterScreen: React.FC<FilterScreenProps> = ({
@@ -85,14 +86,15 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
   isSearchOpen = false,
   initialRoot,
   onClose,
-  onOpenVod
+  onOpenVod,
+  onOpenSearch
 }) => {
   useViewProfiler('Filtros');
   const [root, setRoot] = useState<FilterRoot>(initialRoot);
   const [values, setValues] = useState<FilterValues>(NO_FILTERS);
   const [options, setOptions] = useState<FilterOptions | null>(null);
   const [results, setResults] = useState<Results>(EMPTY_RESULTS);
-  const [area, setArea] = useState<'filters' | 'grid'>('filters');
+  const [area, setArea] = useState<'header' | 'filters' | 'grid'>('filters');
   const [rowIdx, setRowIdx] = useState(0);
   const [colByRow, setColByRow] = useState<number[]>([0, 0, 0, 0, 0]);
   const [gridIndex, setGridIndex] = useState(0);
@@ -193,7 +195,7 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
   useEffect(() => {
     const track = pageTrackRef.current;
     if (!track) return;
-    if (area === 'filters') {
+    if (area !== 'grid') {
       setTrackOffset(track, 'y', 0);
       return;
     }
@@ -226,8 +228,15 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
 
   useScreenKeys(key => {
     if (key === 'back') {
-      if (area === 'grid') setArea('filters');
+      if (area !== 'filters') setArea('filters');
       else onClose();
+      return;
+    }
+
+    // Header action (Buscar), above the Tipo row
+    if (area === 'header') {
+      if (key === 'down') setArea('filters');
+      else if (key === 'enter' && onOpenSearch) onOpenSearch();
       return;
     }
 
@@ -236,6 +245,7 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
       const col = colByRow[rowIdx];
       if (key === 'up') {
         if (rowIdx > 0) focusRowAt(rowIdx - 1);
+        else if (onOpenSearch) setArea('header');
       } else if (key === 'down') {
         if (rowIdx < rows.length - 1) focusRowAt(rowIdx + 1);
         else if (results.items.length > 0) {
@@ -284,24 +294,11 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
 
   return (
     <div className="filter-screen" style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
-      {/* Same header as the categorized catalog */}
-      <div className="browse-head filter-head">
-        <div className="browse-head-left">
-          <BrandLogo />
-          <div className="browse-header-divider" />
-          <div className="browse-heading">
-            <h1 className="browse-title">Filtrar</h1>
-            <div className="browse-subtitle">
-              <span className="browse-count">{typeLabel}</span>
-              <span className="browse-subtitle-dot">•</span>
-              <span className="browse-subtitle-desc">
-                {totalLabel}
-                {activeCount > 0 ? ` · ${activeCount} ${activeCount === 1 ? 'filtro' : 'filtros'}` : ''}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <ScreenHeader
+        title="Filtrar"
+        actions={onOpenSearch ? [{ id: 'search', title: 'Buscar', icon: SearchIcon, onClick: onOpenSearch }] : []}
+        focusedAction={area === 'header' ? 0 : null}
+      />
 
       <div className="filter-page-clip">
         <div className="filter-page-track" ref={pageTrackRef}>
@@ -330,6 +327,12 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
                 </div>
               );
             })}
+          </div>
+
+          <div className="filter-results-head">
+            <span className="filter-results-type">{typeLabel}</span>
+            <span>{totalLabel}</span>
+            {activeCount > 0 && <span className="filter-results-active">{activeCount} {activeCount === 1 ? 'filtro activo' : 'filtros activos'}</span>}
           </div>
 
           {results.error && results.items.length === 0 ? (

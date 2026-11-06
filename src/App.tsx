@@ -24,7 +24,7 @@ import { catalogService } from './services/catalogService';
 import { VodItem, VodEpisode } from './types/vod';
 import { LiveChannel, LiveCategory } from './types/channel';
 import { historyService } from './services/historyService';
-import { settingsService, applySubtitleChoice, PREFERRED_LANGUAGES, SUBTITLE_CHOICES } from './services/settingsService';
+import { settingsService, applySubtitleChoice, subtitleChoiceIndex, PREFERRED_LANGUAGES, SUBTITLE_CHOICES } from './services/settingsService';
 import { getResumeTarget, startAtForEpisode } from './lib/vodResume';
 import { FocusDomain, VodPlayerState } from './app/types';
 import { useCatalog } from './app/useCatalog';
@@ -349,8 +349,9 @@ export const App: React.FC = () => {
   // Kept in a ref so the window listener never runs with stale state.
   const handleKeyRef = useRef<(key: TvKey, ev?: KeyboardEvent) => boolean>(() => true);
   handleKeyRef.current = (key: TvKey, ev?: KeyboardEvent): boolean => {
-    // Search modal owns the keyboard while open (typing, arrows, Enter, Back)
-    if (isSearchOpen) return false;
+    // Search modal owns the keyboard while open (typing, arrows, Enter, Back); a detail or the
+    // player opened from it sits on top and takes the keys (the search waits hidden underneath)
+    if (isSearchOpen && !activeDetailItem && !activeVodPlayer) return false;
 
     // Fullscreen VOD Player (handles its own keys; back closes player)
     if (activeVodPlayer) {
@@ -383,7 +384,7 @@ export const App: React.FC = () => {
     }
     if (key === 'colorYellow') {
       if (activeDetailItem) {
-        setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'audio', modalIndex: 0 }));
+        setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'audio', modalIndex: settingsService.get().audio, actionIndex: 2 }));
         return true;
       }
       if (selectedTab === 'tv') {
@@ -671,21 +672,28 @@ export const App: React.FC = () => {
           onToggleFavorite={it => favoritesService.toggleFavorite(it.id)}
           onSelectSeason={sIdx => setDetailFocus(prev => ({
             ...prev,
+            // Picking from the open season list closes it
+            area: prev.area === 'seasonMenu' ? 'seasons' : prev.area,
             seasonIndex: sIdx,
             episodeIndex: prev.seasonIndex === sIdx ? prev.episodeIndex : 0
           }))}
           onSelectEpisode={epIdx => setDetailFocus(prev => ({ ...prev, episodeIndex: epIdx }))}
+          onOpenSeasonMenu={() => setDetailFocus(prev => ({ ...prev, area: 'seasonMenu', seasonMenuIndex: prev.seasonIndex }))}
           onSelectRelated={rel => handleOpenDetail(rel)}
           onDetailLoaded={counts => setDetailCounts(counts)}
-          onOpenAudioModal={() => setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'audio', modalIndex: 0 }))}
-          onCloseAudioModal={() => setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 2 }))}
+          onOpenAudioModal={col => {
+            const st = settingsService.get();
+            const current = col === 'audio' ? st.audio : subtitleChoiceIndex(st);
+            setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: col, modalIndex: current, actionIndex: col === 'audio' ? 2 : 3 }));
+          }}
+          onCloseAudioModal={() => setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: prev.modalCol === 'subs' ? 3 : 2 }))}
           onSelectAudioOption={opt => {
             settingsService.set({ audio: Math.max(0, PREFERRED_LANGUAGES.indexOf(opt)) });
-            setDetailFocus(prev => ({ ...prev }));
+            setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 2 }));
           }}
           onSelectSubOption={sub => {
             applySubtitleChoice(Math.max(0, SUBTITLE_CHOICES.indexOf(sub)));
-            setDetailFocus(prev => ({ ...prev }));
+            setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 3 }));
           }}
         />
       )}
@@ -771,6 +779,7 @@ export const App: React.FC = () => {
               initialRoot={screen.root}
               onClose={pop}
               onOpenVod={it => handleOpenDetail(it)}
+              onOpenSearch={() => setIsSearchOpen(true)}
             />
           );
         }

@@ -422,7 +422,7 @@ html, body {
   color: #000000 !important;
   border: 3px solid #ffffff !important;
   outline: none !important;
-  box-shadow: 0 0 24px rgba(255, 255, 255, 0.6) !important;
+  box-shadow: none !important; /* solid: a blurred glow is costly on the TV */
 }
 
 .play-btn-apple.is-focused .play-triangle {
@@ -2259,7 +2259,7 @@ html, body {
 .vod-detail-main {
   position: relative;
   z-index: 10;
-  padding: 0 64px 60px 64px;
+  padding: 100px 64px 60px 64px; /* under the screen header */
 }
 
 .vod-detail-header-block {
@@ -2439,7 +2439,7 @@ html, body {
   border: 3px solid #ffffff !important;
   outline: none !important;
   transform: none !important;
-  box-shadow: 0 0 24px rgba(255, 255, 255, 0.6) !important;
+  box-shadow: none !important; /* solid: a blurred glow is costly on the TV */
 }
 
 .vod-action-btn.primary-btn.is-focused .btn-icon {
@@ -4821,7 +4821,7 @@ html.xuper-vod-avplay .app-root,
   position: absolute;
   left: 0;
   right: 0;
-  top: 130px;
+  top: 92px;
   bottom: 0;
   display: flex;
   padding: 0 min(50px, 3vw) 20px min(50px, 3vw);
@@ -5599,14 +5599,11 @@ html.xuper-vod-avplay .app-root,
   z-index: 900;
   display: flex;
   flex-direction: column;
+  padding-top: 84px; /* under the screen header */
+  box-sizing: border-box;
   background: var(--bg-main);
   color: var(--text-main);
   overflow: hidden;
-}
-
-.filter-head {
-  flex-shrink: 0;
-  padding-bottom: 18px;
 }
 
 .filter-page-clip {
@@ -5697,6 +5694,285 @@ html.xuper-vod-avplay .app-root,
   color: #64748b;
 }
 
-.filter-grid {
-  margin-top: 24px;
+.filter-results-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 22px 0 16px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+
+.filter-results-type {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.filter-results-active {
+  padding: 2px 12px;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.16);
+  color: #93c5fd;
+  font-size: 15px;
+}
+
+/* Screen header (catalog, filters, search, detail, profile): the home bar with a title instead of tabs */
+.screen-header-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+}
+
+.screen-header-divider {
+  width: 2px;
+  height: 30px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.screen-header-spacer {
+  flex: 1;
+}
+
+.screen-header-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  max-width: 900px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+}
+
+.screen-header-title > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.screen-header-sub {
+  font-size: 18px;
+  font-weight: 600;
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Search screen under the shared screen header (absolute, 68px) */
+.search-modal-container {
+  position: relative;
+  padding-top: 84px;
+}
+
+/* ==========================================================================
+   Detail: season selector, ranges of 20 episodes and numbered episode tiles
+   Solid colours only (no gradients or glows: cheap to paint on the TV)
+   ========================================================================== */
+.vod-season-check {
+  margin-left: auto;
+  padding-left: 16px;
+}
+
+.vod-ep-ranges-clip {
+  overflow: hidden;
+}
+
+.vod-ep-ranges {
+  display: flex;
+  white-space: nowrap;
+  padding: 4px 0 6px; /* aligned with the "Episodios" title */
+}
+
+.vod-ep-range {
+  flex-shrink: 0;
+}
+
+.vod-ep-range {
+  margin: 0 8px 8px 0;
+  padding: 5px 16px;
+  border-radius: 18px;
+  border: 3px solid transparent;
+  font-size: 19px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.vod-ep-range.is-active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.vod-ep-range.has-current::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 8px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.vod-ep-range.is-focused.has-current::after {
+  background: #000000;
+}
+
+.vod-ep-range.is-focused {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
+
+.vod-episodes-slider.is-tiles {
+  gap: 12px;
+  padding: 8px 0 10px; /* aligned with the "Episodios" title */
+}
+
+.vod-ep-tile {
+  position: relative;
+  flex: 0 0 136px;
+  height: 84px;
+  border-radius: 12px;
+  background: #2a303b;
+  border: 3px solid transparent;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #e2e8f0;
+}
+
+.vod-ep-tile.is-skeleton {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.vod-ep-tile-num {
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.vod-ep-tile-play {
+  position: absolute;
+  left: 12px;
+  top: 8px;
+  font-size: 15px;
+  color: #ffffff;
+}
+
+.vod-ep-tile-check {
+  position: absolute;
+  right: 10px;
+  top: 6px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #4ade80;
+}
+
+.vod-ep-tile.is-watched {
+  background: #1d222b;
+  color: #94a3b8;
+}
+
+.vod-ep-tile-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.vod-ep-tile-progress > div {
+  height: 100%;
+  background: #ffffff;
+}
+
+.vod-ep-tile.is-focused {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
+
+.vod-ep-tile.is-focused .vod-ep-tile-play {
+  color: #000000;
+}
+
+.vod-ep-caption {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 6px 0 0;
+  font-size: 18px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.vod-ep-caption-num {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.vod-ep-caption-title {
+  color: #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Audio / Subtítulos: a list under the button (solid colours, as the season list) */
+.vod-action-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.vod-action-caret {
+  margin-left: 10px;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.vod-action-menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 10px);
+  z-index: 60;
+  min-width: 100%;
+  padding: 8px;
+  border-radius: 16px;
+  background: #151a24;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.vod-action-option {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 19px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.vod-action-option.is-active {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.vod-action-option.is-focused {
+  background: #ffffff;
+  color: #000000;
+}
+
+/* Long lists (seasons) scroll inside the dropdown */
+.vod-action-menu.is-scrollable {
+  max-height: 60vh;
+  overflow-y: auto;
+  scrollbar-width: none;
 }

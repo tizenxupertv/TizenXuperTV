@@ -8,7 +8,7 @@ import { OnScreenKeyboard, KbState, KB_INITIAL, pressKey, moveCursor, keyAt } fr
 import { normalizeText } from '../../utils/normalizeText';
 import { normalizeChannels } from '../../lib/channelKey';
 import { allChannelEntries } from '../../lib/channelCache';
-import { BrandLogo } from '../common/BrandLogo';
+import { ScreenHeader, CloseIcon } from '../layout/Header';
 
 export interface SearchModalProps {
   isOpen: boolean;
@@ -403,35 +403,12 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       onClick={onClose}
     >
       <div className="search-modal-container" onClick={e => e.stopPropagation()}>
-        {/* Header with App Brand Logo */}
-        <div className="search-modal-header">
-          <div className="search-header-left">
-            <BrandLogo />
-            <div className="search-header-divider" />
-            <div className="search-modal-title-row">
-              <div className="search-title-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="search-modal-title">
-                  {isTvSearch ? 'Buscar Canales de TV en Vivo' : 'Buscar Películas, Series y Contenido'}
-                </h2>
-                <p className="search-modal-subtitle">
-                  {isTvSearch
-                    ? 'Filtra entre todos los canales disponibles por nombre o programación'
-                    : 'Busca en todo el catálogo de películas y series por título, género o reparto'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <button className="search-close-btn" onClick={onClose} title="Cerrar búsqueda">
-            ✕
-          </button>
-        </div>
+        {/* Same bar as the home: title where the tabs are, close on the right */}
+        <ScreenHeader
+          title={isTvSearch ? 'Buscar canales' : 'Buscar'}
+          subtitle={submittedQuery ? `"${submittedQuery}"` : undefined}
+          actions={[{ id: 'close', title: 'Cerrar búsqueda', icon: CloseIcon, onClick: onClose }]}
+        />
 
         <div className="search-body">
           {/* Left panel: Search input (same width as keyboard) + on-screen keyboard */}

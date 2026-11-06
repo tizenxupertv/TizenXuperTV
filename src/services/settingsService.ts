@@ -7,7 +7,11 @@ export interface PlaybackSettings {
   subLang: number;
   size: number;      // 0 = Normal, 1 = Grande, 2 = Pequeño
   style: number;
+  quality: number;   // index in QUALITY_OPTIONS (0 = Automática)
 }
+
+/** "Resolución" of the detail: preferred quality among the portal's tracks of a title */
+export const QUALITY_OPTIONS = ['Auto', '1080p', '720p', '480p'];
 
 const DEFAULTS: PlaybackSettings = {
   display: 0,
@@ -15,7 +19,8 @@ const DEFAULTS: PlaybackSettings = {
   subtitle: true,
   subLang: 0,
   size: 0,
-  style: 0
+  style: 0,
+  quality: 0
 };
 
 class SettingsService {

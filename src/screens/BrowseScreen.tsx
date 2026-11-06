@@ -4,7 +4,7 @@ import { PortalColumn, portalRootId, getPortalColumns, getPortalColumnPage } fro
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { PosterCard } from '../components/vod/PosterCard';
 import { BrowseRoot } from '../lib/screenStack';
-import { BrandLogo } from '../components/common/BrandLogo';
+import { ScreenHeader, SearchIcon, FilterIcon } from '../components/layout/Header';
 
 export interface CategoryDef {
   id: string;
@@ -697,7 +697,6 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
   const screenTitle = title && title !== 'browse' ? title : ROOT_LABEL[root] || 'Catálogo';
   const entryName = activeEntry ? activeEntry.name : '';
-  const totalLabel = gridTotal === null ? 'Cargando títulos…' : `${gridTotal} títulos en esta categoría`;
 
   // Only the rows around the focus are in the DOM (a column can have thousands of titles); a spacer
   // keeps the rendered rows at their real place on the track
@@ -714,53 +713,15 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
   return (
     <div className="browse-screen" style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
-      {/* Brand Header */}
-      <div className="browse-head">
-        <div className="browse-head-left">
-          <BrandLogo />
-          <div className="browse-header-divider" />
-          <div className="browse-heading">
-            <h1 className="browse-title">{screenTitle}</h1>
-            <div className="browse-subtitle">
-              <span className="browse-count">{entryName}</span>
-              <span className="browse-subtitle-dot">•</span>
-              <span className="browse-subtitle-desc">{totalLabel}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="browse-head-right">
-          <div
-            className={`browse-search-pill ${area === 'search' && headBtn === 0 ? 'is-focused' : ''}`}
-            onClick={() => onOpenSearch && onOpenSearch()}
-          >
-            <svg
-              className="browse-search-icon"
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <span>Buscar títulos</span>
-          </div>
-          {onOpenFilter && (
-            <div
-              className={`browse-search-pill ${area === 'search' && headBtn === 1 ? 'is-focused' : ''}`}
-              onClick={onOpenFilter}
-            >
-              <svg className="browse-search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round">
-                <path d="M3 5h18l-7 8.5V20l-4-2v-4.5L3 5z" />
-              </svg>
-              <span>Filtrar</span>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Same bar as the home: title where the tabs are, this screen's actions on the right */}
+      <ScreenHeader
+        title={screenTitle}
+        actions={[
+          { id: 'search', title: 'Buscar', icon: SearchIcon, onClick: () => onOpenSearch && onOpenSearch() },
+          ...(onOpenFilter ? [{ id: 'filter', title: 'Filtrar', icon: FilterIcon, onClick: onOpenFilter }] : [])
+        ]}
+        focusedAction={area === 'search' ? headBtn : null}
+      />
 
       {/* Two Column Layout: Categories on Left, Grid on Right (like Live TV) */}
       <div className="browse-two-col">

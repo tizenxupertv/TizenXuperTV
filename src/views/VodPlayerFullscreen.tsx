@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { VodItem, VodEpisode } from '../types/vod';
 import { historyService } from '../services/historyService';
 import { playerService } from '../services/playerService';
-import { settingsService } from '../services/settingsService';
+import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
   SubtitleTrack,
   SubtitleCue,
@@ -348,7 +348,14 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         audioPrefAppliedRef.current = true;
         const tracksNow: any[] = Array.isArray(res.tracks) ? res.tracks : [];
         const prefCode = PREF_LANG_CODES[settingsService.get().audio] || 'es';
-        const wanted = tracksNow.find(t => sameLanguage(t.audio, prefCode));
+        // "Resolución" of the detail: among the tracks in that language, the preferred quality
+        const qPref = QUALITY_OPTIONS[settingsService.get().quality || 0];
+        const qWanted = qPref && qPref !== QUALITY_OPTIONS[0] ? qPref.replace('p', '') : '';
+        const byAudio = tracksNow.filter(t => sameLanguage(t.audio, prefCode));
+        const pool = byAudio.length ? byAudio : (qWanted ? tracksNow : []);
+        const wanted = pool.length
+          ? (qWanted && pool.find(t => String(t.quality || '').indexOf(qWanted) !== -1)) || pool[0]
+          : undefined;
         if (wanted && wanted.index !== res.trackIndex) {
           console.log('[VodPlayer] preferred audio', prefCode, '-> track', wanted.index, 'instead of', res.trackIndex);
           portalTrackRef.current = wanted.index;
