@@ -179,10 +179,10 @@ html, body {
   line-height: 1;
 }
 
-/* Active tab: the brand gradient (logo colours) as a solid fill, deep enough for white text; no glow */
+/* Active tab: a solid neutral pill with white text (the focused tab is the white pill) */
 .nav-tab-btn.is-selected {
   color: #ffffff;
-  background: linear-gradient(135deg, #0891b2 0%, #7c3aed 100%);
+  background: #2c3340;
   border-color: transparent;
 }
 
