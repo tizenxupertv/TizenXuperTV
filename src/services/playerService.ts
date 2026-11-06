@@ -1,5 +1,6 @@
 import { LiveChannel } from '../types/channel';
 import { normalizeChannel } from '../lib/channelKey';
+import { hostOf, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 
 declare global {
   interface Window {
@@ -25,6 +26,9 @@ export interface LiveStatus {
 const START_TIMEOUT_MS = 25000;
 // Fatal HLS errors retried before giving up: a dead stream must not retry forever
 const MAX_HLS_RETRIES = 2;
+/** Retries of the same server when a live playlist refresh comes back broken */
+const MAX_REFRESH_RETRIES = 3;
+const REFRESH_RETRY_MS = 1500;
 
 class PlayerService {
   private activeChannelCode: string = '';
@@ -55,7 +59,40 @@ class PlayerService {
     };
   }
 
+  /** Last HLS.js error of the current channel, added to the report when the channel fails */
+  private lastHlsError = '';
+  /** Picture size and codecs when playback starts: 0x0 means sound without picture */
+  private pictureInfo(): string {
+    try {
+      const hls = window.__xuperPreviewHls;
+      if (hls) {
+        const v = this.currentVideoEl;
+        const level = hls.levels && hls.levels[hls.currentLevel >= 0 ? hls.currentLevel : 0];
+        const codecs = level ? [level.videoCodec, level.audioCodec].filter(Boolean).join('/') : '';
+        return ` ${v ? `${v.videoWidth}x${v.videoHeight}` : '?'}${codecs ? ` ${codecs}` : ''}`;
+      }
+      const av = window.webapis && window.webapis.avplay;
+      const info = av && av.getCurrentStreamInfo ? av.getCurrentStreamInfo() : [];
+      const video = (info || []).find((t: any) => t.type === 'VIDEO');
+      if (video) {
+        const extra = JSON.parse(video.extra_info || '{}');
+        return ` ${extra.Width || '?'}x${extra.Height || '?'} ${extra.fourCC || ''}`.trimEnd();
+      }
+      return ' sin pista de video';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /** Player of the current channel, for the problem report */
+  private playerName(): string {
+    return window.__xuperPreviewHls ? 'HLS.js' : 'AVPlay';
+  }
+
   private setStatus(code: string, state: LiveSignal) {
+    if (state === 'playing' && !(this.status.code === code && this.status.state === 'playing')) {
+      logPlayback({ kind: 'start', player: this.playerName(), detail: `reproduciendo${this.pictureInfo()}` });
+    }
     if (this.status.code === code && this.status.state === state) return;
     this.status = { code, state };
     this.statusListeners.forEach(cb => {
@@ -103,6 +140,7 @@ class PlayerService {
   private failChannel(code: string, why: string) {
     if (this.activeChannelCode !== code) return;
     console.warn('[PlayerService] Channel down:', code, why);
+    logPlayback({ kind: 'error', player: this.playerName(), detail: why + (this.lastHlsError ? ` · ${this.lastHlsError}` : '') });
     this.clearWatch();
     this.destroyHls();
     if (this.usingAvPreview && window.XuperAVPlay && typeof window.XuperAVPlay.stopLive === 'function') {
@@ -234,6 +272,8 @@ class PlayerService {
     window.XuperPlatform?.setScreenSaver?.(false);
     const code = String(channel.code || channel.id);
     console.log('[PlayerService] Resolving live channel:', channel.name, code);
+    setPlaybackContext({ channel: channel.name, category: channel.categoryName, source: channel.url ? 'directo' : 'portal' });
+    this.lastHlsError = '';
     this.usingAvPreview = false;
     this.watchStart(code, videoEl);
 
@@ -260,6 +300,7 @@ class PlayerService {
       window.MagisClient.resolveLive(code, (err: any, streamMeta: any) => {
         if (err || !streamMeta || !streamMeta.url) {
           console.error('[PlayerService] Failed to resolve channel:', err);
+          this.lastHlsError = `portal ${(err && (err.portalCode || err.message)) || 'sin enlace'}`.slice(0, 80);
           if (!(err && /aaa10002/i.test(err.portalCode || err.message || ''))) {
             this.failChannel(code, 'resolve');
             return;
@@ -340,7 +381,12 @@ class PlayerService {
 
         let backupIdx = 0;
         let retries = 0;
+        // A live playlist refresh that comes back broken (cut off, empty) while the channel plays is
+        // usually a hiccup of that server: retry it before moving to the backups
+        let refreshRetries = 0;
+        let currentSource = effectiveUrl;
         const backups = (streamMeta && streamMeta.backupUrls) || [];
+        hls.on(window.Hls.Events.LEVEL_LOADED, () => { refreshRetries = 0; });
 
         hls.loadSource(effectiveUrl);
         hls.attachMedia(videoEl);
@@ -361,7 +407,33 @@ class PlayerService {
 
         hls.on(window.Hls.Events.ERROR, (event: any, data: any) => {
           console.error('[HLS error]', data.type, data.details, data.fatal);
+          const status = data.response && data.response.code ? ` ${data.response.code}` : '';
+          // What the server sent instead of a playlist (an ISP block page, a portal error): links removed
+          let body = '';
+          if (/Parsing|Load/i.test(String(data.details || ''))) {
+            try {
+              const nd = data.networkDetails;
+              const text = nd && typeof nd.responseText === 'string' ? nd.responseText : '';
+              body = text.replace(/https?:\/\/\S+/g, '[url]').replace(/\s+/g, ' ').trim().slice(0, 70);
+            } catch (e) {}
+          }
+          this.lastHlsError = `${data.type}/${data.details}${status}${body ? ` «${body}»` : ''}`;
+          const host = hostOf((data.frag && data.frag.url) || data.url || (data.context && data.context.url) || (streamMeta && streamMeta.url) || url);
+          if (data.fatal) logPlayback({ kind: 'error', player: 'HLS.js', detail: this.lastHlsError, host });
+          else if (data.details === 'bufferStalledError') logPlayback({ kind: 'stall', player: 'HLS.js', detail: 'bufferStalledError', host });
           if (data.fatal) {
+            const refreshHiccup = /^level(ParsingError|LoadError|LoadTimeOut)$/.test(String(data.details)) &&
+              !!code && this.status.code === code && this.status.state === 'playing';
+            if (refreshHiccup && refreshRetries < MAX_REFRESH_RETRIES) {
+              refreshRetries++;
+              logPlayback({ kind: 'stall', player: 'HLS.js', detail: `lista incompleta, reintento ${refreshRetries}`, host });
+              setTimeout(() => {
+                if (window.__xuperPreviewHls !== hls) return;
+                hls.loadSource(currentSource);
+                hls.startLoad();
+              }, REFRESH_RETRY_MS);
+              return;
+            }
             if (backupIdx < backups.length) {
               const next = backups[backupIdx++];
               const nextUrl = typeof next === 'string' ? next : next?.url;
@@ -373,6 +445,8 @@ class PlayerService {
                   const license = streamMeta?.headers?.['Content-License'] || '';
                   nextEffective = `/stream-proxy?url=${encodeURIComponent(nextUrl)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}`;
                 }
+                currentSource = nextEffective;
+                refreshRetries = 0;
                 hls.loadSource(nextEffective);
                 hls.startLoad();
                 return;

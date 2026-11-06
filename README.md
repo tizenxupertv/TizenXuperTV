@@ -39,6 +39,7 @@
 - **TV-Optimized Remote Keyboard**: Full QWERTY on-screen keyboard tailored for 5-way D-Pad remote navigation, instant search filtering, and history.
 - **Fast Startup & IndexedDB Cache**: Local offline caching for posters, categories, and channels; parallel TripleDES decryption in a dedicated Web Worker to maintain smooth 60fps UI animations.
 - **Sign-in with Telegram**: Required on first launch: the TV shows a QR code that opens the TizenXuper bot in Telegram; one tap links the TV. Only the session is stored on the server (Telegram name, TV model, app version); history and favorites stay on the TV.
+- **Problem Reports**: Perfil › Diagnóstico › *Enviar reporte a soporte* sends the TV model, network type, supported formats and the last playback errors (stream hosts only, never links or tokens) to support through the Telegram bot; the answer arrives in Telegram.
 - **100% Samsung Remote Friendly**: Fully responsive to Samsung Smart Remote controls (D-Pad, Select, Return/Back, Play/Pause, Channel Up/Down, Volume, and Color buttons).
 
 ---
@@ -54,7 +55,7 @@
    - Enter `1 2 3 4 5` on your remote.
    - Switch Developer Mode to **ON** and set your computer's local IP address as the **Host PC IP**.
    - Restart the TV (hold the Power button on the remote for 3 seconds).
-4. In Apps2Samsung, find **TizenXuper TV** in the Community Catalog or drag and drop the `TizenXuperTV_1.9.0.wgt` package from the [Releases](releases) tab.
+4. In Apps2Samsung, find **TizenXuper TV** in the Community Catalog or drag and drop the `TizenXuperTV_1.9.1.wgt` package from the [Releases](releases) tab.
 5. Click **Install**. The app will be automatically signed and installed on your TV.
 
 ---
@@ -100,7 +101,7 @@ npm run build
 bash tools/build-and-sign.sh
 ```
 
-The compiled package will be located at `build/TizenXuperTV_1.9.0.wgt`.
+The compiled package will be located at `build/TizenXuperTV_1.9.1.wgt`.
 
 ---
 

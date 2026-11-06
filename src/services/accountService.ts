@@ -175,6 +175,26 @@ export function createAccountService(deps: AccountDeps) {
       }
     },
 
+    /** App version and TV model, for the problem report */
+    deviceInfo(): { version: string; model: string } {
+      return deps.device();
+    },
+
+    /** Sends a problem report to support; the bot delivers it and answers the user in Telegram */
+    async sendReport(report: object): Promise<'ok' | 'too_many' | 'signed_out' | 'error'> {
+      const s = session();
+      if (!s) return 'signed_out';
+      try {
+        const res = await post('/tv/report', { report }, s.token);
+        if (res.ok) return 'ok';
+        if (res.status === 429) return 'too_many';
+        if (res.status === 401) return 'signed_out';
+        return 'error';
+      } catch (e) {
+        return 'error';
+      }
+    },
+
     /** Forgets the session on this TV and asks the server to unlink it */
     async logout(): Promise<void> {
       const s = session();
@@ -194,14 +214,22 @@ export type AccountService = ReturnType<typeof createAccountService>;
 
 declare const __APP_VERSION__: string;
 
+/** TV model and Tizen version for support, e.g. "UN50U8000FKXZL · Tizen 9.0" (empty in a browser) */
 function tvModel(): string {
+  const w = window as any;
+  let model = '';
   try {
-    const w = window as any;
-    if (w.webapis && w.webapis.productinfo) {
-      return String(w.webapis.productinfo.getRealModel() || w.webapis.productinfo.getModel() || '');
-    }
+    // Needs the productinfo privilege in config.xml
+    if (w.webapis && w.webapis.productinfo) model = String(w.webapis.productinfo.getRealModel() || w.webapis.productinfo.getModel() || '');
   } catch (e) {}
-  return '';
+  try {
+    if (!model && w.tizen && w.tizen.systeminfo) model = String(w.tizen.systeminfo.getCapability('http://tizen.org/system/model_name') || '');
+  } catch (e) {}
+  let tizen = '';
+  try {
+    if (w.tizen && w.tizen.systeminfo) tizen = String(w.tizen.systeminfo.getCapability('http://tizen.org/feature/platform.version') || '');
+  } catch (e) {}
+  return [model, tizen && `Tizen ${tizen}`].filter(Boolean).join(' · ');
 }
 
 export const accountService = createAccountService({

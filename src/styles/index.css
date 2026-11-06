@@ -6236,3 +6236,6 @@ html.xuper-vod-avplay .app-root,
 .tg-login-status.is-expired, .tg-login-status.is-error { color: #fb7185; }
 .tg-login-status.is-done { color: #4ade80; font-size: 18px; }
 .pf-logout { margin-left: auto; white-space: nowrap; }
+.pf-diag-report { margin: 14px 0 6px; font-size: 14px; line-height: 1.5; color: var(--text-muted); max-width: 880px; }
+.pf-diag-report.ok { color: #34d399; }
+.pf-diag-report.too_many, .pf-diag-report.error, .pf-diag-report.signed_out { color: #fb7185; }

@@ -111,3 +111,26 @@ test('logout forgets the session even when the server is unreachable', async () 
   assert.equal(sent.at(-1)!.url, `${ACCOUNT_API}/tv/logout`);
   assert.equal(changes, 1);
 });
+
+test('sendReport posts the report with the session and maps the answers', async () => {
+  const { service, sent } = await signedIn([
+    { status: 200, body: { ok: true } },
+    { status: 429, body: { error: 'too_many' } },
+    { status: 401 },
+    new Error('offline')
+  ]);
+  const report = { app: '1.9.1', events: [] };
+  assert.equal(await service.sendReport(report), 'ok');
+  assert.equal(sent.at(-1)!.url, `${ACCOUNT_API}/tv/report`);
+  assert.deepEqual(body(sent.at(-1)!), { report });
+  assert.equal((sent.at(-1)!.init.headers as Record<string, string>).Authorization, `Bearer ${'t'.repeat(43)}`);
+  assert.equal(await service.sendReport(report), 'too_many');
+  assert.equal(await service.sendReport(report), 'signed_out');
+  assert.equal(await service.sendReport(report), 'error');
+});
+
+test('sendReport without a session does not call the server', async () => {
+  const { service, sent } = harness([]);
+  assert.equal(await service.sendReport({}), 'signed_out');
+  assert.equal(sent.length, 0);
+});
