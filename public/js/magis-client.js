@@ -1542,7 +1542,9 @@
     series: 76178,
     kids: 76783,
     anime: 76180,
-    explorar: 76784
+    explorar: 76784,
+    // "Hot Search-Ranking": its child "Busca popular" holds the titles of the search screen
+    search: 76301
   };
 
   // Category tree (v3/getColumnContents): children of a column, as the official app's sidebar.
@@ -1601,7 +1603,7 @@
     });
   }
 
-  // Full catalog of a root, page by page; filters: { tags, year, originalCountry } (portal values, in English)
+  // Full catalog of a root, page by page; filters: { tags, year, originalCountry, audio } (portal values: English names, audio key)
   // opts.low: prefetch, waits behind every other request
   function browse(root, filters, pageNum, pageSize, callback, opts) {
     var columnId = ROOT_IDS[root];
@@ -1611,6 +1613,7 @@
     if (filters.tags) body.tags = filters.tags;
     if (filters.year) body.year = filters.year;
     if (filters.originalCountry) body.originalCountry = filters.originalCountry;
+    if (filters.audio) body.audio = filters.audio;
     ensureSession(function (err) {
       if (err) return callback(err);
       call('v3/filterByContent', body, { low: !!(opts && opts.low) }, function (fErr, fRes) {
@@ -1627,7 +1630,7 @@
   }
 
   var filterCache = {};
-  // Filter values of a root: { tags: [...], year: [...], originalCountry: [...] }
+  // Filter values of a root: { tags: [...], year: [...], originalCountry: [...], audio: [{ key, value }] }
   function browseFilters(root, callback) {
     var columnId = ROOT_IDS[root];
     if (!columnId) return callback(new Error('unknown root ' + root));
@@ -1639,7 +1642,8 @@
         filterCache[root] = {
           tags: gRes && gRes.tags || [],
           year: gRes && gRes.year || [],
-          originalCountry: gRes && gRes.originalCountry || []
+          originalCountry: gRes && gRes.originalCountry || [],
+          audio: gRes && gRes.audio || []
         };
         callback(null, filterCache[root]);
       });

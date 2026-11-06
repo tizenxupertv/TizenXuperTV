@@ -502,6 +502,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         profileActive
         onSelectTab={() => {}}
         onSearchClick={() => {}}
+        onFilterClick={() => {}}
         onProfileClick={() => {}}
       />
       <div className="profile-body">

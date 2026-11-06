@@ -8,7 +8,8 @@ import { VodPlayerFullscreen } from './views/VodPlayerFullscreen';
 import { SearchModal } from './components/search/SearchModal';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { BrowseScreen, resolveCategoryIdForRow } from './screens/BrowseScreen';
-import { BrowseRoot } from './lib/screenStack';
+import { FilterScreen } from './screens/FilterScreen';
+import { BrowseRoot, FilterRoot } from './lib/screenStack';
 import { PerfHud } from './components/common/PerfHud';
 import { PinDialog } from './screens/PinDialog';
 import { WelcomeModal } from './components/common/WelcomeModal';
@@ -337,6 +338,13 @@ export const App: React.FC = () => {
     push({ id: 'profile' });
   }, [push]);
 
+  // Filter screen, on the type of the current tab (movies elsewhere)
+  const openFilter = useCallback((root?: FilterRoot) => {
+    const byTab: Partial<Record<TabId, FilterRoot>> = { peliculas: 'movies', series: 'series', kids: 'kids', anime: 'anime' };
+    playerService.stop();
+    push({ id: 'filter', root: root || byTab[selectedTab] || 'movies' });
+  }, [push, selectedTab]);
+
   // Handle D-pad Navigation: routes each key to the handler of the active screen.
   // Kept in a ref so the window listener never runs with stale state.
   const handleKeyRef = useRef<(key: TvKey, ev?: KeyboardEvent) => boolean>(() => true);
@@ -442,7 +450,8 @@ export const App: React.FC = () => {
         setLiveTvFocus,
         setIsSearchOpen,
         guardTab,
-        openProfile
+        openProfile,
+        openFilter: () => openFilter()
       });
     }
 
@@ -585,6 +594,7 @@ export const App: React.FC = () => {
           focusedIndex={focusDomain === 'header' ? headerFocusIndex : null}
           onSelectTab={tab => guardTab(tab, () => setSelectedTab(tab))}
           onSearchClick={() => setIsSearchOpen(true)}
+          onFilterClick={() => openFilter()}
           onProfileClick={openProfile}
         />
       )}
@@ -743,6 +753,24 @@ export const App: React.FC = () => {
               onClose={pop}
               onOpenVod={it => handleOpenDetail(it)}
               onOpenSearch={() => setIsSearchOpen(true)}
+              onOpenFilter={() => {
+                const r = screen.root;
+                openFilter(r === 'movies' || r === 'series' || r === 'kids' || r === 'anime' ? r : 'movies');
+              }}
+            />
+          );
+        }
+        if (screen.id === 'filter') {
+          // Stays under a detail opened from it, so Back returns to the same filters and grid position
+          return (
+            <FilterScreen
+              key={`filter-${idx}`}
+              isTop={isTop}
+              hidden={!!activeDetailItem || !!activeVodPlayer}
+              isSearchOpen={isSearchOpen}
+              initialRoot={screen.root}
+              onClose={pop}
+              onOpenVod={it => handleOpenDetail(it)}
             />
           );
         }

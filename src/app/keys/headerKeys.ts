@@ -15,6 +15,7 @@ export interface HeaderKeysCtx {
   setIsSearchOpen: Setter<boolean>;
   guardTab: (tab: TabId, apply: () => void) => void;
   openProfile: () => void;
+  openFilter: () => void;
 }
 
 export function handleHeaderKeys(key: TvKey, ctx: HeaderKeysCtx): boolean {
@@ -28,14 +29,15 @@ export function handleHeaderKeys(key: TvKey, ctx: HeaderKeysCtx): boolean {
     setLiveTvFocus,
     setIsSearchOpen,
     guardTab,
-    openProfile
+    openProfile,
+    openFilter
   } = ctx;
   if (key === 'left') {
     setHeaderFocusIndex(prev => Math.max(0, prev - 1));
     return true;
   }
   if (key === 'right') {
-    setHeaderFocusIndex(prev => Math.min(8, prev + 1));
+    setHeaderFocusIndex(prev => Math.min(9, prev + 1));
     return true;
   }
   if (key === 'up') {
@@ -48,6 +50,8 @@ export function handleHeaderKeys(key: TvKey, ctx: HeaderKeysCtx): boolean {
     } else if (headerFocusIndex === 7) {
       setIsSearchOpen(true);
     } else if (headerFocusIndex === 8) {
+      openFilter();
+    } else if (headerFocusIndex === 9) {
       openProfile();
     }
     return true;

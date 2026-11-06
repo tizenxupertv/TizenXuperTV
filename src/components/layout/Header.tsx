@@ -4,9 +4,10 @@ import { BrandLogo } from '../common/BrandLogo';
 
 export interface HeaderProps {
   selectedTab: TabId;
-  focusedIndex: number | null; // 0..6: tabs, 7: search, 8: profile
+  focusedIndex: number | null; // 0..6: tabs, 7: search, 8: filter, 9: profile
   onSelectTab: (tab: TabId) => void;
   onSearchClick: () => void;
+  onFilterClick: () => void;
   onProfileClick: () => void;
   profileActive?: boolean;
 }
@@ -16,6 +17,7 @@ export const Header: React.FC<HeaderProps> = ({
   focusedIndex,
   onSelectTab,
   onSearchClick,
+  onFilterClick,
   onProfileClick,
   profileActive
 }) => {
@@ -59,7 +61,17 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <button
-          className={`notify-btn ${profileActive ? 'is-active' : ''} ${focusedIndex === 8 ? 'is-focused' : ''}`}
+          className={`notify-btn ${focusedIndex === 8 ? 'is-focused' : ''}`}
+          onClick={onFilterClick}
+          title="Filtrar"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round">
+            <path d="M3 5h18l-7 8.5V20l-4-2v-4.5L3 5z" />
+          </svg>
+        </button>
+
+        <button
+          className={`notify-btn ${profileActive ? 'is-active' : ''} ${focusedIndex === 9 ? 'is-focused' : ''}`}
           onClick={onProfileClick}
           title="Perfil"
         >

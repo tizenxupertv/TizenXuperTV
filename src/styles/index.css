@@ -3306,6 +3306,44 @@ html, body {
   margin-bottom: 16px;
 }
 
+/* "Búsqueda popular · Actualizar · Total: 10" (official search screen) */
+.search-popular-head {
+  justify-content: flex-start;
+}
+
+.search-popular-title {
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffffff;
+  margin-right: 18px;
+}
+
+.search-popular-refresh {
+  padding: 6px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 3px solid transparent;
+  color: #e2e8f0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.search-popular-refresh.is-focused {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
+
+.search-popular-total {
+  margin-left: auto;
+  font-size: 18px;
+  color: #cbd5e1;
+}
+
+.search-popular-total b {
+  color: #fbbf24;
+}
+
 .search-nav-hint {
   color: #00e5ff;
   font-size: 12px;
@@ -3892,12 +3930,22 @@ html, body {
 
 .osk-row {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 6px;
 }
 
-.osk-row-actions {
-  grid-template-columns: repeat(4, 1fr);
+/* Action keys (123, delete, search) and the space bar span several columns */
+.osk-key.is-ok {
+  color: #e2e8f0;
+}
+
+.osk-space-bar {
+  display: block;
+  width: 60%;
+  height: 10px;
+  border: 3px solid currentColor;
+  border-top: none;
+  box-sizing: border-box;
 }
 
 .osk-key {
@@ -3993,7 +4041,7 @@ html, body {
 }
 
 .search-left-panel {
-  width: 340px;
+  width: 470px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -5520,3 +5568,135 @@ html.xuper-vod-avplay .app-root,
 }
 
 
+
+/* Search screen keyboard: big keys like the official app (7 columns) */
+.search-keyboard-wrap .osk {
+  gap: 10px;
+}
+
+.search-keyboard-wrap .osk-row {
+  gap: 8px;
+}
+
+.search-keyboard-wrap .osk-key {
+  height: 58px;
+  font-size: 24px;
+}
+
+.search-keyboard-wrap .osk-key.is-action {
+  font-size: 20px;
+}
+
+/* ==========================================================================
+   Filter screen (Tipo / Género / Año / País / Audio + grid)
+   ========================================================================== */
+.filter-screen {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-main);
+  color: var(--text-main);
+  overflow: hidden;
+}
+
+.filter-head {
+  flex-shrink: 0;
+  padding-bottom: 18px;
+}
+
+.filter-page-clip {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.filter-page-track {
+  position: relative;
+  padding: 4px min(60px, 4vw) 60px;
+  will-change: transform;
+}
+
+/* Filters in one card: label column + a row of chips that slides horizontally */
+.filter-panel {
+  padding: 10px 26px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  height: 60px;
+}
+
+.filter-row + .filter-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.filter-row-label {
+  width: 130px;
+  flex-shrink: 0;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.filter-chips-clip {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.filter-chips {
+  display: flex;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.filter-chip {
+  flex-shrink: 0;
+  margin-right: 10px;
+  padding: 5px 20px;
+  border-radius: 24px;
+  border: 3px solid transparent;
+  font-size: 22px;
+  font-weight: 600;
+  color: #cbd5e1;
+  transition: none !important;
+}
+
+.filter-chip.is-selected {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(96, 165, 250, 0.5);
+  color: #93c5fd;
+}
+
+.filter-chip.is-type.is-selected {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.filter-chip.is-focused,
+.filter-chip.is-selected.is-focused {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
+
+.filter-chip.is-loading {
+  color: #64748b;
+}
+
+.filter-grid {
+  margin-top: 24px;
+}

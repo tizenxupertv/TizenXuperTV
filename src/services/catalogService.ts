@@ -1046,6 +1046,65 @@ export function getPortalColumns(columnId: number): Promise<PortalColumn[]> {
   );
 }
 
+// ---------- Filter screen (v3/filterGenre values, v3/filterByContent titles)
+
+export interface FilterOptions {
+  tags: string[];
+  year: string[];
+  originalCountry: string[];
+  audio: { key: string; value: string }[];
+}
+
+/** Selected values, as the portal names them ('' = all) */
+export interface FilterValues {
+  tags: string;
+  year: string;
+  originalCountry: string;
+  audio: string;
+}
+
+export function getFilterOptions(root: string): Promise<FilterOptions> {
+  return new Promise((resolve, reject) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.browseFilters !== 'function') return reject(new Error('no portal client'));
+    client.browseFilters(root, (err: any, res: any) => {
+      if (err) return reject(err);
+      resolve({
+        tags: res.tags || [],
+        year: (res.year || []).map(String),
+        originalCountry: res.originalCountry || [],
+        audio: res.audio || []
+      });
+    });
+  });
+}
+
+export function getFilteredPage(
+  root: string,
+  filters: FilterValues,
+  pageNum: number,
+  pageSize: number
+): Promise<{ items: VodItem[]; total: number }> {
+  return new Promise((resolve, reject) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.browse !== 'function') return reject(new Error('no portal client'));
+    client.browse(root, filters, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
+      if (err) return reject(err);
+      const offset = (pageNum - 1) * pageSize;
+      resolve({ items: (res.items || []).map((raw, i) => normalizeItem(raw, offset + i)), total: res.total || 0 });
+    });
+  });
+}
+
+/** "Búsqueda popular" of the search screen: the titles of the first child of the hot-search root */
+export async function getPopularSearchPage(pageNum: number, pageSize: number): Promise<{ items: VodItem[]; total: number }> {
+  const rootId = portalRootId('search');
+  if (rootId === undefined) throw new Error('no portal client');
+  const cols = await getPortalColumns(rootId);
+  if (!cols.length) return { items: [], total: 0 };
+  return getPortalColumnPage(cols[0].id, pageNum, pageSize);
+}
+
 export function getPortalColumnPage(
   columnId: number,
   pageNum: number,

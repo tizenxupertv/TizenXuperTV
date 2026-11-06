@@ -395,7 +395,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
             onClick={() => onOpenAudioModal && onOpenAudioModal()}
           >
             <span className="btn-icon">🌐</span>
-            <span>Audio y Subs · {audioShortName}</span>
+            <span>Idioma · {audioShortName}</span>
           </button>
 
           {/* Action 3: Trailer (Only if trailer exists) */}
@@ -545,7 +545,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
           <div className="audio-modal-card" onClick={e => e.stopPropagation()}>
             <div className="audio-modal-header">
               <span className="audio-modal-icon">🌐</span>
-              <h2 className="audio-modal-title">Audio y Subtítulos</h2>
+              <h2 className="audio-modal-title">Idioma: audio y subtítulos</h2>
               <button className="audio-modal-close-btn" onClick={onCloseAudioModal}>✕</button>
             </div>
 

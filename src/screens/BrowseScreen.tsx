@@ -320,6 +320,7 @@ interface BrowseScreenProps {
   onClose: () => void;
   onOpenVod: (item: VodItem) => void;
   onOpenSearch?: () => void;
+  onOpenFilter?: () => void;
 }
 
 type BrowseArea = 'cats' | 'grid' | 'search';
@@ -376,7 +377,8 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
   catalogItems,
   onClose,
   onOpenVod,
-  onOpenSearch
+  onOpenSearch,
+  onOpenFilter
 }) => {
   useViewProfiler('Categorías');
   const catListRef = useRef<HTMLDivElement>(null);
@@ -541,6 +543,7 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
   const [catIndex, setCatIndex] = useState<number>(initialIndex);
   const [area, setArea] = useState<BrowseArea>('grid');
+  const [headBtn, setHeadBtn] = useState<0 | 1>(0);
   const [gridIndex, setGridIndex] = useState<number>(0);
 
   // A new list of entries (the portal tree arrived) starts on its initial entry; the same list
@@ -681,8 +684,14 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
     }
 
     if (area === 'search') {
+      // Header buttons: Buscar (0) | Filtrar (1)
       if (key === 'down') setArea('cats');
-      else if (key === 'enter' && onOpenSearch) onOpenSearch();
+      else if (key === 'left') setHeadBtn(0);
+      else if (key === 'right' && onOpenFilter) setHeadBtn(1);
+      else if (key === 'enter') {
+        if (headBtn === 1 && onOpenFilter) onOpenFilter();
+        else if (onOpenSearch) onOpenSearch();
+      }
     }
   }, isTop && !hidden && !isSearchOpen);
 
@@ -722,7 +731,7 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
         <div className="browse-head-right">
           <div
-            className={`browse-search-pill ${area === 'search' ? 'is-focused' : ''}`}
+            className={`browse-search-pill ${area === 'search' && headBtn === 0 ? 'is-focused' : ''}`}
             onClick={() => onOpenSearch && onOpenSearch()}
           >
             <svg
@@ -739,6 +748,17 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
             </svg>
             <span>Buscar títulos</span>
           </div>
+          {onOpenFilter && (
+            <div
+              className={`browse-search-pill ${area === 'search' && headBtn === 1 ? 'is-focused' : ''}`}
+              onClick={onOpenFilter}
+            >
+              <svg className="browse-search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round">
+                <path d="M3 5h18l-7 8.5V20l-4-2v-4.5L3 5z" />
+              </svg>
+              <span>Filtrar</span>
+            </div>
+          )}
         </div>
       </div>
 

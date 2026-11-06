@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { TabId } from '../layout/TopNavbar';
 import { LiveChannel } from '../../types/channel';
 import { VodItem } from '../../types/vod';
-import { catalogService } from '../../services/catalogService';
+import { catalogService, getPopularSearchPage } from '../../services/catalogService';
 import { MOCK_CHANNELS_BY_CATEGORY } from '../../services/mockLiveChannels';
 import { OnScreenKeyboard, KbState, KB_INITIAL, pressKey, moveCursor, keyAt } from '../live/OnScreenKeyboard';
 import { normalizeText } from '../../utils/normalizeText';
@@ -35,7 +35,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const [query, setQuery] = useState<string>('');
   const [submittedQuery, setSubmittedQuery] = useState<string>('');
   const [focusedResultIndex, setFocusedResultIndex] = useState<number>(0);
-  const [focusArea, setFocusArea] = useState<'keyboard' | 'results'>('keyboard');
+  const [focusArea, setFocusArea] = useState<'keyboard' | 'results' | 'refresh'>('keyboard');
   const [kb, setKb] = useState<KbState>(KB_INITIAL);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
 
@@ -179,16 +179,42 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     };
   }, [submittedQuery, isTvSearch, isOpen]);
 
+  // "Búsqueda popular" (as the official app): 10 titles of the portal's hot-search column;
+  // "Actualizar" shows the next 10, back to the first after the last
+  const POPULAR_SIZE = 10;
+  const [popular, setPopular] = useState<{ items: VodItem[]; total: number; page: number } | null>(null);
+  const popularTokenRef = useRef(0);
+  const loadPopular = (page: number) => {
+    const token = ++popularTokenRef.current;
+    getPopularSearchPage(page, POPULAR_SIZE).then(
+      res => {
+        if (token !== popularTokenRef.current || !res.items.length) return;
+        setPopular({ items: res.items, total: res.total, page });
+        setFocusedResultIndex(0);
+      },
+      () => {}
+    );
+  };
+  const refreshPopular = () => {
+    if (!popular) return loadPopular(1);
+    const pages = Math.max(1, Math.ceil(popular.total / POPULAR_SIZE));
+    loadPopular(popular.page >= pages ? 1 : popular.page + 1);
+  };
+  useEffect(() => {
+    if (isOpen && !isTvSearch && !popular) loadPopular(1);
+  }, [isOpen, isTvSearch]);
+  const showingPopular = !isTvSearch && !submittedQuery.trim() && !!popular;
+
   // Results: home titles that match show at once, the portal's results follow without repeats
   const filteredVod = useMemo(() => {
     if (isTvSearch) return [];
     const q = normalizeText(submittedQuery.trim());
-    if (!q) return allVodItems.slice(0, 24);
+    if (!q) return popular ? popular.items : allVodItems.slice(0, 24);
     const local = localHaystacks.filter(h => h.title.includes(q) || h.rest.includes(q)).map(h => h.item);
     const seen = new Set(local.map(it => it.id));
     const remote = remoteVod.filter(it => !seen.has(it.id));
     return local.concat(remote).slice(0, 120);
-  }, [isTvSearch, submittedQuery, allVodItems, localHaystacks, remoteVod]);
+  }, [isTvSearch, submittedQuery, allVodItems, localHaystacks, remoteVod, popular]);
 
   const totalResults = isTvSearch ? filteredChannels.length : filteredVod.length;
 
@@ -256,8 +282,20 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       if (isBack) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        if (focusArea === 'results') setFocusArea('keyboard');
+        if (focusArea !== 'keyboard') setFocusArea('keyboard');
         else onClose();
+        return;
+      }
+
+      // "Actualizar" button above the popular titles
+      if (focusArea === 'refresh') {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'Enter' || e.key === 'ArrowUp' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+        if (e.key === 'Enter') refreshPopular();
+        else if (e.key === 'ArrowDown' && totalResults > 0) setFocusArea('results');
+        else if (e.key === 'ArrowLeft') setFocusArea('keyboard');
         return;
       }
 
@@ -310,7 +348,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         e.stopImmediatePropagation();
-        setFocusedResultIndex(prev => Math.max(0, prev - cols));
+        if (focusedResultIndex < cols && showingPopular) setFocusArea('refresh');
+        else setFocusedResultIndex(prev => Math.max(0, prev - cols));
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -342,7 +381,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [isOpen, hidden, focusArea, focusedResultIndex, totalResults, isTvSearch, filteredChannels, filteredVod, query, kb, vodCols, onClose, onSelectChannel, onSelectVodItem]);
+  }, [isOpen, hidden, focusArea, focusedResultIndex, totalResults, isTvSearch, filteredChannels, filteredVod, query, kb, vodCols, onClose, onSelectChannel, onSelectVodItem, showingPopular, popular]);
 
   // Keep focused result in view
   useEffect(() => {
@@ -439,6 +478,20 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
           {/* Results Area */}
           <div className="search-results-area">
+          {showingPopular ? (
+            <div className="search-results-counter search-popular-head">
+              <span className="search-popular-title">Búsqueda popular</span>
+              <span
+                className={`search-popular-refresh ${focusArea === 'refresh' ? 'is-focused' : ''}`}
+                onClick={refreshPopular}
+              >
+                Actualizar
+              </span>
+              <span className="search-popular-total">
+                Total: <b>{totalResults}</b>
+              </span>
+            </div>
+          ) : (
           <div className="search-results-counter">
             <span>
               {submittedQuery
@@ -450,6 +503,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
             </span>
             <span className="search-nav-hint">▲ ▼ ◄ ► y OK · Selecciona "Buscar" o ► para ver resultados</span>
           </div>
+          )}
 
           {totalResults === 0 ? (
             <div className="search-empty-state">
