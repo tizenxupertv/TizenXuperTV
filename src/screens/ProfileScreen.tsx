@@ -120,13 +120,30 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const type = w.webapis && w.webapis.network ? w.webapis.network.getActiveConnectionType() : -1;
       network = ['Sin conexión', 'Wi-Fi', 'Datos móviles', 'Cable'][type] || '';
     } catch (e) {}
+    // Formats the in-app player (HLS.js over MediaSource) can decode on this TV
+    const formats: Array<[string, string]> = [
+      ['H264', 'video/mp4; codecs="avc1.64001f"'],
+      ['HEVC', 'video/mp4; codecs="hvc1.1.6.L120.90"'],
+      ['AAC', 'audio/mp4; codecs="mp4a.40.2"'],
+      ['MP3', 'audio/mpeg'],
+      ['MP3/mp4', 'audio/mp4; codecs="mp3"'],
+      ['AC3', 'audio/mp4; codecs="ac-3"'],
+      ['EAC3', 'audio/mp4; codecs="ec-3"']
+    ];
+    let caps = '';
+    try {
+      const MS = (window as any).MediaSource;
+      caps = formats.map(([name, type]) => `${name} ${MS && MS.isTypeSupported(type) ? '✓' : '✗'}`).join(' · ');
+    } catch (e) {}
+    const now = new Date();
+    const local = `${now.getHours() < 10 ? '0' : ''}${now.getHours()}:${now.getMinutes() < 10 ? '0' : ''}${now.getMinutes()}`;
     accountService.sendReport({
       app: version,
       model,
       network,
       screen: `${window.screen.width}x${window.screen.height}`,
       diag: report ? { verdict: report.verdict, portalMs: report.portalMs, cdns: report.cdns } : null,
-      events: playbackEvents()
+      events: [...playbackEvents(), ...(caps ? [{ at: now.getTime(), local, kind: 'info', channel: 'Formatos del reproductor', detail: caps }] : [])]
     }).then(setReportState);
   };
 
