@@ -590,7 +590,9 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   // Navigating up/down in the channel list does NOT interrupt or restart the stream!
   useEffect(() => {
     if (isActiveTab && tunedChannel && previewVideoRef.current) {
-      playerService.playLivePreview(tunedChannel, previewVideoRef.current);
+      // The category goes into the problem report (portal channels do not carry its name)
+      const category = tunedChannel.categoryName || (categories.find(c => String(c.id) === String(tunedChannel.colId)) || activeCategory || { name: '' }).name;
+      playerService.playLivePreview(category && !tunedChannel.categoryName ? { ...tunedChannel, categoryName: category } : tunedChannel, previewVideoRef.current);
     } else if (!isActiveTab) {
       playerService.stop();
     }

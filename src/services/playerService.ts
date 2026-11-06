@@ -59,6 +59,29 @@ class PlayerService {
   /** Last HLS.js error of the current channel, added to the report when the channel fails */
   private lastHlsError = '';
 
+  /** Picture size and codecs when playback starts: 0x0 means sound without picture */
+  private pictureInfo(): string {
+    try {
+      const hls = window.__xuperPreviewHls;
+      if (hls) {
+        const v = this.currentVideoEl;
+        const level = hls.levels && hls.levels[hls.currentLevel >= 0 ? hls.currentLevel : 0];
+        const codecs = level ? [level.videoCodec, level.audioCodec].filter(Boolean).join('/') : '';
+        return ` ${v ? `${v.videoWidth}x${v.videoHeight}` : '?'}${codecs ? ` ${codecs}` : ''}`;
+      }
+      const av = window.webapis && window.webapis.avplay;
+      const info = av && av.getCurrentStreamInfo ? av.getCurrentStreamInfo() : [];
+      const video = (info || []).find((t: any) => t.type === 'VIDEO');
+      if (video) {
+        const extra = JSON.parse(video.extra_info || '{}');
+        return ` ${extra.Width || '?'}x${extra.Height || '?'} ${extra.fourCC || ''}`.trimEnd();
+      }
+      return ' sin pista de video';
+    } catch (e) {
+      return '';
+    }
+  }
+
   /** Player of the current channel, for the problem report */
   private playerName(): string {
     return window.__xuperPreviewHls ? 'HLS.js' : 'AVPlay';
@@ -66,7 +89,7 @@ class PlayerService {
 
   private setStatus(code: string, state: LiveSignal) {
     if (state === 'playing' && !(this.status.code === code && this.status.state === 'playing')) {
-      logPlayback({ kind: 'start', player: this.playerName(), detail: 'reproduciendo' });
+      logPlayback({ kind: 'start', player: this.playerName(), detail: `reproduciendo${this.pictureInfo()}` });
     }
     if (this.status.code === code && this.status.state === state) return;
     this.status = { code, state };
