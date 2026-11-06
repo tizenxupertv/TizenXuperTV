@@ -56,7 +56,8 @@
     series: 'masnew_series',
     anime: 'masnew_anime',
     kids: 'masnew_kids',
-    free: 'masnew_free'
+    free: 'masnew_free',
+    explorar: 'masnew_explorar'
   };
 
   var ROOT_CATEGORY = {
@@ -65,7 +66,8 @@
     series: 'serie',
     anime: 'anime',
     kids: 'infantil',
-    free: 'gratis'
+    free: 'gratis',
+    explorar: 'explorar'
   };
 
   var DEVICE_FIXED = {

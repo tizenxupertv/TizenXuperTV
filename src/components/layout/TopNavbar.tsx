@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type TabId = 'tv' | 'destacados' | 'peliculas' | 'series' | 'kids' | 'anime' | 'historial';
+export type TabId = 'tv' | 'destacados' | 'peliculas' | 'series' | 'kids' | 'anime' | 'explorar';
 
 export interface TabItem {
   id: TabId;
@@ -88,13 +88,12 @@ export const TABS: TabItem[] = [
     )
   },
   {
-    id: 'historial',
-    label: 'HISTORIAL',
+    id: 'explorar',
+    label: 'EXPLORAR',
     icon: (
       <svg viewBox="0 0 33 33" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4">
-        <circle cx="16.5" cy="17" r="10.5" />
-        <path d="M16.5 10.5V17l5 3" strokeLinecap="round" />
-        <path d="M8 7v6h6" />
+        <circle cx="16.5" cy="16.5" r="11.5" />
+        <path d="M21.5 11.5l-2.8 7.2-7.2 2.8 2.8-7.2z" fill="currentColor" strokeLinejoin="round" />
       </svg>
     )
   }

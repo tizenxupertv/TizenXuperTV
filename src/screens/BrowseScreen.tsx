@@ -506,13 +506,13 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
   // App categories with their counts (platform brands and sports draw from the full pool)
   const categoriesWithCounts = useMemo(() => {
-    if (isPortal) return [];
+    if (portalCols !== 'offline') return [];
     return VOD_CATEGORIES.map(cat => {
       const pool = isPlatformOrCross(cat.id) ? fullPool : allPool;
       const count = cat.id === 'all' ? allPool.length : pool.filter(cat.matcher).length;
       return { ...cat, count };
     }).filter(c => c.count > 0 || c.id === 'all');
-  }, [isPortal, allPool, fullPool]);
+  }, [portalCols, allPool, fullPool]);
 
   const fixedList = useMemo(() => {
     const seen = new Set<string>();
@@ -521,6 +521,8 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
   // ---------- Sidebar entries and the one the screen opens on
   const { entries, initialIndex } = useMemo((): { entries: SideEntry[]; initialIndex: number } => {
+    // Tree on its way: an empty sidebar ("…") rather than a flash of the offline categories
+    if (portalCols === null) return { entries: [], initialIndex: 0 };
     if (!isPortal) {
       const list: SideEntry[] = categoriesWithCounts.map(c => ({ key: c.id, name: c.name, icon: c.icon, count: c.count }));
       const at = list.findIndex(e => e.key === wantedCat);
@@ -563,7 +565,11 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
   // Titles in the grid, and how many the category has in all (null: not known yet)
   const { gridItems, gridTotal, gridState } = useMemo(() => {
-    if (!activeEntry) return { gridItems: [] as VodItem[], gridTotal: 0, gridState: 'ready' };
+    if (!activeEntry) {
+      return portalCols === null
+        ? { gridItems: [] as VodItem[], gridTotal: null, gridState: 'loading' }
+        : { gridItems: [] as VodItem[], gridTotal: 0, gridState: 'ready' };
+    }
     if (activeEntry.key === FIXED_KEY) return { gridItems: fixedList, gridTotal: fixedList.length, gridState: 'ready' };
     if (activeEntry.colId !== undefined) {
       const d = dataRef.current[activeEntry.colId];
@@ -577,7 +583,7 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
     const list = pool.filter(cat.matcher);
     return { gridItems: list, gridTotal: list.length, gridState: 'ready' };
     // dataVersion: the column data lives in a ref
-  }, [activeEntry, fixedList, allPool, fullPool, dataVersion]);
+  }, [activeEntry, portalCols, fixedList, allPool, fullPool, dataVersion]);
 
   // Next page when the focus gets near the last loaded row
   useEffect(() => {

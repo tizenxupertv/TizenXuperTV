@@ -1,6 +1,6 @@
 import { kvGet, kvSet } from '../lib/kvStore';
 import { VodItem, VodEpisode, VodSeason } from '../types/vod';
-import { organizeCatalogItems, belongsToSection, parseSeason } from '../lib/catalogOrganizer';
+import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../lib/catalogOrganizer';
 
 declare global {
   interface Window {
@@ -17,6 +17,12 @@ declare global {
       items: any[];
     };
   }
+}
+
+/** One home row of a portal root, as getNextColumns sends it (e.g. "Horror", "Netflix Series") */
+export interface PortalRow {
+  name: string;
+  items: VodItem[];
 }
 
 function normalizeItem(raw: any, index: number): VodItem {
@@ -94,7 +100,7 @@ function formatEpisodeDuration(raw: any): string {
 //  - once the app is idle, and when it comes back to the front, a copy older than
 //    LIVE_REFRESH_AFTER_MS is downloaded again for the next start.
 const LIVE_KEY = 'xuper_live_catalog_v1';
-const LIVE_ROOTS = ['featured', 'movies', 'series', 'kids', 'anime', 'free'];
+const LIVE_ROOTS = ['featured', 'movies', 'series', 'kids', 'anime', 'free', 'explorar'];
 const LIVE_WAIT_MS = 6000;
 const LIVE_FRESH_MS = 2 * 60 * 60 * 1000;
 const LIVE_REFRESH_AFTER_MS = 30 * 60 * 1000;
@@ -176,6 +182,7 @@ class CatalogService {
     kids: VodItem[];
     anime: VodItem[];
     rowsByGroup: Record<string, VodItem[]>;
+    portalRows: Record<string, PortalRow[]>;
   } | null = null;
 
   public async fetchCatalog(): Promise<{
@@ -185,12 +192,15 @@ class CatalogService {
     kids: VodItem[];
     anime: VodItem[];
     rowsByGroup: Record<string, VodItem[]>;
+    portalRows: Record<string, PortalRow[]>;
   }> {
     if (this.cache) return this.cache;
 
     // 0. Live catalog: a recent saved copy, else fresh from the portal, else any saved copy
     const saved = await readLiveCatalog();
-    if (saved && Date.now() - saved.at < LIVE_FRESH_MS) {
+    // A copy saved before the Explorar root was downloaded lacks its rows: not fresh
+    const savedComplete = !!saved && saved.items.some((it: any) => String(it.category || '').split(',')[0] === 'explorar');
+    if (saved && savedComplete && Date.now() - saved.at < LIVE_FRESH_MS) {
       return this.categorize(saved.items.map((it: any, idx: number) => normalizeItem(it, idx)));
     }
     const fresh = await Promise.race([
@@ -229,8 +239,27 @@ class CatalogService {
   }
 
   private categorize(rawItems: VodItem[]) {
-    // 1. Group series seasons and filter adult content
-    const items = organizeCatalogItems(rawItems);
+    // 1. Group series seasons and filter adult content. On the way, keep the portal's rows per root
+    //    (getNextColumns): the same rows, names and order as the official app's tabs.
+    const collector = new SeriesCollector();
+    const items: VodItem[] = [];
+    const portalRows: Record<string, PortalRow[]> = {};
+    const rowIndex: Record<string, PortalRow> = {};
+    for (const raw of rawItems) {
+      if (!raw || isAdultItem(raw)) continue;
+      const { item: grouped, isFresh } = collector.add(raw);
+      if (isFresh) items.push(grouped);
+      const root = (raw.category || '').split(',')[0].trim();
+      if (!root || !raw.row) continue;
+      const key = `${root}\u0000${raw.row}`;
+      let row = rowIndex[key];
+      if (!row) {
+        row = rowIndex[key] = { name: raw.row, items: [] };
+        (portalRows[root] || (portalRows[root] = [])).push(row);
+      }
+      // Seasons of a series share one entry, so a row never shows the same series twice
+      if (row.items.indexOf(grouped) === -1) row.items.push(grouped);
+    }
 
     const featured: VodItem[] = [];
     const movies: VodItem[] = [];
@@ -269,7 +298,8 @@ class CatalogService {
       series: series.length >= 4 ? series : items.slice(0, 50),
       kids: kids.length >= 4 ? kids : items.slice(0, 30),
       anime: anime.length >= 4 ? anime : items.slice(0, 30),
-      rowsByGroup
+      rowsByGroup,
+      portalRows
     };
 
     return this.cache;

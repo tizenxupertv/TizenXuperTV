@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { catalogService } from '../services/catalogService';
+import { catalogService, PortalRow } from '../services/catalogService';
 import { historyService } from '../services/historyService';
 import { VodItem } from '../types/vod';
 import { HistoryItem } from '../types/history';
@@ -14,6 +14,7 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
   const [kidsItems, setKidsItems] = useState<VodItem[]>([]);
   const [animeItems, setAnimeItems] = useState<VodItem[]>([]);
   const [catalogRows, setCatalogRows] = useState<Record<string, VodItem[]>>({});
+  const [portalRows, setPortalRows] = useState<Record<string, PortalRow[]>>({});
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
 
   const onLoadedRef = useRef(onLoaded);
@@ -32,6 +33,7 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
       setKidsItems(catalog.kids || []);
       setAnimeItems(catalog.anime || []);
       setCatalogRows(catalog.rowsByGroup || {});
+      setPortalRows(catalog.portalRows || {});
       if (onLoadedRef.current) onLoadedRef.current(catalog);
     });
 
@@ -59,6 +61,7 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
     kidsItems,
     animeItems,
     catalogRows,
+    portalRows,
     historyItems,
     findVod
   };

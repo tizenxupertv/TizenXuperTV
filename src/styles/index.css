@@ -492,7 +492,9 @@ html, body {
   position: relative;
   margin: 0 0 36px 0;
   content-visibility: auto;
-  contain-intrinsic-size: 1px 320px;
+  /* Placeholder = height of a rendered row; `auto` keeps each row's real height once rendered */
+  contain-intrinsic-size: 1px 343px;
+  contain-intrinsic-size: auto 1px auto 343px;
   contain: layout style;
 }
 

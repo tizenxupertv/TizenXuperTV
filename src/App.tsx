@@ -224,7 +224,7 @@ export const App: React.FC = () => {
   );
   const currentRows = useMemo(
     () => buildTabRows(selectedTab, catalog),
-    [selectedTab, historyItems, seriesItems, movieItems, featuredItems, kidsItems, animeItems, catalog.catalogRows]
+    [selectedTab, historyItems, seriesItems, movieItems, featuredItems, kidsItems, animeItems, catalog.catalogRows, catalog.portalRows]
   );
   const totalRows = currentRows.length;
 
@@ -289,8 +289,13 @@ export const App: React.FC = () => {
   }, [currentRows]);
   // "Ver todo" of a row: opens the Categorized Catalog view focused on that row's category
   const openSeeAll = useCallback((row: ContentRowDef) => {
-    const target = browseTargetForRow(row, selectedTab);
     const category = resolveCategoryIdForRow(row.title);
+    // A portal row is a column of its tab's root: the catalog opens on that same column
+    if (row.portalRoot) {
+      push({ id: 'browse', root: row.portalRoot, title: row.title, column: row.title, items: row.items as VodItem[], category });
+      return;
+    }
+    const target = browseTargetForRow(row, selectedTab);
     if (target.column) {
       // The column's titles (all roots) plus the row's own, without repeats
       const seen = new Set<string>();
@@ -613,7 +618,7 @@ export const App: React.FC = () => {
         />
       </div>
 
-      {/* View: VOD TABS (Destacados, Películas, Series, Kids, Anime, Historial) */}
+      {/* View: VOD TABS (Destacados, Películas, Series, Kids, Anime, Explorar) */}
       {/* Stays mounted under the detail / player (hidden) so Back returns to the same row, card and scroll */}
       {selectedTab !== 'tv' && (
         <div
