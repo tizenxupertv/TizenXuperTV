@@ -3,6 +3,7 @@ import { catalogService, PortalRow } from '../services/catalogService';
 import { historyService } from '../services/historyService';
 import { VodItem } from '../types/vod';
 import { HistoryItem } from '../types/history';
+import { continueWatchingItems } from '../lib/vodResume';
 
 type Catalog = Awaited<ReturnType<typeof catalogService.fetchCatalog>>;
 
@@ -21,9 +22,10 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
   onLoadedRef.current = onLoaded;
 
   useEffect(() => {
-    setHistoryItems(historyService.getHistory());
+    // Only unfinished titles feed "Seguir viendo"; the full history stays in the profile
+    setHistoryItems(continueWatchingItems(historyService.getHistory()));
     const unsubHist = historyService.subscribe(() => {
-      setHistoryItems(historyService.getHistory());
+      setHistoryItems(continueWatchingItems(historyService.getHistory()));
     });
 
     catalogService.fetchCatalog().then(catalog => {

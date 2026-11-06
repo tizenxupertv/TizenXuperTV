@@ -12,6 +12,11 @@ export function isFinished(position: number, duration: number): boolean {
   return duration > 0 && position / duration >= 0.9;
 }
 
+/** History entries for "Seguir viendo": what was played last and is not finished yet */
+export function continueWatchingItems(history: HistoryItem[]): HistoryItem[] {
+  return history.filter(h => !isFinished(h.position, h.duration));
+}
+
 function episodeNumber(ep: VodEpisode, index: number): number {
   return parseInt(String(ep.number ?? ep.seriesNumber ?? ''), 10) || index + 1;
 }
