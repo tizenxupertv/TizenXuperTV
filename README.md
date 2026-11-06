@@ -38,6 +38,7 @@
 - **Interactive Live TV Guide**: 3-column navigation (Categories, Channel List, Live Video Preview & Info) with instant channel switching.
 - **TV-Optimized Remote Keyboard**: Full QWERTY on-screen keyboard tailored for 5-way D-Pad remote navigation, instant search filtering, and history.
 - **Fast Startup & IndexedDB Cache**: Local offline caching for posters, categories, and channels; parallel TripleDES decryption in a dedicated Web Worker to maintain smooth 60fps UI animations.
+- **Sign-in with Telegram**: Required on first launch: the TV shows a QR code that opens the TizenXuper bot in Telegram; one tap links the TV. Only the session is stored on the server (Telegram name, TV model, app version); history and favorites stay on the TV.
 - **100% Samsung Remote Friendly**: Fully responsive to Samsung Smart Remote controls (D-Pad, Select, Return/Back, Play/Pause, Channel Up/Down, Volume, and Color buttons).
 
 ---
