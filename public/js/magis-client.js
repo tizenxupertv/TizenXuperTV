@@ -1544,25 +1544,31 @@
     anime: 76180,
     explorar: 76784,
     // "Hot Search-Ranking": its child "Busca popular" holds the titles of the search screen
-    search: 76301
+    search: 76301,
+    // Adult (restricted): its children only come with specialFlag "1"; the app opens it after the PIN
+    adult: 76300
   };
 
   // Category tree (v3/getColumnContents): children of a column, as the official app's sidebar.
-  // Sorted by the portal's `sequence`; restricted (adult) columns are left out.
+  // Sorted by the portal's `sequence`; restricted (adult) columns are left out unless opts.special
+  // (specialFlag "1", the adult section opened after the PIN).
   var columnCache = {};
   function columns(columnId, callback, opts) {
-    var key = String(columnId);
+    var special = !!(opts && opts.special);
+    var key = String(columnId) + (special ? ':s' : '');
     var hit = columnCache[key];
     if (hit && Date.now() - hit.at < TREE_TTL) return callback(null, hit.list);
     ensureSession(function (err) {
       if (err) return callback(err);
-      call('v3/getColumnContents', { columnId: columnId, pageNum: 1, pageSize: 1000 }, { low: !!(opts && opts.low) }, function (cErr, cRes) {
+      var body = { columnId: columnId, pageNum: 1, pageSize: 1000 };
+      if (special) body.specialFlag = '1';
+      call('v3/getColumnContents', body, { low: !!(opts && opts.low) }, function (cErr, cRes) {
         if (cErr) return callback(cErr);
         var raw = cRes && cRes.childColumnList || [];
         var list = [];
         for (var i = 0; i < raw.length; i++) {
           var c = raw[i];
-          if (!c || !c.id || String(c.restricted) === '1') continue;
+          if (!c || !c.id || (!special && String(c.restricted) === '1')) continue;
           list.push({ id: c.id, code: text(c.code), name: text(c.name), free: String(c.free) === '1', sequence: parseInt(c.sequence, 10) || 0 });
         }
         list.sort(function (a, b) { return a.sequence - b.sequence; });

@@ -182,6 +182,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           { id: 'change', onActivate: () => onRequestPin('change') },
           { id: 'disable', onActivate: () => onRequestPin('disable') }
         ]);
+        // +18 section: turning it on always asks the PIN; turning it off does not
+        r.push([{
+          id: 'adult',
+          onActivate: () => {
+            if (parentalService.isAdultEnabled()) parentalService.setAdultEnabled(false);
+            else onRequestPin('unlock', () => parentalService.setAdultEnabled(true));
+          }
+        }]);
         for (let i = 0; i < lockCats.length; i += LOCK_COLS) {
           r.push(lockCats.slice(i, i + LOCK_COLS).map(c => ({
             id: 'live-' + c.id,
@@ -361,7 +369,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <h2 className="pf-title">Control parental</h2>
             <p className="pf-note">
               Crea un PIN de 4 dígitos para proteger las categorías de TV en vivo y las pestañas de contenido que elijas.
-              Si lo olvidas, deberás reinstalar la app.
+              La sección para adultos (+18) también necesita el PIN. Si lo olvidas, deberás reinstalar la app.
             </p>
             <div className={`pf-btn ${isF('create') ? 'is-focused' : ''}`} onClick={tap('create')}>Crear PIN</div>
           </div>
@@ -376,6 +384,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <div className="pf-btn-row">
             <div className={`pf-btn ${isF('change') ? 'is-focused' : ''}`} onClick={tap('change')}>Cambiar PIN</div>
             <div className={`pf-btn pf-btn-danger ${isF('disable') ? 'is-focused' : ''}`} onClick={tap('disable')}>Desactivar bloqueo</div>
+          </div>
+          <h3 className="pf-subtitle">Sección para adultos (+18)</h3>
+          <div className="pf-row">
+            <div className="pf-row-label">
+              {parentalService.isAdultEnabled()
+                ? 'Activada: aparece la pestaña +18 y pide el PIN al entrar'
+                : 'Desactivada: el contenido para adultos está oculto (activarla pide el PIN)'}
+            </div>
+            <div className={`pf-switch ${parentalService.isAdultEnabled() ? 'on' : 'off'} ${isF('adult') ? 'is-focused' : ''}`} onClick={tap('adult')}>
+              <span className="pf-switch-knob" />
+            </div>
           </div>
           <h3 className="pf-subtitle">Canales en vivo</h3>
           <div className="pf-lock-grid">

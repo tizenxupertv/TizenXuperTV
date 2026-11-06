@@ -1,10 +1,12 @@
 import React from 'react';
-import { TabId, TABS } from './TopNavbar';
+import { TabId, TABS, TabItem } from './TopNavbar';
 import { BrandLogo } from '../common/BrandLogo';
 
 export interface HeaderProps {
   selectedTab: TabId;
-  focusedIndex: number | null; // 0..6: tabs, 7: search, 8: filter, 9: profile
+  focusedIndex: number | null; // tabs first, then search, filter, profile
+  /** Tabs to show (the +18 tab is added when enabled) */
+  tabs?: TabItem[];
   onSelectTab: (tab: TabId) => void;
   onSearchClick: () => void;
   onFilterClick: () => void;
@@ -19,8 +21,10 @@ export const Header: React.FC<HeaderProps> = ({
   onSearchClick,
   onFilterClick,
   onProfileClick,
-  profileActive
+  profileActive,
+  tabs = TABS
 }) => {
+  const searchIdx = tabs.length;
   return (
     <header className="app-header">
       {/* 1. Left: Brand Logo */}
@@ -29,7 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* 2. Center: Direct Navigation Tabs (Apple TV single-bar style) */}
       <nav className="header-navbar">
         <div className="navbar-track">
-          {TABS.map((tab, idx) => {
+          {tabs.map((tab, idx) => {
             const isSelected = selectedTab === tab.id;
             const isFocused = focusedIndex === idx;
 
@@ -50,7 +54,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* 3. Right: Search & Profile */}
       <div className="header-notify">
         <button
-          className={`notify-btn ${focusedIndex === 7 ? 'is-focused' : ''}`}
+          className={`notify-btn ${focusedIndex === searchIdx ? 'is-focused' : ''}`}
           onClick={onSearchClick}
           title="Buscar"
         >
@@ -58,7 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <button
-          className={`notify-btn ${focusedIndex === 8 ? 'is-focused' : ''}`}
+          className={`notify-btn ${focusedIndex === searchIdx + 1 ? 'is-focused' : ''}`}
           onClick={onFilterClick}
           title="Filtrar"
         >
@@ -66,7 +70,7 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <button
-          className={`notify-btn ${profileActive ? 'is-active' : ''} ${focusedIndex === 9 ? 'is-focused' : ''}`}
+          className={`notify-btn ${profileActive ? 'is-active' : ''} ${focusedIndex === searchIdx + 2 ? 'is-focused' : ''}`}
           onClick={onProfileClick}
           title="Perfil"
         >

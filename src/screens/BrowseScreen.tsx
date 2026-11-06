@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useReducer } from 'react';
 import { VodItem } from '../types/vod';
 import { PortalColumn, portalRootId, getPortalColumns, getPortalColumnPage } from '../services/catalogService';
+import { parentalService } from '../services/parentalService';
+import { isAdultLabel } from '../lib/catalogOrganizer';
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { PosterCard } from '../components/vod/PosterCard';
 import { BrowseRoot } from '../lib/screenStack';
@@ -362,7 +364,8 @@ const ROOT_LABEL: Record<BrowseRoot, string> = {
   series: 'Catálogo de Series',
   kids: 'Catálogo Infantil y Familiar',
   anime: 'Catálogo de Anime',
-  explorar: 'Explorar'
+  explorar: 'Explorar',
+  adult: 'Adultos +18'
 };
 
 export const BrowseScreen: React.FC<BrowseScreenProps> = ({
@@ -400,7 +403,10 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
     }
     let alive = true;
     setPortalCols(null);
-    getPortalColumns(rootId)
+    const isAdultRoot = root === 'adult';
+    getPortalColumns(rootId, { special: isAdultRoot })
+      // Without the +18 section enabled, erotic columns stay out of the other sections
+      .then(list => (isAdultRoot || parentalService.isAdultEnabled() ? list : list.filter(c => !isAdultLabel(c.name))))
       .then(async list => {
         // A platform row whose platform has no column in this section opens Explorar, which has them all
         const explorarId = portalRootId('explorar');
@@ -414,8 +420,9 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
         return list;
       })
       .then(
-        list => { if (alive) setPortalCols(list.length ? list : 'offline'); },
-        () => { if (alive) setPortalCols('offline'); }
+        // The adult section has no offline categories: an empty list rather than the general ones
+        list => { if (alive) setPortalCols(list.length || isAdultRoot ? list : 'offline'); },
+        () => { if (alive) setPortalCols(isAdultRoot ? [] : 'offline'); }
       );
     return () => { alive = false; };
     // The opening row only matters for the first load of this screen

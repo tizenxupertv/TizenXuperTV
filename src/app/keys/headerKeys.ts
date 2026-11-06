@@ -1,5 +1,5 @@
 import { TvKey } from '../../hooks/useTvRemote';
-import { TabId, TABS } from '../../components/layout/TopNavbar';
+import { TabId, TabItem } from '../../components/layout/TopNavbar';
 import { DestacadosFocus } from '../../views/DestacadosView';
 import { LiveTvFocus } from '../../views/LiveTvView';
 import { FocusDomain, Setter } from '../types';
@@ -16,6 +16,10 @@ export interface HeaderKeysCtx {
   guardTab: (tab: TabId, apply: () => void) => void;
   openProfile: () => void;
   openFilter: () => void;
+  /** Visible tabs (the +18 tab is added when enabled) */
+  tabs: TabItem[];
+  /** Opens a tab (PIN checks included) */
+  selectTab: (tab: TabId) => void;
 }
 
 export function handleHeaderKeys(key: TvKey, ctx: HeaderKeysCtx): boolean {
@@ -30,28 +34,30 @@ export function handleHeaderKeys(key: TvKey, ctx: HeaderKeysCtx): boolean {
     setIsSearchOpen,
     guardTab,
     openProfile,
-    openFilter
+    openFilter,
+    tabs,
+    selectTab
   } = ctx;
+  const searchIdx = tabs.length;
   if (key === 'left') {
     setHeaderFocusIndex(prev => Math.max(0, prev - 1));
     return true;
   }
   if (key === 'right') {
-    setHeaderFocusIndex(prev => Math.min(9, prev + 1));
+    setHeaderFocusIndex(prev => Math.min(searchIdx + 2, prev + 1));
     return true;
   }
   if (key === 'up') {
     return true;
   }
   if (key === 'enter') {
-    if (headerFocusIndex <= 6) {
-      const tabId = TABS[headerFocusIndex].id;
-      guardTab(tabId, () => setSelectedTab(tabId));
-    } else if (headerFocusIndex === 7) {
+    if (headerFocusIndex < searchIdx) {
+      selectTab(tabs[headerFocusIndex].id);
+    } else if (headerFocusIndex === searchIdx) {
       setIsSearchOpen(true);
-    } else if (headerFocusIndex === 8) {
+    } else if (headerFocusIndex === searchIdx + 1) {
       openFilter();
-    } else if (headerFocusIndex === 9) {
+    } else if (headerFocusIndex === searchIdx + 2) {
       openProfile();
     }
     return true;

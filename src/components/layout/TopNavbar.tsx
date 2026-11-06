@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type TabId = 'tv' | 'destacados' | 'peliculas' | 'series' | 'kids' | 'anime' | 'explorar';
+export type TabId = 'tv' | 'destacados' | 'peliculas' | 'series' | 'kids' | 'anime' | 'explorar' | 'adultos';
 
 export interface TabItem {
   id: TabId;
@@ -98,6 +98,22 @@ export const TABS: TabItem[] = [
     )
   }
 ];
+
+/** "+18": only when the adult section is enabled in Perfil › Bloqueo; opens the section after the PIN */
+export const ADULT_TAB: TabItem = {
+  id: 'adultos',
+  label: '+18',
+  icon: (
+    <svg viewBox="0 0 33 33" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4">
+      <rect x="7" y="14" width="19" height="14" rx="2.5" />
+      <path d="M11 14v-3.5a5.5 5.5 0 0 1 11 0V14" />
+    </svg>
+  )
+};
+
+export function getTabs(adultEnabled: boolean): TabItem[] {
+  return adultEnabled ? [...TABS, ADULT_TAB] : TABS;
+}
 
 interface TopNavbarProps {
   selectedTab: TabId;

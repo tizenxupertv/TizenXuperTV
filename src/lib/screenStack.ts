@@ -2,7 +2,7 @@ import { VodItem } from '../types/vod';
 
 export type PinMode = 'unlock' | 'create' | 'change' | 'disable';
 
-export type BrowseRoot = 'featured' | 'movies' | 'series' | 'kids' | 'anime' | 'explorar';
+export type BrowseRoot = 'featured' | 'movies' | 'series' | 'kids' | 'anime' | 'explorar' | 'adult';
 
 /** "Tipo" of the filter screen */
 export type FilterRoot = 'movies' | 'series' | 'kids' | 'anime';

@@ -1027,12 +1027,14 @@ export function portalRootId(root: string): number | undefined {
   return ids ? ids[root] : undefined;
 }
 
-export function getPortalColumns(columnId: number): Promise<PortalColumn[]> {
-  const key = `xuper_columns_v1_${columnId}`;
+/** opts.special: restricted children too (adult section, opened after the PIN) */
+export function getPortalColumns(columnId: number, opts?: { special?: boolean }): Promise<PortalColumn[]> {
+  const special = !!(opts && opts.special);
+  const key = `xuper_columns_v1_${columnId}${special ? '_s' : ''}`;
   return new Promise<PortalColumn[]>((resolve, reject) => {
     const client = window.MagisClient;
     if (!client || typeof client.columns !== 'function') return reject(new Error('no portal client'));
-    client.columns(columnId, (err: any, list: PortalColumn[]) => (err ? reject(err) : resolve(list || [])));
+    client.columns(columnId, (err: any, list: PortalColumn[]) => (err ? reject(err) : resolve(list || [])), { special });
   }).then(
     list => {
       if (list.length) kvSet(key, list);

@@ -8,6 +8,8 @@ interface ParentalState {
   pinHash?: string;
   lockedLiveCats: string[];
   lockedVodTabs: string[];
+  /** "Sección para adultos (+18)": off unless enabled with the PIN in Perfil › Bloqueo */
+  adultEnabled?: boolean;
 }
 
 export type VerifyResult = 'ok' | 'bad' | 'cooldown';
@@ -30,7 +32,8 @@ class ParentalService {
         return {
           pinHash: p.pinHash,
           lockedLiveCats: Array.isArray(p.lockedLiveCats) ? p.lockedLiveCats : [],
-          lockedVodTabs: Array.isArray(p.lockedVodTabs) ? p.lockedVodTabs : []
+          lockedVodTabs: Array.isArray(p.lockedVodTabs) ? p.lockedVodTabs : [],
+          adultEnabled: !!p.adultEnabled && !!p.pinHash
         };
       }
     } catch (e) {}
@@ -52,6 +55,18 @@ class ParentalService {
 
   public hasPin(): boolean {
     return !!this.read().pinHash;
+  }
+
+  /** The +18 section exists only with a PIN (removing the PIN turns it off) */
+  public isAdultEnabled(): boolean {
+    const state = this.read();
+    return !!state.pinHash && !!state.adultEnabled;
+  }
+
+  public setAdultEnabled(on: boolean) {
+    const state = this.read();
+    state.adultEnabled = on && !!state.pinHash;
+    this.write(state);
   }
 
   public isSessionUnlocked(): boolean {

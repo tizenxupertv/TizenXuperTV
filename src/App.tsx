@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { TabId, TABS } from './components/layout/TopNavbar';
+import { TabId, TABS, getTabs } from './components/layout/TopNavbar';
+import { parentalService } from './services/parentalService';
 import { Header } from './components/layout/Header';
 import { DestacadosView, DestacadosFocus, ContentRowDef } from './views/DestacadosView';
 import { LiveTvView } from './views/LiveTvView';
@@ -338,6 +339,19 @@ export const App: React.FC = () => {
     push({ id: 'profile' });
   }, [push]);
 
+  // "+18" tab: shown only when enabled in Perfil › Bloqueo; opens the adult section after the PIN
+  const [adultEnabled, setAdultEnabled] = useState<boolean>(() => parentalService.isAdultEnabled());
+  useEffect(() => parentalService.subscribe(() => setAdultEnabled(parentalService.isAdultEnabled())), []);
+  const tabs = useMemo(() => getTabs(adultEnabled), [adultEnabled]);
+  const openAdult = useCallback(() => {
+    const go = () => push({ id: 'browse', root: 'adult', title: 'Adultos +18' });
+    if (parentalService.isAdultEnabled()) requestPin('unlock', go);
+  }, [push, requestPin]);
+  const selectTab = useCallback((tab: TabId) => {
+    if (tab === 'adultos') openAdult();
+    else guardTab(tab, () => setSelectedTab(tab));
+  }, [openAdult, guardTab]);
+
   // Filter screen, on the type of the current tab (movies elsewhere)
   const openFilter = useCallback((root?: FilterRoot) => {
     const byTab: Partial<Record<TabId, FilterRoot>> = { peliculas: 'movies', series: 'series', kids: 'kids', anime: 'anime' };
@@ -452,7 +466,9 @@ export const App: React.FC = () => {
         setIsSearchOpen,
         guardTab,
         openProfile,
-        openFilter: () => openFilter()
+        openFilter: () => openFilter(),
+        tabs,
+        selectTab
       });
     }
 
@@ -593,7 +609,8 @@ export const App: React.FC = () => {
         <Header
           selectedTab={selectedTab}
           focusedIndex={focusDomain === 'header' ? headerFocusIndex : null}
-          onSelectTab={tab => guardTab(tab, () => setSelectedTab(tab))}
+          tabs={tabs}
+          onSelectTab={selectTab}
           onSearchClick={() => setIsSearchOpen(true)}
           onFilterClick={() => openFilter()}
           onProfileClick={openProfile}
@@ -757,7 +774,7 @@ export const App: React.FC = () => {
               onClose={pop}
               onOpenVod={it => handleOpenDetail(it)}
               onOpenSearch={() => setIsSearchOpen(true)}
-              onOpenFilter={() => {
+              onOpenFilter={screen.root === 'adult' ? undefined : () => {
                 const r = screen.root;
                 openFilter(r === 'movies' || r === 'series' || r === 'kids' || r === 'anime' ? r : 'movies');
               }}
