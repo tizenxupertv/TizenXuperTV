@@ -1,0 +1,213 @@
+/**
+ * Sign-in with Telegram (required to use the app). The TV shows a QR code that opens the
+ * TizenXuper bot; the user confirms there and the TV receives a session token.
+ * Only the session lives here: history, favorites and settings stay on the TV.
+ *
+ * Server: the TizenXuper Bot Worker (TizenXuper Bot/src/tvApi.ts).
+ * No relative imports, so test/accountService.test.ts can load this file in Node.
+ */
+export const ACCOUNT_API = 'https://tizenxuper-bot.juliochemoreno.workers.dev';
+
+const SESSION_KEY = 'xuper_tg_session_v1';
+const DEVICE_KEY = 'xuper_device_id_v1';
+const REQUEST_TIMEOUT_MS = 10000;
+
+export interface AccountUser {
+  name: string;
+  username: string | null;
+}
+
+export interface AccountSession extends AccountUser {
+  token: string;
+}
+
+export interface LoginCode {
+  code: string;
+  /** Secret that only this TV knows, needed to collect the session */
+  key: string;
+  /** t.me deep link shown as the QR code */
+  url: string;
+  expiresAt: number;
+  /** Seconds between status checks */
+  interval: number;
+}
+
+export type PollResult = { status: 'pending' } | { status: 'expired' } | { status: 'linked'; session: AccountSession };
+
+/** ok: session valid · revoked: the TV was unlinked (sign in again) · offline: could not check */
+export type VerifyResult = 'ok' | 'revoked' | 'offline';
+
+interface KeyValue {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+export interface AccountDeps {
+  storage: () => KeyValue;
+  fetchFn: (url: string, init: RequestInit) => Promise<Response>;
+  now: () => number;
+  /** App version and TV model sent to the server */
+  device: () => { version: string; model: string };
+  randomBytes: (n: number) => Uint8Array;
+}
+
+/** ABCD2345 → ABCD-2345 */
+export const formatCode = (code: string) => `${code.slice(0, 4)}-${code.slice(4)}`;
+
+export function createAccountService(deps: AccountDeps) {
+  let listeners: Array<() => void> = [];
+  const notify = () => listeners.forEach(cb => {
+    try { cb(); } catch (e) {}
+  });
+
+  function read(key: string): string | null {
+    try { return deps.storage().getItem(key); } catch (e) { return null; }
+  }
+  function write(key: string, value: string | null): void {
+    try {
+      if (value === null) deps.storage().removeItem(key);
+      else deps.storage().setItem(key, value);
+    } catch (e) {}
+  }
+
+  /** Random id of this installation (not the TV's hardware id) */
+  function deviceId(): string {
+    const saved = read(DEVICE_KEY);
+    if (saved && /^[A-Za-z0-9_-]{8,64}$/.test(saved)) return saved;
+    const id = Array.from(deps.randomBytes(16), b => b.toString(16).padStart(2, '0')).join('');
+    write(DEVICE_KEY, id);
+    return id;
+  }
+
+  async function post(path: string, body: unknown, token?: string): Promise<Response> {
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = setTimeout(() => ctrl && ctrl.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      return await deps.fetchFn(`${ACCOUNT_API}${path}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: ctrl ? ctrl.signal : undefined
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function session(): AccountSession | null {
+    const raw = read(SESSION_KEY);
+    if (!raw) return null;
+    try {
+      const s = JSON.parse(raw);
+      return s && typeof s.token === 'string' && s.token ? { token: s.token, name: String(s.name || ''), username: s.username || null } : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function save(s: AccountSession | null): void {
+    write(SESSION_KEY, s ? JSON.stringify(s) : null);
+    notify();
+  }
+
+  return {
+    session,
+
+    isSignedIn(): boolean {
+      return session() !== null;
+    },
+
+    /** New one-time code for the QR screen; throws when the server cannot be reached */
+    async startLogin(): Promise<LoginCode> {
+      const { version, model } = deps.device();
+      const res = await post('/tv/login', { deviceId: deviceId(), version, model });
+      if (!res.ok) throw new Error(`login ${res.status}`);
+      const data = await res.json();
+      return {
+        code: String(data.code),
+        key: String(data.key),
+        url: String(data.url),
+        expiresAt: deps.now() + Number(data.expiresIn || 300) * 1000,
+        interval: Math.max(2, Number(data.interval || 4))
+      };
+    },
+
+    /** Checks whether the user confirmed the code; saves the session when linked */
+    async poll(login: LoginCode): Promise<PollResult> {
+      if (deps.now() >= login.expiresAt) return { status: 'expired' };
+      const res = await post('/tv/login/status', { code: login.code, key: login.key });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = await res.json();
+      if (data.status === 'linked' && typeof data.token === 'string') {
+        const s: AccountSession = {
+          token: data.token,
+          name: String((data.user && data.user.name) || ''),
+          username: (data.user && data.user.username) || null
+        };
+        save(s);
+        return { status: 'linked', session: s };
+      }
+      return data.status === 'expired' ? { status: 'expired' } : { status: 'pending' };
+    },
+
+    /** Confirms the saved session with the server; only an explicit 401 signs the TV out */
+    async verify(): Promise<VerifyResult> {
+      const s = session();
+      if (!s) return 'revoked';
+      try {
+        const { version, model } = deps.device();
+        const res = await post('/tv/session', { version, model }, s.token);
+        if (res.status === 401) {
+          save(null);
+          return 'revoked';
+        }
+        if (!res.ok) return 'offline';
+        const data = await res.json();
+        if (data.user && (data.user.name !== s.name || (data.user.username || null) !== s.username)) {
+          save({ token: s.token, name: String(data.user.name || ''), username: data.user.username || null });
+        }
+        return 'ok';
+      } catch (e) {
+        return 'offline';
+      }
+    },
+
+    /** Forgets the session on this TV and asks the server to unlink it */
+    async logout(): Promise<void> {
+      const s = session();
+      save(null);
+      if (!s) return;
+      try { await post('/tv/logout', {}, s.token); } catch (e) {}
+    },
+
+    subscribe(cb: () => void): () => void {
+      listeners.push(cb);
+      return () => { listeners = listeners.filter(l => l !== cb); };
+    }
+  };
+}
+
+export type AccountService = ReturnType<typeof createAccountService>;
+
+declare const __APP_VERSION__: string;
+
+function tvModel(): string {
+  try {
+    const w = window as any;
+    if (w.webapis && w.webapis.productinfo) {
+      return String(w.webapis.productinfo.getRealModel() || w.webapis.productinfo.getModel() || '');
+    }
+  } catch (e) {}
+  return '';
+}
+
+export const accountService = createAccountService({
+  storage: () => window.localStorage,
+  fetchFn: (url, init) => fetch(url, init),
+  now: () => Date.now(),
+  device: () => ({ version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev', model: tvModel() }),
+  randomBytes: n => crypto.getRandomValues(new Uint8Array(n))
+});

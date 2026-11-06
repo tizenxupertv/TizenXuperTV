@@ -10,6 +10,7 @@ import { settingsService } from '../services/settingsService';
 import { parentalService } from '../services/parentalService';
 import { diagnosticService, DiagReport } from '../services/diagnosticService';
 import { iptvService, IPTV_LISTS } from '../services/iptvService';
+import { accountService } from '../services/accountService';
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
 
@@ -48,6 +49,8 @@ const SIZE_OPTS = ['Normal', 'Grande', 'Pequeño'];
 const STYLE_OPTS = ['Aa', 'Aa', 'Aa'];
 const GRID_COLS = 7;
 const MAX_LIST = 30;
+/** "Cerrar sesión" needs a second OK within this time */
+const LOGOUT_CONFIRM_MS = 4000;
 
 const VERDICTS: Record<string, { cls: string; text: string }> = {
   ok: { cls: 'ok', text: 'Todo correcto: el portal y los servidores de video responden.' },
@@ -86,6 +89,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [, setTick] = useState(0);
   const [report, setReport] = useState<DiagReport | null>(null);
   const [diagRunning, setDiagRunning] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const rerender = () => setTick(t => t + 1);
@@ -96,10 +101,27 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       favoritesService.subscribe(rerender),
       settingsService.subscribe(rerender),
       parentalService.subscribe(rerender),
-      iptvService.subscribe(rerender)
+      iptvService.subscribe(rerender),
+      accountService.subscribe(rerender)
     ];
     return () => unsubs.forEach(u => u());
   }, []);
+
+  // First OK asks for confirmation; the second signs out and restarts at the sign-in screen
+  useEffect(() => {
+    if (!confirmLogout) return;
+    const t = setTimeout(() => setConfirmLogout(false), LOGOUT_CONFIRM_MS);
+    return () => clearTimeout(t);
+  }, [confirmLogout]);
+  const logout = () => {
+    if (loggingOut) return;
+    if (!confirmLogout) {
+      setConfirmLogout(true);
+      return;
+    }
+    setLoggingOut(true);
+    accountService.logout().then(() => window.location.reload());
+  };
 
   const settings = settingsService.get();
   const hasPin = parentalService.hasPin();
@@ -145,9 +167,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     const id = SECTIONS[section].id;
     const r: Cell[][] = [];
     if (id === 'account') {
+      r.push([{ id: 'logout', onActivate: logout }]);
       r.push([
-        { id: 'tab-history', onActivate: () => { setListTab('history'); setFocus({ r: 0, c: 0 }); } },
-        { id: 'tab-favs', onActivate: () => { setListTab('favs'); setFocus({ r: 0, c: 1 }); } }
+        { id: 'tab-history', onActivate: () => { setListTab('history'); setFocus({ r: 1, c: 0 }); } },
+        { id: 'tab-favs', onActivate: () => { setListTab('favs'); setFocus({ r: 1, c: 1 }); } }
       ]);
       for (let i = 0; i < listItems.length; i += GRID_COLS) {
         r.push(listItems.slice(i, i + GRID_COLS).map(it => ({ id: 'card-' + it.key, onActivate: it.open })));
@@ -255,14 +278,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     else if (!rows[focus.r][focus.c]) setFocus({ r: focus.r, c: Math.max(0, rows[focus.r].length - 1) });
   });
 
-  const profileId = (() => {
-    try {
-      const raw = localStorage.getItem('xuper_local_profile_v1');
-      return raw ? JSON.parse(raw).id || '—' : '—';
-    } catch (e) {
-      return '—';
-    }
-  })();
+  const account = accountService.session();
 
   const radioRow = (label: string, group: string, opts: string[], selected: number) => (
     <div className="pf-row">
@@ -290,8 +306,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 dangerouslySetInnerHTML={{ __html: SECTIONS[0].icon }} />
             </div>
             <div className="pf-account-info">
-              <div className="pf-account-id">{profileId}</div>
-              <div className="pf-account-type">Perfil local de este televisor · sin registro ni contraseña, tus datos no salen del TV</div>
+              <div className="pf-account-id">{account ? account.name || 'Usuario de Telegram' : '—'}</div>
+              <div className="pf-account-type">
+                Sesión iniciada con Telegram{account && account.username ? ` (@${account.username})` : ''} · tu historial y favoritos se quedan en este TV
+              </div>
+            </div>
+            <div className={`pf-btn pf-btn-danger pf-logout ${isF('logout') ? 'is-focused' : ''}`} onClick={tap('logout')}>
+              {loggingOut ? 'Cerrando sesión…' : confirmLogout ? 'Pulsa OK otra vez para salir' : 'Cerrar sesión'}
             </div>
           </div>
           <div className="pf-hr" />

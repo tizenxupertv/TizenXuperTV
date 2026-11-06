@@ -6202,3 +6202,37 @@ html.xuper-vod-avplay .app-root,
   font-size: 15px;
   font-weight: 700;
 }
+
+/* ==========================================================================
+   Sign-in with Telegram (required before the app; drawn above the splash)
+   ========================================================================== */
+.tg-login {
+  position: fixed; inset: 0; z-index: 100001; display: flex; flex-direction: column;
+  background: radial-gradient(circle at 30% 40%, #12151e 0%, #07080b 100%);
+}
+.tg-login-brand { padding: 28px 48px 0; }
+.tg-login-body { flex: 1; display: flex; align-items: center; justify-content: center; gap: 64px; padding: 0 64px 48px; }
+.tg-login-card {
+  width: 300px; flex-shrink: 0; padding: 20px; border-radius: 24px; background: #fff;
+  display: flex; flex-direction: column; align-items: center; box-sizing: border-box;
+}
+.tg-login-card.is-empty { height: 340px; justify-content: center; background: rgba(255, 255, 255, 0.06); }
+.tg-login-card-msg { font-size: 16px; color: var(--text-muted); }
+.tg-login-card.is-empty .tg-login-card-msg { font-size: 15px; }
+.tg-login-qr { display: block; }
+.tg-login-code { margin-top: 12px; font-size: 28px; font-weight: 900; letter-spacing: 4px; color: #0b1020; }
+.tg-login-info { max-width: 600px; }
+.tg-login-title { font-size: 32px; font-weight: 900; letter-spacing: -0.5px; margin: 0 0 10px; }
+.tg-login-lead { font-size: 16px; line-height: 1.5; color: var(--text-muted); margin: 0 0 24px; }
+.tg-login-steps { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
+.tg-login-step { display: flex; align-items: center; gap: 14px; font-size: 16px; color: #e2e8f0; }
+.tg-login-num {
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 800; color: #fff; background: var(--gradient-brand);
+}
+.tg-login-alt { font-size: 14px; color: var(--text-muted); margin: 0 0 22px; }
+.tg-login-alt b { color: #e2e8f0; }
+.tg-login-status { min-height: 22px; font-size: 15px; font-weight: 700; color: var(--color-accent-sub); margin-bottom: 16px; }
+.tg-login-status.is-expired, .tg-login-status.is-error { color: #fb7185; }
+.tg-login-status.is-done { color: #4ade80; font-size: 18px; }
+.pf-logout { margin-left: auto; white-space: nowrap; }
