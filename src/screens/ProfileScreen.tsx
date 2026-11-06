@@ -11,6 +11,7 @@ import { parentalService } from '../services/parentalService';
 import { diagnosticService, DiagReport } from '../services/diagnosticService';
 import { iptvService, IPTV_LISTS } from '../services/iptvService';
 import { accountService } from '../services/accountService';
+import { playbackEvents } from '../lib/playbackLog';
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
 
@@ -90,6 +91,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [report, setReport] = useState<DiagReport | null>(null);
   const [diagRunning, setDiagRunning] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [reportState, setReportState] = useState<'idle' | 'sending' | 'ok' | 'too_many' | 'signed_out' | 'error'>('idle');
   const [loggingOut, setLoggingOut] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -106,6 +108,27 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     ];
     return () => unsubs.forEach(u => u());
   }, []);
+
+  // Problem report for support: TV, network, last network check and recent playback events
+  const sendReport = () => {
+    if (reportState === 'sending') return;
+    setReportState('sending');
+    const { version, model } = accountService.deviceInfo();
+    let network = '';
+    try {
+      const w = window as any;
+      const type = w.webapis && w.webapis.network ? w.webapis.network.getActiveConnectionType() : -1;
+      network = ['Sin conexión', 'Wi-Fi', 'Datos móviles', 'Cable'][type] || '';
+    } catch (e) {}
+    accountService.sendReport({
+      app: version,
+      model,
+      network,
+      screen: `${window.screen.width}x${window.screen.height}`,
+      diag: report ? { verdict: report.verdict, portalMs: report.portalMs, cdns: report.cdns } : null,
+      events: playbackEvents()
+    }).then(setReportState);
+  };
 
   // First OK asks for confirmation; the second signs out and restarts at the sign-in screen
   useEffect(() => {
@@ -204,7 +227,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     } else if (id === 'iptv') {
       IPTV_LISTS.forEach(l => r.push([{ id: `iptv-${l.id}`, onActivate: () => iptvService.setEnabled(l.id, !iptvService.isEnabled(l.id)) }]));
     } else if (id === 'diag') {
-      r.push([{ id: 'run', onActivate: runDiag }]);
+      r.push([{ id: 'run', onActivate: runDiag }, { id: 'report', onActivate: sendReport }]);
     } else if (id === 'donate') {
       r.push([{ id: 'donate-qr', onActivate: () => {} }]);
     }
@@ -442,6 +465,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <div className={`pf-btn ${isF('run') ? 'is-focused' : ''}`} onClick={tap('run')}>
               {diagRunning ? 'Analizando…' : report ? 'Analizar de nuevo' : 'Analizar red'}
             </div>
+            <div className={`pf-btn ${isF('report') ? 'is-focused' : ''}`} onClick={tap('report')}>
+              {reportState === 'sending' ? 'Enviando…' : 'Enviar reporte a soporte'}
+            </div>
             <div className={`pf-diag-summary ${verdict ? verdict.cls : ''}`}>
               {diagRunning
                 ? 'Consultando DNS seguro, portal y servidores…'
@@ -449,6 +475,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   ? verdict.text
                   : 'Pulsa "Analizar red" para empezar.'}
             </div>
+          </div>
+          <div className={`pf-diag-report ${reportState}`}>
+            {reportState === 'ok' && '✓ Reporte enviado. Te responderemos por Telegram.'}
+            {reportState === 'too_many' && 'Ya enviaste varios reportes esta hora. Espera un poco antes de enviar otro.'}
+            {reportState === 'signed_out' && 'La sesión de Telegram de esta TV se cerró. Reinicia la app para volver a iniciarla.'}
+            {reportState === 'error' && 'No se pudo enviar el reporte. Revisa la conexión e inténtalo de nuevo.'}
+            {(reportState === 'idle' || reportState === 'sending') &&
+              'Si un canal o una película no se ve, envíanos un reporte justo después: incluye el modelo de la TV, la red y los últimos errores de reproducción.'}
           </div>
           {report && !diagRunning && (
             <>

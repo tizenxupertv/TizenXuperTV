@@ -20,6 +20,14 @@
     isWebOS: isWebOS
   };
 
+  // Player errors and stalls for the in-app problem report (src/lib/playbackLog.ts receives them;
+  // it keeps only the host of the link)
+  function reportPlayback(kind, detail, url) {
+    try {
+      if (window.__xuperPlaybackEvent) window.__xuperPlaybackEvent({ kind: kind, player: 'AVPlay', detail: String(detail || ''), url: url || '' });
+    } catch (e) {}
+  }
+
   // ---- Key mapping ----
   if (isTizen) {
     if (window.tizen && tizen.tvinputdevice) {
@@ -706,6 +714,7 @@
         self._safeStopAndClose();
 
         var cleanUrl = String(url).replace(/^https:\/\//i, 'http://');
+        self._lastUrl = cleanUrl;
         webapis.avplay.open(cleanUrl);
         self.syncDisplayRect();
         webapis.avplay.setDisplayMethod(self._displayMethod());
@@ -722,6 +731,7 @@
 
         webapis.avplay.setListener({
           onbufferingstart: function () {
+            if (self.isActive) reportPlayback('stall', 'buffering' + (self.kind === 'vod' ? ' (vod)' : ''), self._lastUrl);
             if (self.videoEl && self.videoEl.onwaiting) self.videoEl.onwaiting();
           },
           onbufferingprogress: function (percent) {
@@ -766,6 +776,7 @@
           },
           onerror: function (type) {
             console.error('[XuperAVPlay] AVPlay error:', type);
+            reportPlayback('error', String(type) + (self.kind === 'vod' ? ' (vod)' : ''), self._lastUrl);
             if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
               window.XuperPlatform.setScreenSaver(true);
             }
@@ -833,6 +844,7 @@
           if (self.videoEl && self.videoEl.onplaying) self.videoEl.onplaying();
         }, function (e) {
           console.error('[XuperAVPlay] prepareAsync error:', e);
+          reportPlayback('error', 'prepare ' + ((e && (e.name || e.message)) || e) + (self.kind === 'vod' ? ' (vod)' : ''), self._lastUrl);
           if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
             window.XuperPlatform.setScreenSaver(true);
           }
@@ -844,6 +856,7 @@
         return true;
       } catch (err) {
         console.error('[XuperAVPlay] Failed to open stream:', err);
+        reportPlayback('error', 'open ' + ((err && (err.name || err.message)) || err), url);
         if (self._tryNextBackup()) return true;
         self.isActive = false;
         return false;
@@ -995,6 +1008,7 @@
         self._safeStopAndClose();
 
         var cleanUrl = String(url).replace(/^https:\/\//i, 'http://');
+        self._lastPreviewUrl = cleanUrl;
         webapis.avplay.open(cleanUrl);
         self.syncDisplayRect();
         webapis.avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
@@ -1040,6 +1054,7 @@
           oncurrentplaytime: function () {},
           onerror: function (type) {
             console.error('[XuperAVPlay] Preview AVPlay error:', type);
+            reportPlayback('error', 'preview ' + type, self._lastPreviewUrl);
             if (tryNextPreviewBackup()) return;
             self.isPreviewActive = false;
           },
@@ -1056,6 +1071,7 @@
           markPlaying();
         }, function (e) {
           console.error('[XuperAVPlay] Preview prepareAsync error:', e);
+          reportPlayback('error', 'preview prepare ' + ((e && (e.name || e.message)) || e), self._lastPreviewUrl);
           if (tryNextPreviewBackup()) return;
           self.isPreviewActive = false;
         });

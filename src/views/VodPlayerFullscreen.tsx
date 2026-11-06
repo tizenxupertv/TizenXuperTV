@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { VodItem, VodEpisode } from '../types/vod';
 import { historyService } from '../services/historyService';
 import { playerService } from '../services/playerService';
+import { logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
   SubtitleTrack,
@@ -89,6 +90,17 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const [showOsd, setShowOsd] = useState(true);
   const [osdMessage, setOsdMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Problem report: what is playing, and why it stopped
+  useEffect(() => {
+    if (isTrailer) return;
+    const ep = episode as any;
+    const label = ep && (ep.episodeNumber || ep.number) ? ` · ep. ${ep.episodeNumber || ep.number}` : '';
+    setPlaybackContext({ channel: `${item.title}${label}`, category: item.isSeries ? 'Serie' : 'Película', source: 'portal' });
+  }, [item.id, episode && (episode as any).id, isTrailer]);
+  useEffect(() => {
+    if (error && !isTrailer) logPlayback({ kind: 'error', player: 'VOD', detail: error });
+  }, [error]);
   const [retryTick, setRetryTick] = useState(0);
   const [nextCountdown, setNextCountdown] = useState<number | null>(null);
   const osdTimerRef = useRef<any>(null);

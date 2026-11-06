@@ -175,6 +175,26 @@ export function createAccountService(deps: AccountDeps) {
       }
     },
 
+    /** App version and TV model, for the problem report */
+    deviceInfo(): { version: string; model: string } {
+      return deps.device();
+    },
+
+    /** Sends a problem report to support; the bot delivers it and answers the user in Telegram */
+    async sendReport(report: object): Promise<'ok' | 'too_many' | 'signed_out' | 'error'> {
+      const s = session();
+      if (!s) return 'signed_out';
+      try {
+        const res = await post('/tv/report', { report }, s.token);
+        if (res.ok) return 'ok';
+        if (res.status === 429) return 'too_many';
+        if (res.status === 401) return 'signed_out';
+        return 'error';
+      } catch (e) {
+        return 'error';
+      }
+    },
+
     /** Forgets the session on this TV and asks the server to unlink it */
     async logout(): Promise<void> {
       const s = session();
