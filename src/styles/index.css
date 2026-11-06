@@ -6060,12 +6060,13 @@ html.xuper-vod-avplay .app-root,
 }
 
 /* ==========================================================================
-   Detail actions: two big buttons, then small round buttons with their label
-   (same rounded style as the rest of the app: dark glass at rest, white when focused)
+   Detail actions, one row: the big Reproducir button, then round buttons whose label shows
+   under the focused one (same rounded style as the rest of the app: dark glass at rest,
+   white when focused)
    ========================================================================== */
 .vod-detail-actions-row.vod-actions-main {
   gap: 18px;
-  margin-bottom: 22px;
+  margin-bottom: 52px;
 }
 
 .vod-main-btn {
@@ -6106,12 +6107,6 @@ html.xuper-vod-avplay .app-root,
   border-color: #ffffff;
 }
 
-.vod-actions-quick {
-  display: flex;
-  gap: 18px;
-  margin-bottom: 44px;
-}
-
 .vod-quick-btn {
   width: 96px;
   padding: 0;
@@ -6148,4 +6143,26 @@ html.xuper-vod-avplay .app-root,
   background: #ffffff;
   border-color: #ffffff;
   color: #000000;
+}
+
+/* Round buttons in the action row: as tall as Reproducir, label under them out of the flow */
+.vod-actions-main .vod-quick-btn {
+  position: relative;
+  width: 58px;
+}
+
+.vod-actions-main .vod-quick-circle {
+  width: 58px;
+  height: 58px;
+}
+
+.vod-quick-label {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
 }

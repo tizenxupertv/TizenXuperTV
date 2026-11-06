@@ -147,18 +147,16 @@ export const App: React.FC = () => {
   } = detail;
 
   // Starts playback from the detail screen: resume / next episode / chosen episode / trailer
-  const playFromDetail = (item: VodItem, episode?: VodEpisode, isTrailer?: boolean, fromStart?: boolean) => {
+  const playFromDetail = (item: VodItem, episode?: VodEpisode, isTrailer?: boolean) => {
     if (isTrailer) {
       setActiveVodPlayer({ item, isTrailer: true });
       return;
     }
     const entry = historyService.getEntry(item.id);
     const { episodes, seasonId, seasonNumber } = detailEpisodes;
-    const found = episode
+    const target = episode
       ? { episode, startAt: startAtForEpisode(episode, entry) }
       : getResumeTarget(item, episodes, entry, seasonNumber, seasonId);
-    // "Reiniciar": the same episode from the beginning
-    const target = fromStart ? { ...found, startAt: 0 } : found;
     setActiveVodPlayer({
       item,
       episode: target.episode,
@@ -696,7 +694,7 @@ export const App: React.FC = () => {
           isFavorite={favoritesService.isFavorite(activeDetailItem.id)}
           relatedItems={currentRelatedItems}
           onBack={detail.handleBackDetail}
-          onPlay={(it, ep, isTrailer, fromStart) => playFromDetail(it, ep, isTrailer, fromStart)}
+          onPlay={(it, ep, isTrailer) => playFromDetail(it, ep, isTrailer)}
           onEpisodesChange={data => setDetailEpisodes(data)}
           onToggleFavorite={it => favoritesService.toggleFavorite(it.id)}
           onSelectSeason={sIdx => setDetailFocus(prev => ({
