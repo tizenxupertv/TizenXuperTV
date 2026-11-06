@@ -38,6 +38,8 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
   const seasonsCount = detailCounts.seasonsCount;
   const episodesCount = detailCounts.episodesCount;
   const relatedCount = currentRelatedItems.length;
+  const hasTrailer = Boolean(detailCounts.hasTrailer || activeDetailItem.trailerUrl || (activeDetailItem as any).trailer);
+  const maxActionIndex = hasTrailer ? 3 : 2;
 
   // Modal has top priority for back and dpad
   if (area === 'audioModal') {
@@ -106,7 +108,13 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
       if (isSeries && seasonsCount > 1) {
         setDetailFocus(prev => ({ ...prev, area: 'seasons' }));
       } else if (isSeries && episodesCount > 0) {
-        setDetailFocus(prev => ({ ...prev, area: 'episodes', episodeIndex: 0 }));
+        setDetailFocus(prev => {
+          const targetEp = (prev.episodeIndex !== undefined && prev.episodeIndex > 0)
+            ? prev.episodeIndex
+            : (detailEpisodes.activeEpisodeIndex ?? prev.episodeIndex ?? 0);
+          const safeEp = Math.min(episodesCount - 1, Math.max(0, targetEp));
+          return { ...prev, area: 'episodes', episodeIndex: safeEp };
+        });
       } else if (relatedCount > 0) {
         setDetailFocus(prev => ({ ...prev, area: 'related', relatedIndex: 0 }));
       }
@@ -117,7 +125,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
       return true;
     }
     if (key === 'right') {
-      setDetailFocus(prev => ({ ...prev, actionIndex: Math.min(3, prev.actionIndex + 1) }));
+      setDetailFocus(prev => ({ ...prev, actionIndex: Math.min(maxActionIndex, prev.actionIndex + 1) }));
       return true;
     }
     if (key === 'enter') {
@@ -127,7 +135,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
         favoritesService.toggleFavorite(activeDetailItem.id);
       } else if (actionIndex === 2) {
         setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'audio', modalIndex: 0 }));
-      } else if (actionIndex === 3) {
+      } else if (actionIndex === 3 && hasTrailer) {
         playFromDetail(activeDetailItem, undefined, true);
       }
       return true;
@@ -142,7 +150,13 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
     }
     if (key === 'down') {
       if (episodesCount > 0) {
-        setDetailFocus(prev => ({ ...prev, area: 'episodes', episodeIndex: 0 }));
+        setDetailFocus(prev => {
+          const targetEp = (prev.episodeIndex !== undefined && prev.episodeIndex > 0)
+            ? prev.episodeIndex
+            : (detailEpisodes.activeEpisodeIndex ?? prev.episodeIndex ?? 0);
+          const safeEp = Math.min(episodesCount - 1, Math.max(0, targetEp));
+          return { ...prev, area: 'episodes', episodeIndex: safeEp };
+        });
       } else if (relatedCount > 0) {
         setDetailFocus(prev => ({ ...prev, area: 'related', relatedIndex: 0 }));
       }

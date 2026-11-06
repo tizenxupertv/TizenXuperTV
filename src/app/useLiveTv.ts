@@ -171,6 +171,55 @@ export function useLiveTv() {
     return () => window.removeEventListener('keydown', onType);
   }, [isFullscreenLive, showFullscreenGuide, fullscreenGuideArea]);
 
+  // Direct channel number tuning (remote 0-9 keys)
+  const [numericBuffer, setNumericBuffer] = useState<string>('');
+  const numericTimerRef = useRef<any>(null);
+
+  const commitNumericTune = useCallback((targetStr?: string) => {
+    const raw = (targetStr !== undefined ? targetStr : numericBuffer).trim();
+    if (numericTimerRef.current) {
+      clearTimeout(numericTimerRef.current);
+      numericTimerRef.current = null;
+    }
+    setNumericBuffer('');
+    if (!raw) return;
+
+    const num = parseInt(raw, 10);
+    if (isNaN(num) || num <= 0) return;
+
+    const chs = liveChannelsRef.current;
+    let foundIdx = chs.findIndex(c => String(c.code).trim() === raw || String(c.id).trim() === raw);
+    if (foundIdx === -1 && num <= chs.length) {
+      foundIdx = num - 1; // 1-based channel number
+    }
+
+    if (foundIdx !== -1 && chs[foundIdx]) {
+      setLiveTvFocus(prev => ({ ...prev, channelIndex: foundIdx }));
+      setTunedLiveChannel(chs[foundIdx]);
+      try { localStorage.setItem('xuper_last_live_ch', JSON.stringify(chs[foundIdx])); } catch {}
+      triggerOsd();
+    }
+  }, [numericBuffer, triggerOsd]);
+
+  const pushNumericDigit = useCallback((digit: string) => {
+    if (numericTimerRef.current) clearTimeout(numericTimerRef.current);
+    setNumericBuffer(prev => {
+      const next = (prev + digit).slice(-3);
+      numericTimerRef.current = setTimeout(() => {
+        commitNumericTune(next);
+      }, 1300);
+      return next;
+    });
+  }, [commitNumericTune]);
+
+  const cancelNumericTune = useCallback(() => {
+    if (numericTimerRef.current) {
+      clearTimeout(numericTimerRef.current);
+      numericTimerRef.current = null;
+    }
+    setNumericBuffer('');
+  }, []);
+
   return {
     liveTvFocus,
     setLiveTvFocus,
@@ -202,7 +251,11 @@ export function useLiveTv() {
     setShowFullscreenOsd,
     triggerOsd,
     toggleLiveFavorite,
-    locateLiveChannel
+    locateLiveChannel,
+    numericBuffer,
+    pushNumericDigit,
+    commitNumericTune,
+    cancelNumericTune
   };
 }
 

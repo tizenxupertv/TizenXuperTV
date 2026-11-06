@@ -48,7 +48,7 @@ const VOD_TABS = [
 ];
 
 const DISPLAY_OPTS = ['Ajustar (con bandas)', 'Pantalla completa', 'Automático'];
-const AUDIO_OPTS = ['Español', 'Portugués', 'Inglés'];
+const AUDIO_OPTS = ['Español (Latino)', 'Español (España)', 'Portugués', 'Inglés'];
 const SIZE_OPTS = ['Normal', 'Grande', 'Pequeño'];
 const STYLE_OPTS = ['Aa', 'Aa', 'Aa'];
 const GRID_COLS = 7;
@@ -495,7 +495,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   };
 
   return (
-    <div className="profile-screen">
+    <div className="profile-screen" style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
       <Header
         selectedTab={'' as TabId}
         focusedIndex={null}

@@ -16,7 +16,7 @@ export function animateScroll(el: HTMLElement, axis: 'left' | 'top', to: number,
   const step = (now: number) => {
     const p = Math.min(1, (now - start) / duration);
     const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
-    el[prop] = from + delta * eased;
+    el[prop] = Math.round(from + delta * eased);
     if (p < 1) running.set(el, requestAnimationFrame(step));
     else running.delete(el);
   };
@@ -51,13 +51,26 @@ export function getTrackOffset(el: HTMLElement | null): number {
 /** Moves a track to `value` px (left or up); `animate: false` jumps there */
 export function setTrackOffset(el: HTMLElement, axis: 'x' | 'y', value: number, animate = true): void {
   prepare(el);
-  if (Math.abs((offsets.get(el) || 0) - value) < 1 && el.style.transform) return;
-  offsets.set(el, value);
+  const rounded = Math.round(value);
+  if (Math.abs((offsets.get(el) || 0) - rounded) < 1 && el.style.transform) return;
+  offsets.set(el, rounded);
+
   const now = performance.now();
-  const rapid = now - lastMoveAt < 160; // held key: shorter moves keep up with focus
+  const delta = now - lastMoveAt;
   lastMoveAt = now;
-  el.style.transition = animate ? `transform ${rapid ? 120 : 220}ms ${EASE}` : 'none';
-  el.style.transform = axis === 'x' ? `translate3d(${-value}px, 0, 0)` : `translate3d(0, ${-value}px, 0)`;
+
+  // Hold acceleration (prevents compositor queue build-up on sustained D-pad hold):
+  // When holding down arrow keys on Samsung TV remotes, repeat intervals are ~70-90ms.
+  // Queuing 200ms transitions creates noticeable visual lag behind focus.
+  let duration = 110;
+  if (delta < 90) {
+    duration = 0; // Instant jump during sustained rapid hold
+  } else if (delta < 180) {
+    duration = 60; // Ultra-snappy transition during brisk navigation
+  }
+
+  el.style.transition = animate && duration > 0 ? `transform ${duration}ms ${EASE}` : 'none';
+  el.style.transform = axis === 'x' ? `translate3d(${-rounded}px, 0, 0)` : `translate3d(0, ${-rounded}px, 0)`;
 }
 
 /**

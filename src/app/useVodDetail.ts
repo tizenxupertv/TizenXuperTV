@@ -8,6 +8,7 @@ export interface DetailCounts {
   episodesCount: number;
   relatedCount: number;
   isSeries: boolean;
+  hasTrailer?: boolean;
 }
 
 interface DetailHistoryEntry {

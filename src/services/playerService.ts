@@ -5,6 +5,7 @@ declare global {
   interface Window {
     MagisClient?: any;
     XuperAVPlay?: any;
+    XuperPlatform?: any;
     __xuperCurrentStreamMeta?: any;
     __xuperPreviewHls?: any;
     __xuperCreateHls?: any;
@@ -27,6 +28,17 @@ class PlayerService {
       const channel = this.lastChannel;
       this.activeChannelCode = '';
       this.playLivePreview(channel, this.currentVideoEl);
+    });
+
+    // Auto-recover live channel playback when network reconnects after an outage
+    window.addEventListener('xuper-network-change', (e: any) => {
+      if (e?.detail?.online) {
+        if (this.lastChannel && this.currentVideoEl && !this.activeChannelCode) {
+          console.log('[PlayerService] Network recovered, retuning channel:', this.lastChannel.name);
+          const channel = this.lastChannel;
+          this.playLivePreview(channel, this.currentVideoEl);
+        }
+      }
     });
   }
 
@@ -112,10 +124,12 @@ class PlayerService {
         this.currentVideoEl.load();
       } catch {}
     }
+    window.XuperPlatform?.setScreenSaver?.(true);
   }
 
   private doPlayChannel(channel: LiveChannel, videoEl: HTMLVideoElement | null, fullscreen: boolean) {
     if (!videoEl) return;
+    window.XuperPlatform?.setScreenSaver?.(false);
     const code = String(channel.code || channel.id);
     console.log('[PlayerService] Resolving live channel:', channel.name, code);
 

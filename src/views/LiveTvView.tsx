@@ -4,6 +4,7 @@ import { playerService } from '../services/playerService';
 import { getMockChannelsForCategory } from '../services/mockLiveChannels';
 import { parentalService } from '../services/parentalService';
 import { useRenderCount } from '../debug/renderCount';
+import { useViewProfiler } from '../lib/perfMonitor';
 import { channelKey, isSameChannel, normalizeChannels } from '../lib/channelKey';
 import { ChannelRow, CategoryRow } from '../components/live/LiveRows';
 import { OnScreenKeyboard, KbState, KB_INITIAL } from '../components/live/OnScreenKeyboard';
@@ -95,6 +96,7 @@ interface LiveTvViewProps {
   onCategoriesLoaded?: (categories: LiveCategory[]) => void;
   onSelectCategory?: (catIndex: number) => void;
   onOpenDrawerSearch?: () => void;
+  numericBuffer?: string;
 }
 
 // Global in-memory cache for ultra-fast instant category switching
@@ -120,19 +122,15 @@ function filterLockedChannels(list: LiveChannel[], cats: LiveCategory[], activeI
 }
 const globalChannelMasterCache: Record<string, LiveChannel> = {};
 
-// Fast, zero-reflow nearest scroll for TV list containers: replaces scrollIntoView / getBoundingClientRect
-function fastScrollIntoView(container: HTMLElement, target: HTMLElement, pad = 12) {
-  const itemTop = target.offsetTop;
-  const itemHeight = target.offsetHeight;
-  const itemBottom = itemTop + itemHeight;
+// Fast, zero-reflow nearest scroll for TV list containers: replaces scrollIntoView / offsetTop reflows
+function fastScrollList(container: HTMLElement, targetIndex: number, itemPitch: number, pad = 12) {
+  const targetTop = targetIndex * itemPitch;
   const cTop = container.scrollTop;
-  const cHeight = container.clientHeight;
-  const cBottom = cTop + cHeight;
-
-  if (itemTop < cTop + pad) {
-    container.scrollTop = Math.max(0, itemTop - pad);
-  } else if (itemBottom > cBottom - pad) {
-    container.scrollTop = itemBottom - cHeight + pad;
+  const cHeight = container.clientHeight || 700;
+  if (targetTop < cTop + pad) {
+    container.scrollTop = Math.max(0, targetTop - pad);
+  } else if (targetTop + itemPitch > cTop + cHeight - pad) {
+    container.scrollTop = targetTop + itemPitch - cHeight + pad;
   }
 }
 
@@ -161,9 +159,22 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   onChannelsLoaded,
   onCategoriesLoaded,
   onSelectCategory,
-  onOpenDrawerSearch
+  onOpenDrawerSearch,
+  numericBuffer
 }) => {
   useRenderCount('LiveTvView');
+  useViewProfiler('TV en Vivo');
+  const [streamQuality, setStreamQuality] = useState<string>('FHD 1080p');
+
+  // Query AVPlay hardware stream quality when OSD is visible
+  useEffect(() => {
+    if (isFullscreen && showOsd && (window as any).XuperAVPlay && (window as any).XuperAVPlay.getCurrentStreamQuality) {
+      try {
+        const q = (window as any).XuperAVPlay.getCurrentStreamQuality();
+        if (q && q.label) setStreamQuality(q.label);
+      } catch (e) {}
+    }
+  }, [isFullscreen, showOsd, tunedChannel]);
   const savedCatIdx = useMemo(() => {
     try {
       const v = localStorage.getItem('xuper_last_live_cat_idx');
@@ -206,7 +217,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Fast direct scrolling without animation lag - zero-reflow fastScrollIntoView
+  // Fast direct scrolling without animation lag - zero-reflow fastScrollList
   useEffect(() => {
     if (!isFullscreen && isFocusActive && focus.area === 'cats' && catListRef.current) {
       const container = catListRef.current;
@@ -218,8 +229,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         container.scrollTop = container.scrollHeight;
         return;
       }
-      const target = container.children[focus.catIndex] as HTMLElement;
-      if (target) fastScrollIntoView(container, target, 8);
+      fastScrollList(container, focus.catIndex, 48, 12);
     }
   }, [isFullscreen, isFocusActive, focus.area, focus.catIndex, categories.length]);
 
@@ -234,8 +244,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         container.scrollTop = container.scrollHeight;
         return;
       }
-      const target = container.children[focus.channelIndex] as HTMLElement;
-      if (target) fastScrollIntoView(container, target, 8);
+      fastScrollList(container, focus.channelIndex, 62, 16);
     }
   }, [isFullscreen, isFocusActive, focus.area, focus.channelIndex, channels.length]);
 
@@ -250,16 +259,18 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         container.scrollTop = container.scrollHeight;
         return;
       }
-      const target = container.children[drawerFocusIndex] as HTMLElement;
-      if (target) fastScrollIntoView(container, target, 12);
+      fastScrollList(container, drawerFocusIndex, 92, 16);
     }
   }, [isFullscreen, showChannelsDrawer, drawerFocusIndex, channels.length]);
 
   // Keep the category cursor of the fullscreen drawer visible
   useEffect(() => {
     if (!isFullscreen || !showChannelsDrawer || !drawerCatsRef.current) return;
-    const el = drawerCatsRef.current.children[drawerCatIndex] as HTMLElement | undefined;
-    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+    if (drawerCatIndex === 0) {
+      drawerCatsRef.current.scrollTop = 0;
+      return;
+    }
+    fastScrollList(drawerCatsRef.current, drawerCatIndex, 52, 12);
   }, [isFullscreen, showChannelsDrawer, drawerCatIndex, drawerArea]);
 
   // Drawer search: looks through every channel already loaded (all categories)
@@ -653,6 +664,14 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             </div>
           )}
 
+          {/* Direct Channel Number Tuning Floating Overlay */}
+          {numericBuffer && (
+            <div className="osd-numeric-banner">
+              <span className="osd-numeric-label">CANAL</span>
+              <span className="osd-numeric-digits">{numericBuffer}</span>
+            </div>
+          )}
+
           {/* =========================================================
               FULLSCREEN: Authentic InfoBar OSD (Vanilla Layout)
               ========================================================= */}
@@ -676,6 +695,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
 
               <div className="pi-namerow">
                 <span className="pi-name">{displayChannel.name}</span>
+                <span className="pi-quality-badge">{streamQuality || 'FHD 1080p'}</span>
               </div>
 
               <div className="pi-btn-group">

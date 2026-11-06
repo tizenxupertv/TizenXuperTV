@@ -1,7 +1,8 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useLayoutEffect } from 'react';
 import { VodItem } from '../../types/vod';
 import { PosterCard } from './PosterCard';
 import { scrollHorizontalSlider } from '../../utils/scrollHelper';
+import { preloadCardNeighbors } from '../../lib/imageCache';
 
 interface ContentSliderProps {
   title: string;
@@ -30,20 +31,31 @@ const ContentSliderComponent: React.FC<ContentSliderProps> = ({
 }) => {
   const sliderRef = useRef<HTMLDivElement>(null);
   // Images load only for the cards on screen plus a few ahead, and stay once loaded:
-  // portal images are full size (up to 3000 px) and decoding all of them at once stalls the TV
-  const ahead = isWide ? 5 : 9;
-  const [loadCount, setLoadCount] = useState(0);
+  // portal images are full size and decoding all of them at once stalls the TV
+  const ahead = isWide ? 4 : 7;
+  const [loadCount, setLoadCount] = useState(nearFocus || focusedIndex !== null ? ahead : 0);
   useEffect(() => {
-    if (!nearFocus && focusedIndex === null) return;
+    if (!nearFocus && focusedIndex === null) {
+      return;
+    }
     const wanted = (focusedIndex || 0) + ahead;
     setLoadCount(c => (wanted > c ? wanted : c));
   }, [nearFocus, focusedIndex, ahead]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (focusedIndex !== null && sliderRef.current) {
       const target = sliderRef.current.children[focusedIndex] as HTMLElement;
       scrollHorizontalSlider(sliderRef.current, target, focusedIndex, 48, 160);
+    }
+  }, [focusedIndex]);
 
+  // Decoupled predictive preloading: runs after frame paint to keep D-pad navigation instant
+  useEffect(() => {
+    if (focusedIndex !== null) {
+      const t = setTimeout(() => {
+        preloadCardNeighbors(items, focusedIndex, isWide ? 3 : 5, isWide);
+      }, 50);
+      return () => clearTimeout(t);
     }
   }, [focusedIndex, items, isWide]);
 

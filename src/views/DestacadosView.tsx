@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { useRenderCount } from '../debug/renderCount';
+import { useViewProfiler } from '../lib/perfMonitor';
 import { setTrackOffset } from '../utils/scrollHelper';
 import { VodItem } from '../types/vod';
 import { HistoryItem } from '../types/history';
@@ -61,6 +62,7 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
   onSeeAll
 }) => {
   useRenderCount('DestacadosView');
+  useViewProfiler('Destacados');
   const containerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const currentHero = heroItems[activeHeroIndex] || heroItems[0];
@@ -198,6 +200,9 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
           );
         }
 
+        const activeRowIdx = isFocusActive && focus.area === 'row' ? focus.rowIndex : 0;
+        const isNearFocus = Math.abs(rowIdx - activeRowIdx) <= 2;
+
         return (
           <ContentSlider
             key={row.id}
@@ -205,7 +210,7 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
             subtitle={row.subtitle}
             items={row.items as VodItem[]}
             isRanked={row.isRanked}
-            nearFocus={rowIdx <= (isFocusActive && focus.area === 'row' ? focus.rowIndex : 0) + 2}
+            nearFocus={isNearFocus}
             isWide={row.isWide}
             focusedIndex={focusedIndex}
             onActivate={onActivateVod}

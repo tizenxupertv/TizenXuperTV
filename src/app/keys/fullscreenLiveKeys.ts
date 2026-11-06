@@ -192,7 +192,39 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
   }
 
   // Quick Mini-Guide is closed:
-  if (key === 'back') {
+  // Color Shortcuts in Fullscreen Live TV
+  if (key === 'colorRed' && ctx.tunedLiveChannel) {
+    ctx.toggleLiveFavorite(ctx.tunedLiveChannel);
+    ctx.triggerOsd();
+    return true;
+  }
+  if (key === 'colorBlue') {
+    ctx.setShowFullscreenGuide(prev => !prev);
+    ctx.setShowFullscreenOsd(false);
+    return true;
+  }
+  if (key === 'colorYellow') {
+    ctx.triggerOsd();
+    return true;
+  }
+
+  // Direct channel number keys (0-9)
+  if (key === 'digit' && ev) {
+    ctx.pushNumericDigit(ev.key);
+    return true;
+  }
+  if (ctx.numericBuffer) {
+    if (key === 'enter') {
+      ctx.commitNumericTune();
+      return true;
+    }
+    if (key === 'back') {
+      ctx.cancelNumericTune();
+      return true;
+    }
+  }
+
+  if (key === 'back' || key === 'stop') {
     setIsFullscreenLive(false);
     playerService.exitFullscreen();
     return true;
@@ -205,7 +237,7 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
     setShowFullscreenOsd(false);
     return true;
   }
-  if (key === 'up') {
+  if (key === 'up' || key === 'channelUp') {
     if (liveChannels.length > 0) {
       const nextIdx = (liveTvFocus.channelIndex - 1 + liveChannels.length) % liveChannels.length;
       setLiveTvFocus(prev => ({ ...prev, channelIndex: nextIdx }));
@@ -214,11 +246,19 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
     }
     return true;
   }
-  if (key === 'down') {
+  if (key === 'down' || key === 'channelDown') {
     if (liveChannels.length > 0) {
       const nextIdx = (liveTvFocus.channelIndex + 1) % liveChannels.length;
       setLiveTvFocus(prev => ({ ...prev, channelIndex: nextIdx }));
       setTunedLiveChannel(liveChannels[nextIdx]);
+      triggerOsd();
+    }
+    return true;
+  }
+  if (key === 'info') {
+    if (showFullscreenOsd) {
+      setShowFullscreenOsd(false);
+    } else {
       triggerOsd();
     }
     return true;

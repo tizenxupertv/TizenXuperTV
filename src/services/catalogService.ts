@@ -1,6 +1,6 @@
 import { kvGet, kvSet } from '../lib/kvStore';
 import { VodItem, VodEpisode, VodSeason } from '../types/vod';
-import { organizeCatalogItems, belongsToSection } from '../lib/catalogOrganizer';
+import { organizeCatalogItems, belongsToSection, parseSeason } from '../lib/catalogOrganizer';
 
 declare global {
   interface Window {
@@ -65,6 +65,7 @@ function normalizeItem(raw: any, index: number): VodItem {
     isSeries,
     row: rowName,
     streamUrl: raw.streamUrl || raw.stream_url || '',
+    trailerUrl: raw.trailerUrl || raw.trailer_url || raw.trailer || raw.previewUrl || raw.preview_url || undefined,
     seasons: raw.seasons || [],
     episodes: raw.episodes || []
   };
@@ -824,6 +825,8 @@ class CatalogService {
           if (!detailItem.backdrop && item.backdrop) detailItem.backdrop = item.backdrop;
           if (!detailItem.poster && item.poster) detailItem.poster = item.poster;
           if (!detailItem.landscape && item.landscape) detailItem.landscape = item.landscape;
+          const rawTrailer = res.item?.trailerUrl || res.item?.trailer_url || res.item?.trailer || res.trailerUrl || res.trailer || res.trailer_url || res.previewUrl || '';
+          if (rawTrailer) detailItem.trailerUrl = String(rawTrailer);
 
           const episodes: VodEpisode[] = (res.episodes || []).map((ep: any, idx: number) => ({
             id: String(ep.id || ep.contentId || idx + 1),
@@ -837,20 +840,86 @@ class CatalogService {
             description: ep.description || ep.desc || ep.synopsis || 'Sin descripción disponible para este episodio.'
           }));
 
-          const seasons: VodSeason[] = (res.seasons || []).map((s: any, sIdx: number) => ({
-            id: String(s.id || sIdx + 1),
-            name: s.name || `Temporada ${s.number || sIdx + 1}`,
-            number: Number(s.number) || sIdx + 1,
-            episodes: []
-          })).sort((a: VodSeason, b: VodSeason) => a.number - b.number);
+          const rawSeasons: any[] = res.seasons || [];
+          const itemSeasons: VodSeason[] = item.seasons || [];
+
+          // Build clean, deduplicated list of seasons
+          const seenNumbers = new Set<number>();
+          const seenIds = new Set<string>();
+          const cleanedSeasons: VodSeason[] = [];
+
+          const addSeason = (candidate: { id: string; name?: string; number?: number }) => {
+            const sid = String(candidate.id || '').trim();
+            if (!sid || seenIds.has(sid)) return;
+
+            let snum = candidate.number ? Number(candidate.number) : 0;
+            let sname = (candidate.name || '').trim();
+
+            if (!snum && sname) {
+              const p = parseSeason(sname);
+              if (p.number) snum = p.number;
+            }
+
+            if (!snum) {
+              let nextNum = 1;
+              while (seenNumbers.has(nextNum)) nextNum++;
+              snum = nextNum;
+            }
+
+            if (seenNumbers.has(snum)) {
+              // Duplicate season number (e.g. duplicate Season 1 entry in portal)
+              if (sid === String(item.id)) {
+                const existingIdx = cleanedSeasons.findIndex(x => x.number === snum);
+                if (existingIdx !== -1) {
+                  seenIds.delete(cleanedSeasons[existingIdx].id);
+                  cleanedSeasons[existingIdx] = {
+                    id: sid,
+                    name: sname || `Temporada ${snum}`,
+                    number: snum,
+                    episodes: []
+                  };
+                  seenIds.add(sid);
+                }
+              }
+              return;
+            }
+
+            seenIds.add(sid);
+            seenNumbers.add(snum);
+            cleanedSeasons.push({
+              id: sid,
+              name: sname || `Temporada ${snum}`,
+              number: snum,
+              episodes: []
+            });
+          };
+
+          // Priority 1: Current item being viewed
+          if (detailItem.isSeries || item.isSeries || episodes.length > 0) {
+            const p = parseSeason(item.title);
+            addSeason({
+              id: String(item.id),
+              name: p.number ? `Temporada ${p.number}` : undefined,
+              number: p.number || undefined
+            });
+          }
+
+          // Priority 2: Seasons discovered by SeriesCollector in catalog
+          for (const s of itemSeasons) {
+            addSeason(s);
+          }
+
+          // Priority 3: Related seasons from sameSeasonSeriesList in portal
+          for (const s of rawSeasons) {
+            addSeason(s);
+          }
+
+          cleanedSeasons.sort((a, b) => a.number - b.number);
 
           return {
             item: detailItem,
-            // Real portal data only: no invented episodes when the portal returns none
             episodes,
-            seasons: seasons.length > 0
-              ? seasons
-              : (detailItem.isSeries || episodes.length > 0 ? [{ id: item.id, name: 'Temporada 1', number: 1, episodes: [] }] : [])
+            seasons: cleanedSeasons
           };
         }
       } catch (e) {

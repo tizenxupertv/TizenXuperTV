@@ -166,7 +166,7 @@ html, body {
   box-sizing: border-box;
   cursor: pointer;
   outline: none;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .nav-tab-icon {
@@ -284,17 +284,17 @@ html, body {
   background-size: cover;
   background-position: center top;
   background-repeat: no-repeat;
-  transition: opacity 0.35s ease, filter 0.35s ease;
+  transition: opacity 0.25s ease;
+  will-change: opacity;
 }
 
 .home-showcase.is-dimmed .showcase-bg {
-  opacity: 0.35;
-  filter: brightness(0.65);
+  opacity: 0.22;
 }
 
 .home-showcase.is-dimmed .showcase-content {
-  opacity: 0.45;
-  transition: opacity 0.35s ease;
+  opacity: 0.35;
+  transition: opacity 0.25s ease;
 }
 
 .showcase-gradient {
@@ -401,11 +401,11 @@ html, body {
   height: 48px;
   padding: 0 28px;
   border-radius: 9999px;
-  background: #ffffff;
-  color: #000000;
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
   font-size: 16px;
   font-weight: 800;
-  border: 3px solid transparent;
+  border: 3px solid rgba(255, 255, 255, 0.22);
   box-sizing: border-box;
   cursor: pointer;
   outline: none;
@@ -414,19 +414,19 @@ html, body {
 
 .play-btn-apple .play-triangle {
   font-size: 14px;
-  color: #000000;
+  color: #ffffff;
 }
 
 .play-btn-apple.is-focused {
-  background: linear-gradient(135deg, #00e5ff 0%, #a855f7 100%) !important;
-  color: #ffffff !important;
+  background: #ffffff !important;
+  color: #000000 !important;
   border: 3px solid #ffffff !important;
   outline: none !important;
-  box-shadow: none !important;
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.6) !important;
 }
 
 .play-btn-apple.is-focused .play-triangle {
-  color: #ffffff !important;
+  color: #000000 !important;
 }
 
 .icon-btn-apple {
@@ -584,10 +584,11 @@ html, body {
   position: absolute;
   left: 0; right: 0; bottom: 0;
   height: 80px;
-  background: linear-gradient(0deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.6) 65%, transparent 100%);
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 65%, transparent 100%);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  z-index: 3 !important;
 }
 
 .cw-title-row {
@@ -659,7 +660,7 @@ html, body {
   cursor: pointer;
   outline: none;
   border: 3px solid rgba(255, 255, 255, 0.08);
-  transition: border-color 0.12s ease;
+  transition: none !important;
   contain: layout style paint;
 }
 
@@ -668,6 +669,7 @@ html, body {
   width: clamp(320px, 24vw, 420px);
   height: clamp(230px, 17vw, 295px);
   border-radius: 16px;
+  contain-intrinsic-size: 360px 240px;
 }
 
 .poster-card.apple-poster-card.is-focused {
@@ -675,6 +677,7 @@ html, body {
   border: 3px solid #ffffff !important;
   outline: none !important;
   box-shadow: none !important;
+  transition: none !important;
   z-index: 5;
 }
 
@@ -684,6 +687,37 @@ html, body {
   background-size: cover;
   background-position: center;
   position: relative;
+  overflow: hidden;
+}
+
+.poster-card-placeholder-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: inherit;
+  background-color: #11141d;
+}
+
+.poster-card-img-element {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  z-index: 1;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.22s ease-out;
+  will-change: opacity;
+}
+
+.poster-card-img-element.is-loaded {
+  opacity: 1;
 }
 
 /* Brand badge top-right corner */
@@ -699,7 +733,7 @@ html, body {
   padding: 2px 7px;
   border-radius: 4px;
   letter-spacing: 0.5px;
-  z-index: 2;
+  z-index: 4 !important;
 }
 
 /* Wide card season / exclusive tag */
@@ -715,7 +749,7 @@ html, body {
   font-weight: 700;
   color: #00e5ff;
   letter-spacing: 0.4px;
-  z-index: 2;
+  z-index: 4 !important;
 }
 
 /* Top 10 Rank Number in large bold typography (Apple TV+ signature) */
@@ -730,7 +764,7 @@ html, body {
   text-shadow: 0 4px 16px rgba(0, 0, 0, 0.95), 0 2px 4px rgba(0, 0, 0, 0.9);
   opacity: 0.98;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-  z-index: 2;
+  z-index: 4 !important;
 }
 
 /* Bottom Vignette with uppercase Title & Genre */
@@ -741,6 +775,7 @@ html, body {
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.96) 0%, rgba(0, 0, 0, 0.65) 60%, transparent 100%);
   display: flex;
   flex-direction: column;
+  z-index: 3 !important;
 }
 
 .poster-vignette-title {
@@ -789,7 +824,7 @@ html, body {
   font-weight: 700;
   color: #f8fafc;
   letter-spacing: 0.3px;
-  z-index: 2;
+  z-index: 4 !important;
 }
 
 .wide-top-circle {
@@ -805,12 +840,15 @@ html, body {
   align-items: center;
   justify-content: center;
   color: #cbd5e1;
-  z-index: 2;
+  z-index: 4 !important;
 }
 
 .wide-vignette {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
   padding: 56px 16px 16px 16px !important;
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.96) 0%, rgba(0, 0, 0, 0.75) 50%, rgba(0, 0, 0, 0.25) 75%, transparent 100%) !important;
+  z-index: 3 !important;
 }
 
 .wide-vignette-title {
@@ -1065,6 +1103,8 @@ html, body {
   outline: none;
   box-sizing: border-box;
   transition: none !important;
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 54px;
 }
 
 .live-channel-card.is-active-channel {
@@ -2144,10 +2184,26 @@ html, body {
   top: 0;
   width: 100%;
   height: min(760px, 70vh);
-  background-size: cover;
-  background-position: center top;
-  background-repeat: no-repeat;
+  overflow: hidden;
   z-index: 1;
+  background-color: #07090e;
+}
+
+.vod-detail-backdrop-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+  will-change: opacity;
+}
+
+.vod-detail-backdrop-img.is-loaded {
+  opacity: 1;
 }
 
 .vod-detail-overlay-vignette {
@@ -2166,6 +2222,9 @@ html, body {
   position: relative;
   z-index: 10;
   padding: 36px 64px 20px 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .vod-back-btn {
@@ -2330,10 +2389,14 @@ html, body {
 }
 
 .vod-action-btn.primary-btn {
-  background: #ffffff;
-  color: #000000;
-  border: 3px solid transparent;
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  border: 3px solid rgba(255, 255, 255, 0.22);
   box-sizing: border-box;
+}
+
+.vod-action-btn.primary-btn .btn-icon {
+  color: #ffffff;
 }
 
 .vod-action-btn.secondary-btn {
@@ -2349,12 +2412,36 @@ html, body {
   background: rgba(251, 191, 36, 0.15);
 }
 
+.vod-action-btn.vod-action-icon-only {
+  width: 52px;
+  min-width: 52px;
+  padding: 0;
+  border-radius: 50%;
+  gap: 0;
+}
+
+.vod-action-btn.vod-action-icon-only .btn-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.vod-action-btn.secondary-btn.is-fav.is-focused {
+  background: #fbbf24 !important;
+  color: #000000 !important;
+  border: 3px solid #ffffff !important;
+}
+
 .vod-action-btn.primary-btn.is-focused {
-  background: linear-gradient(135deg, #00e5ff 0%, #a855f7 100%) !important;
-  color: #ffffff !important;
+  background: #ffffff !important;
+  color: #000000 !important;
   border: 3px solid #ffffff !important;
   outline: none !important;
   transform: none !important;
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.6) !important;
+}
+
+.vod-action-btn.primary-btn.is-focused .btn-icon {
+  color: #000000 !important;
 }
 
 .vod-action-btn.secondary-btn.is-focused {
@@ -2419,6 +2506,7 @@ html, body {
   border: 3px solid #ffffff !important;
   outline: none !important;
   transform: none !important;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.5) !important;
 }
 
 .vod-episodes-slider {
@@ -2459,9 +2547,25 @@ html, body {
 .episode-card-thumb {
   width: 100%;
   height: 190px;
-  background-size: cover;
-  background-position: center;
   position: relative;
+  overflow: hidden;
+  background-color: #11141d;
+}
+
+.episode-card-thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.22s ease-out;
+  will-change: opacity;
+}
+
+.episode-card-thumb-img.is-loaded {
+  opacity: 1;
 }
 
 .episode-badge-num {
@@ -2475,6 +2579,29 @@ html, body {
   font-weight: 800;
   color: #ffffff;
   letter-spacing: 0.5px;
+  z-index: 3 !important;
+}
+
+.episode-check-icon {
+  color: #38bdf8;
+  font-weight: 900;
+  margin-left: 4px;
+}
+
+.episode-card-thumb .cw-progress-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3 !important;
+}
+
+.vod-episode-card.is-watched {
+  opacity: 0.85;
+}
+
+.vod-episode-card.is-watched.is-focused {
+  opacity: 1;
 }
 
 .episode-play-overlay {
@@ -2548,6 +2675,96 @@ html, body {
   -webkit-box-orient: vertical;
   overflow: hidden;
   margin: 0;
+}
+
+/* Episode Skeleton Cards */
+.vod-episode-card.is-skeleton {
+  pointer-events: none;
+  border: 3px solid rgba(255, 255, 255, 0.04);
+  background: #0f131c;
+}
+
+.vod-episode-card.is-skeleton .episode-card-thumb {
+  background: #181d29;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.04) 50%, transparent 100%);
+  animation: skeletonPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes skeletonPulse {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
+}
+
+.skeleton-pill {
+  width: 48px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+.skeleton-line {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-title-line {
+  width: 75%;
+  height: 16px;
+  margin-bottom: 10px;
+}
+
+.skeleton-meta-line {
+  width: 45%;
+  height: 12px;
+  margin-bottom: 12px;
+}
+
+.skeleton-desc-line {
+  width: 90%;
+  height: 11px;
+  margin-bottom: 6px;
+}
+
+.skeleton-desc-short {
+  width: 60%;
+  height: 11px;
+}
+
+.vod-episodes-empty-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1.5px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 24px 32px;
+  color: #94a3b8;
+  font-size: 16px;
+  font-weight: 500;
+  width: 100%;
+  max-width: 600px;
+}
+
+.vod-episodes-empty-icon {
+  font-size: 28px;
+  opacity: 0.8;
 }
 
 /* Related Section (uses unified PosterCard component) */
@@ -2956,6 +3173,19 @@ html, body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.search-header-left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.search-header-divider {
+  width: 1px;
+  height: 38px;
+  background: rgba(255, 255, 255, 0.14);
+  flex-shrink: 0;
+}
+
 .search-modal-title-row {
   display: flex;
   align-items: center;
@@ -3095,6 +3325,8 @@ html, body {
   border: 1.5px solid rgba(255, 255, 255, 0.07);
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 64px;
 }
 
 .search-channel-card.is-focused {
@@ -4438,6 +4670,20 @@ html.xuper-vod-avplay .app-root,
   padding: 38px min(60px, 4vw) 0;
 }
 
+.browse-head-left {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  min-width: 0;
+}
+
+.browse-header-divider {
+  width: 1px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.14);
+  flex-shrink: 0;
+}
+
 .browse-heading {
   display: flex;
   flex-direction: column;
@@ -4481,7 +4727,7 @@ html.xuper-vod-avplay .app-root,
   font-weight: 400;
 }
 
-.browse-filters {
+.browse-head-right {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -4489,132 +4735,285 @@ html.xuper-vod-avplay .app-root,
   flex-shrink: 0;
 }
 
-.browse-filter {
-  position: relative;
+.browse-search-pill {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 18px 10px 22px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: transform 0.15s ease-out, background 0.15s ease-out;
-}
-
-.browse-search-btn {
-  padding: 10px 20px;
   gap: 8px;
-}
-
-.browse-search-icon {
-  opacity: 0.85;
-  color: #00e5ff;
-}
-
-.browse-filter.is-focused .browse-search-icon {
-  color: #000000;
-  stroke: #000000;
-  opacity: 1;
-}
-
-.browse-filter.is-active {
-  background: rgba(255, 255, 255, 0.16);
-}
-
-.browse-filter.is-focused {
-  background: #ffffff;
-  color: #000000;
-  transform: scale(1.05);
-}
-
-.browse-filter-name {
-  font-size: 16px;
-  font-weight: 600;
-  opacity: 0.6;
-}
-
-.browse-filter-value {
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.browse-filter-caret {
-  opacity: 0.7;
-}
-
-.browse-count {
-  flex-shrink: 0;
-  font-size: 20px;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.browse-menu {
-  position: absolute;
-  top: calc(100% + 12px);
-  right: 0;
-  min-width: 280px;
-  padding: 10px;
-  border-radius: 18px;
-  background: rgba(28, 28, 30, 0.97);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6);
+  padding: 8px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid rgba(255, 255, 255, 0.1);
   color: #ffffff;
-}
-
-.browse-menu-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 14px;
-  border-radius: 12px;
-  font-size: 20px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.browse-menu-row.is-focused {
-  background: #ffffff;
-  color: #000000;
-}
-
-.browse-menu-check {
-  width: 20px;
-  font-weight: 800;
-}
-
-.browse-menu-more {
-  padding: 8px 14px 2px;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.45);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.browse-body {
+.browse-search-pill .browse-search-icon {
+  color: #00e5ff;
+  stroke: #00e5ff;
+}
+
+.browse-search-pill.is-focused {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+}
+
+.browse-search-pill.is-focused .browse-search-icon {
+  color: #000000 !important;
+  stroke: #000000 !important;
+}
+
+/* Two-column layout matching Live TV */
+.browse-two-col {
   position: absolute;
   left: 0;
   right: 0;
-  top: 140px;
+  top: 130px;
   bottom: 0;
+  display: flex;
+  padding: 0 min(50px, 3vw) 20px min(50px, 3vw);
+  gap: 28px;
+  box-sizing: border-box;
   overflow: hidden;
-  padding: 10px 60px 0;
 }
 
-.browse-grid {
+/* Left Column: Categories List */
+.browse-col-cats {
+  flex: 0 0 clamp(280px, 20vw, 360px);
+  width: clamp(280px, 20vw, 360px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: rgba(14, 18, 27, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.browse-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px 12px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.browse-col-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #00e5ff;
+}
+
+.browse-col-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.browse-cat-vlist {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.browse-cat-vlist::-webkit-scrollbar {
+  display: none;
+}
+
+.browse-cat-vrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1.5px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  outline: none;
+  box-sizing: border-box;
+  transition: none !important;
+}
+
+.browse-cat-vrow.is-active-cat {
+  background: rgba(0, 229, 255, 0.08) !important;
+  border: 1.5px solid rgba(0, 229, 255, 0.45) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.browse-cat-vrow.is-focused {
+  background: #ffffff !important;
+  color: #000000 !important;
+  font-weight: 800 !important;
+  border: 1.5px solid #ffffff !important;
+  outline: none !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.browse-cat-vrow.is-focused .browse-cat-vname,
+.browse-cat-vrow.is-focused .browse-cat-vcount {
+  color: #000000 !important;
+  font-weight: 800 !important;
+}
+
+.browse-cat-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.browse-cat-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.browse-cat-vname {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.browse-cat-vcount {
+  font-size: 12px;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 7px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+/* Right Column: Cards Grid */
+.browse-col-grid {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.browse-cards-grid-track {
+  width: 100%;
+  will-change: transform;
+}
+
+.browse-grid-subhead {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.browse-category-name {
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+}
+
+.browse-category-total {
+  font-size: 14px;
+  color: #00e5ff;
+  font-weight: 600;
+}
+
+.browse-cards-grid {
   display: grid;
-  grid-template-columns: repeat(9, 176px);
-  justify-content: start;
-  gap: 24px 22px;
-  transition: transform 0.25s ease-out;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 16px;
+  padding-bottom: 60px;
+  box-sizing: border-box;
 }
 
-.browse-empty {
-  margin-top: 80px;
-  text-align: center;
-  font-size: 22px;
-  color: rgba(255, 255, 255, 0.6);
+.browse-cards-grid .poster-card.apple-poster-card {
+  width: 100% !important;
+  flex: none !important;
+  height: 250px !important;
+  transition: none !important;
 }
 
-.browse-grid.is-loading {
-  opacity: 0.45;
+.browse-empty-category {
+  margin-top: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #94a3b8;
+  font-size: 18px;
+}
+
+.browse-empty-icon {
+  font-size: 48px;
+  opacity: 0.6;
+}
+
+/* ==========================================================================
+   Real-Time TV Performance Profiler & HUD
+   ========================================================================== */
+.perf-hud-overlay {
+  position: fixed;
+  top: 14px;
+  right: 24px;
+  z-index: 999999;
+  pointer-events: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+}
+
+.perf-hud-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(10, 14, 23, 0.92);
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+
+.perf-hud-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.perf-hud-fps {
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.perf-hud-sep {
+  opacity: 0.3;
+}
+
+.perf-hud-stat {
+  white-space: nowrap;
 }
 
 /* Donations & Support in ProfileScreen */
@@ -4984,4 +5383,138 @@ html.xuper-vod-avplay .app-root,
 .welcome-donate-note strong {
   color: #e2e8f0;
 }
+
+/* =============================================================================
+   Network Status Toast (Phase 3 Tizen Resilience)
+   ============================================================================= */
+
+.network-status-toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 24px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  color: #f1f5f9;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  z-index: 100050;
+  pointer-events: none;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: netToastSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.network-status-toast.is-offline {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(30, 15, 15, 0.96);
+}
+
+.network-status-toast.is-online {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(15, 30, 20, 0.96);
+}
+
+.network-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.network-status-toast.is-offline .network-status-dot {
+  background: #ef4444;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.9);
+}
+
+.network-status-toast.is-online .network-status-dot {
+  background: #22c55e;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.9);
+}
+
+@keyframes netToastSlideDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ==========================================================================
+   Fase 5: OSD Numeric Banner, Stream Quality & Exit Toast
+   ========================================================================== */
+
+.osd-numeric-banner {
+  position: absolute;
+  top: 40px;
+  right: 60px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 2px solid #38bdf8;
+  padding: 10px 22px;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+  z-index: 100;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.osd-numeric-label {
+  font-size: 13px;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 1px;
+}
+
+.osd-numeric-digits {
+  font-size: 32px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 3px;
+}
+
+.pi-quality-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.18);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin-left: 12px;
+}
+
+.xuper-exit-toast {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.94);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  padding: 14px 32px;
+  border-radius: 30px;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8);
+  z-index: 9999;
+  pointer-events: none;
+  animation: fadeIn 0.2s ease-out;
+}
+
 

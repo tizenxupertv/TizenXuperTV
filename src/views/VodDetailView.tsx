@@ -4,8 +4,11 @@ import { catalogService } from '../services/catalogService';
 import { PosterCard } from '../components/vod/PosterCard';
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { historyService } from '../services/historyService';
+import { favoritesService } from '../services/favoritesService';
+import { BrandLogo } from '../components/common/BrandLogo';
 import { settingsService, PREFERRED_LANGUAGES, SUBTITLE_CHOICES, subtitleChoiceIndex } from '../services/settingsService';
-import { getResumeTarget } from '../lib/vodResume';
+import { getResumeTarget, getEpisodeStatus, EpisodeStatus } from '../lib/vodResume';
+import { useViewProfiler } from '../lib/perfMonitor';
 
 export type DetailFocusArea = 'back' | 'actions' | 'seasons' | 'episodes' | 'related' | 'audioModal';
 
@@ -33,9 +36,10 @@ interface VodDetailViewProps {
   onPlay: (item: VodItem, episode?: VodEpisode, isTrailer?: boolean) => void;
   onToggleFavorite: (item: VodItem) => void;
   onSelectSeason?: (seasonIndex: number) => void;
+  onSelectEpisode?: (episodeIndex: number) => void;
   onSelectRelated?: (item: VodItem) => void;
-  onDetailLoaded?: (counts: { seasonsCount: number; episodesCount: number; relatedCount: number; isSeries: boolean }) => void;
-  onEpisodesChange?: (data: { episodes: VodEpisode[]; seasonId: string; seasonNumber?: number }) => void;
+  onDetailLoaded?: (counts: { seasonsCount: number; episodesCount: number; relatedCount: number; isSeries: boolean; hasTrailer?: boolean }) => void;
+  onEpisodesChange?: (data: { episodes: VodEpisode[]; seasonId: string; seasonNumber?: number; activeEpisodeIndex?: number }) => void;
   onOpenAudioModal?: () => void;
   onCloseAudioModal?: () => void;
   onSelectAudioOption?: (audio: string) => void;
@@ -51,6 +55,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   onPlay,
   onToggleFavorite,
   onSelectSeason,
+  onSelectEpisode,
   onSelectRelated,
   onDetailLoaded,
   onEpisodesChange,
@@ -59,6 +64,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   onSelectAudioOption,
   onSelectSubOption
 }) => {
+  useViewProfiler('Detalle VOD');
   const [detailData, setDetailData] = useState<{
     item: VodItem;
     episodes: VodEpisode[];
@@ -70,8 +76,15 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   const [seasonEps, setSeasonEps] = useState<{ seasonId: string; episodes: VodEpisode[] } | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [historyTick, setHistoryTick] = useState(0);
+  const [isFav, setIsFav] = useState<boolean>(() => favoritesService.isFavorite(item.id));
 
   useEffect(() => historyService.subscribe(() => setHistoryTick(t => t + 1)), []);
+  useEffect(() => {
+    setIsFav(favoritesService.isFavorite(item.id));
+    return favoritesService.subscribe(() => {
+      setIsFav(favoritesService.isFavorite(item.id));
+    });
+  }, [item.id]);
 
   // Audio & subtitle preferences: the same ones as the profile (Configuración global)
   const prefs = settingsService.get();
@@ -82,23 +95,36 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   const episodesSliderRef = useRef<HTMLDivElement>(null);
   const relatedSliderRef = useRef<HTMLDivElement>(null);
   const rootScrollRef = useRef<HTMLDivElement>(null);
+  const viewTokenRef = useRef<number>(0);
+  const seasonTokenRef = useRef<number>(0);
 
   // Fetch full details (episodes, seasons, cast, synopsis)
   useEffect(() => {
+    const currentToken = ++viewTokenRef.current;
     let isMounted = true;
     setIsLoading(true);
     setLoadError(false);
     setSeasonEps(null);
 
     catalogService.getVodDetail(item).then(data => {
-      if (!isMounted) return;
+      if (!isMounted || currentToken !== viewTokenRef.current) return;
       setDetailData(data);
       setIsLoading(false);
-      // Open on the season of this item
-      const ownIdx = data.seasons.findIndex(s => String(s.id) === String(item.id));
-      if (ownIdx > 0 && onSelectSeason) onSelectSeason(ownIdx);
+      // Open on the season from history if available, otherwise default to item season
+      const hist = historyService.getEntry(item.id);
+      let targetSeasonIdx = -1;
+      if (hist && (hist.seasonId || hist.seasonNumber !== undefined)) {
+        targetSeasonIdx = data.seasons.findIndex(s =>
+          (hist.seasonId && String(s.id) === String(hist.seasonId)) ||
+          (hist.seasonNumber !== undefined && s.number === hist.seasonNumber)
+        );
+      }
+      if (targetSeasonIdx === -1) {
+        targetSeasonIdx = data.seasons.findIndex(s => String(s.id) === String(item.id));
+      }
+      if (targetSeasonIdx > 0 && onSelectSeason) onSelectSeason(targetSeasonIdx);
     }).catch(err => {
-      if (!isMounted) return;
+      if (!isMounted || currentToken !== viewTokenRef.current) return;
       console.warn('[VodDetailView] Detail load failed:', err);
       setLoadError(true);
       setDetailData({
@@ -111,43 +137,109 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
 
     return () => {
       isMounted = false;
+      viewTokenRef.current++;
     };
   }, [item]);
 
   const currentItem = detailData?.item || item;
-  const seasons = detailData?.seasons || [];
+  const seasons = useMemo(() => {
+    const list = detailData?.seasons || [];
+    const seenNumbers = new Set<number>();
+    const seenNames = new Set<string>();
+    const res: VodSeason[] = [];
+    for (const s of list) {
+      const num = Number(s.number) || 1;
+      const name = (s.name || `Temporada ${num}`).trim();
+      if (!seenNumbers.has(num) && !seenNames.has(name.toLowerCase())) {
+        seenNumbers.add(num);
+        seenNames.add(name.toLowerCase());
+        res.push(s);
+      }
+    }
+    return res.sort((a, b) => (a.number || 1) - (b.number || 1));
+  }, [detailData?.seasons]);
   // Memoized so effects below only run when the list really changes
   const episodes = useMemo<VodEpisode[]>(
     () => (seasonEps ? seasonEps.episodes : (detailData?.episodes || NO_EPISODES)),
     [seasonEps, detailData]
   );
   const currentSeasonId = seasonEps ? seasonEps.seasonId : String(item.id);
-  const currentSeasonNumber = (seasons.find(s => String(s.id) === currentSeasonId) || seasons[0])?.number;
+  const currentSeasonNumber = (seasons.find(s => String(s.id) === currentSeasonId) || seasons[focus.seasonIndex] || seasons[0])?.number;
 
   // Load the episodes of the season selected in the season pills
   useEffect(() => {
     if (!detailData || seasons.length < 2) return;
     const target = seasons[focus.seasonIndex];
     if (!target || String(target.id) === currentSeasonId) return;
+    const token = ++seasonTokenRef.current;
     let alive = true;
     setSeasonLoading(true);
     catalogService.getVodDetail({ ...item, id: String(target.id) })
-      .then(d => { if (alive) setSeasonEps({ seasonId: String(target.id), episodes: d.episodes }); })
-      .catch(() => { if (alive) setSeasonEps({ seasonId: String(target.id), episodes: [] }); })
-      .then(() => { if (alive) setSeasonLoading(false); });
-    return () => { alive = false; };
+      .then(d => { if (alive && token === seasonTokenRef.current) setSeasonEps({ seasonId: String(target.id), episodes: d.episodes }); })
+      .catch(() => { if (alive && token === seasonTokenRef.current) setSeasonEps({ seasonId: String(target.id), episodes: [] }); })
+      .then(() => { if (alive && token === seasonTokenRef.current) setSeasonLoading(false); });
+    return () => {
+      alive = false;
+      seasonTokenRef.current++;
+    };
   }, [focus.seasonIndex, detailData]);
+
+  // History and episode statuses
+  const historyEntry = useMemo(() => historyService.getEntry(item.id), [item.id, historyTick]);
+
+  const episodeStatuses = useMemo(() => {
+    return episodes.map((ep, idx) => getEpisodeStatus(ep, idx, historyEntry, currentSeasonNumber));
+  }, [episodes, historyEntry, currentSeasonNumber]);
+
+  const activeEpisodeIdx = useMemo(() => {
+    if (!historyEntry || episodes.length === 0) return 0;
+    const currentIdx = episodeStatuses.findIndex(s => s.isCurrent);
+    if (currentIdx !== -1) return currentIdx;
+    const nextUnwatched = episodeStatuses.findIndex(s => !s.isWatched);
+    if (nextUnwatched !== -1) return nextUnwatched;
+    return 0;
+  }, [episodeStatuses, historyEntry, episodes.length]);
 
   // Tell the parent which episodes are on screen (used by the remote: OK on an episode, Continuar)
   useEffect(() => {
     if (onEpisodesChangeRef.current) {
-      onEpisodesChangeRef.current({ episodes, seasonId: currentSeasonId, seasonNumber: currentSeasonNumber });
+      onEpisodesChangeRef.current({
+        episodes,
+        seasonId: currentSeasonId,
+        seasonNumber: currentSeasonNumber,
+        activeEpisodeIndex: activeEpisodeIdx
+      });
     }
-  }, [episodes, currentSeasonId, currentSeasonNumber]);
+  }, [episodes, currentSeasonId, currentSeasonNumber, activeEpisodeIdx]);
 
-  const resume = getResumeTarget(item, episodes, historyService.getEntry(item.id), currentSeasonNumber, currentSeasonId);
+  // When episodes load for a season, auto-position and focus on the current episode
+  const lastPositionedKeyRef = useRef<string>('');
+  useEffect(() => {
+    lastPositionedKeyRef.current = '';
+  }, [item.id]);
+
+  useEffect(() => {
+    if (episodes.length === 0) return;
+    const seasonKey = `${item.id}-${currentSeasonId}`;
+    if (lastPositionedKeyRef.current !== seasonKey) {
+      lastPositionedKeyRef.current = seasonKey;
+      if (onSelectEpisode) {
+        onSelectEpisode(activeEpisodeIdx);
+      }
+      if (episodesSliderRef.current && activeEpisodeIdx > 0) {
+        const container = episodesSliderRef.current;
+        const target = container.children[activeEpisodeIdx] as HTMLElement;
+        if (target) {
+          scrollHorizontalSlider(container, target, activeEpisodeIdx, 48, 180);
+        }
+      }
+    }
+  }, [item.id, currentSeasonId, activeEpisodeIdx, episodes.length, onSelectEpisode]);
+
+  const resume = getResumeTarget(item, episodes, historyEntry, currentSeasonNumber, currentSeasonId);
   void historyTick;
   const isSeries = Boolean(currentItem.isSeries || currentItem.kind === 'serie' || seasons.length > 0 || episodes.length > 0);
+  const hasTrailer = Boolean(currentItem.trailerUrl || (currentItem as any).trailer);
 
   // Parent callbacks are new functions on every render: keep the latest in refs so the
   // effects below only fire when the data changes (otherwise they loop forever)
@@ -163,10 +255,11 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         seasonsCount: seasons.length || (isSeries ? 1 : 0),
         episodesCount: episodes.length,
         relatedCount: relatedItems.length,
-        isSeries
+        isSeries,
+        hasTrailer
       });
     }
-  }, [seasons.length, episodes.length, relatedItems.length, isSeries]);
+  }, [seasons.length, episodes.length, relatedItems.length, isSeries, hasTrailer]);
 
   // Auto-scroll horizontal episode slider with comfortable threshold
   useEffect(() => {
@@ -175,7 +268,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
       const target = container.children[focus.episodeIndex] as HTMLElement;
       scrollHorizontalSlider(container, target, focus.episodeIndex, 48, 180);
     }
-  }, [focus.area, focus.episodeIndex]);
+  }, [focus.area, focus.episodeIndex, episodes]);
 
   // Auto-scroll horizontal related slider with comfortable threshold
   useEffect(() => {
@@ -206,13 +299,18 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   return (
     <div className="vod-detail-screen" ref={rootScrollRef}>
       {/* Immersive Cinema Backdrop */}
-      <div
-        className="vod-detail-backdrop"
-        style={{ backgroundImage: `url('${backdropUrl}')` }}
-      />
+      <div className="vod-detail-backdrop">
+        <img
+          className="vod-detail-backdrop-img"
+          src={backdropUrl}
+          decoding="async"
+          onLoad={e => e.currentTarget.classList.add('is-loaded')}
+          alt=""
+        />
+      </div>
       <div className="vod-detail-overlay-vignette" />
 
-      {/* Top Navigation Row: Back Button */}
+      {/* Top Navigation Row: Back Button & Brand Logo */}
       <header className="vod-detail-top-bar">
         <button
           className={`vod-back-btn ${focus.area === 'back' ? 'is-focused' : ''}`}
@@ -220,6 +318,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         >
           <span className="back-arrow">←</span> Volver al catálogo
         </button>
+        <BrandLogo />
       </header>
 
       {/* Main Metadata Section */}
@@ -268,19 +367,26 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
           {/* Action 0: Play / Resume */}
           <button
             className={`vod-action-btn primary-btn ${focus.area === 'actions' && focus.actionIndex === 0 ? 'is-focused' : ''}`}
-            onClick={() => onPlay(currentItem)}
+            onClick={() => onPlay(currentItem, resume.episode)}
           >
             <span className="btn-icon">▶</span>
             <span>{resume.label}</span>
           </button>
 
-          {/* Action 1: Favorite */}
+          {/* Action 1: Favorite (Icon-only) */}
           <button
-            className={`vod-action-btn secondary-btn ${isFavorite ? 'is-fav' : ''} ${focus.area === 'actions' && focus.actionIndex === 1 ? 'is-focused' : ''}`}
-            onClick={() => onToggleFavorite(currentItem)}
+            className={`vod-action-btn vod-action-icon-only secondary-btn ${isFav ? 'is-fav' : ''} ${focus.area === 'actions' && focus.actionIndex === 1 ? 'is-focused' : ''}`}
+            onClick={() => {
+              if (onToggleFavorite) {
+                onToggleFavorite(currentItem);
+              } else {
+                favoritesService.toggleFavorite(currentItem.id);
+              }
+            }}
+            title={isFav ? 'Quitar de Favoritos' : 'Añadir a Favoritos'}
+            aria-label="Favoritos"
           >
-            <span className="btn-icon">{isFavorite ? '★' : '☆'}</span>
-            <span>{isFavorite ? 'En Mi Lista' : 'Añadir a Favoritos'}</span>
+            <span className="btn-icon">{isFav ? '★' : '☆'}</span>
           </button>
 
           {/* Action 2: Audio & Subtitles */}
@@ -292,14 +398,16 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
             <span>Audio y Subs · {audioShortName}</span>
           </button>
 
-          {/* Action 3: Trailer */}
-          <button
-            className={`vod-action-btn secondary-btn ${focus.area === 'actions' && focus.actionIndex === 3 ? 'is-focused' : ''}`}
-            onClick={() => onPlay(currentItem, undefined, true)}
-          >
-            <span className="btn-icon">🎬</span>
-            <span>Ver Tráiler</span>
-          </button>
+          {/* Action 3: Trailer (Only if trailer exists) */}
+          {hasTrailer && (
+            <button
+              className={`vod-action-btn secondary-btn ${focus.area === 'actions' && focus.actionIndex === 3 ? 'is-focused' : ''}`}
+              onClick={() => onPlay(currentItem, undefined, true)}
+            >
+              <span className="btn-icon">🎬</span>
+              <span>Ver Tráiler</span>
+            </button>
+          )}
         </div>
 
         {/* Series Section: Seasons Selector + Episodes Slider */}
@@ -332,30 +440,65 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
             {/* Horizontal Episodes Slider */}
             <div className="vod-episodes-slider" ref={episodesSliderRef}>
               {(isLoading || seasonLoading) ? (
-                <div className="vod-episodes-loading">Cargando episodios…</div>
+                [1, 2, 3, 4, 5].map(n => (
+                  <div key={`ep-skel-${n}`} className="vod-episode-card is-skeleton">
+                    <div className="episode-card-thumb skeleton-shimmer">
+                      <div className="episode-badge-num skeleton-pill" />
+                    </div>
+                    <div className="episode-card-body">
+                      <div className="skeleton-line skeleton-title-line" />
+                      <div className="skeleton-line skeleton-meta-line" />
+                      <div className="skeleton-line skeleton-desc-line" />
+                      <div className="skeleton-line skeleton-desc-short" />
+                    </div>
+                  </div>
+                ))
               ) : loadError ? (
-                <div className="vod-episodes-loading">No se pudieron cargar los episodios. Vuelve a abrir la ficha para reintentar.</div>
+                <div className="vod-episodes-empty-card">
+                  <div className="vod-episodes-empty-icon">⚠️</div>
+                  <div className="vod-episodes-empty-text">No se pudieron cargar los episodios. Vuelve a abrir la ficha para reintentar.</div>
+                </div>
               ) : episodes.length === 0 ? (
-                <div className="vod-episodes-loading">No hay episodios disponibles para esta temporada.</div>
+                <div className="vod-episodes-empty-card">
+                  <div className="vod-episodes-empty-icon">📺</div>
+                  <div className="vod-episodes-empty-text">No hay episodios disponibles para esta temporada.</div>
+                </div>
               ) : (
                 episodes.map((ep, epIdx) => {
                   const isEpFocused = focus.area === 'episodes' && focus.episodeIndex === epIdx;
                   const epPic = ep.picture || backdropUrl;
+                  const st = episodeStatuses[epIdx];
 
                   return (
                     <div
                       key={ep.id || epIdx}
-                      className={`vod-episode-card ${isEpFocused ? 'is-focused' : ''}`}
+                      className={`vod-episode-card ${isEpFocused ? 'is-focused' : ''} ${st?.isWatched ? 'is-watched' : ''} ${st?.isCurrent ? 'is-current' : ''}`}
                       onClick={() => onPlay(currentItem, ep)}
                     >
-                      <div
-                        className="episode-card-thumb"
-                        style={{ backgroundImage: `url('${epPic}')` }}
-                      >
-                        <div className="episode-badge-num">EP. {ep.number || epIdx + 1}</div>
+                      <div className="episode-card-thumb">
+                        <img
+                          className="episode-card-thumb-img"
+                          src={epPic}
+                          decoding="async"
+                          loading="lazy"
+                          onLoad={e => e.currentTarget.classList.add('is-loaded')}
+                          alt=""
+                        />
+                        <div className="episode-badge-num">
+                          EP. {ep.number || epIdx + 1}
+                          {st?.isWatched && <span className="episode-check-icon"> ✓</span>}
+                        </div>
                         <div className="episode-play-overlay">
                           <span className="play-triangle">▶</span>
                         </div>
+                        {st && (st.progressPercent > 0 || st.isWatched) && (
+                          <div className="cw-progress-track">
+                            <div
+                              className="cw-progress-fill"
+                              style={{ width: `${st.isWatched ? 100 : st.progressPercent}%` }}
+                            />
+                          </div>
+                        )}
                       </div>
 
                       <div className="episode-card-body">

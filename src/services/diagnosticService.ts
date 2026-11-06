@@ -50,7 +50,9 @@ class DiagnosticService {
     }
 
     if (hostNames.length > 0 && dohAnswered === 0) {
-      const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
+      const online = typeof window !== 'undefined' && window.XuperPlatform && window.XuperPlatform.isNetworkConnected
+        ? window.XuperPlatform.isNetworkConnected()
+        : (typeof navigator !== 'undefined' ? navigator.onLine : true);
       return { verdict: online ? 'doh-blocked' : 'no-internet', hosts, portalMs: null, cdns: 0 };
     }
 

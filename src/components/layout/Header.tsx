@@ -1,5 +1,6 @@
 import React from 'react';
 import { TabId, TABS } from './TopNavbar';
+import { BrandLogo } from '../common/BrandLogo';
 
 export interface HeaderProps {
   selectedTab: TabId;
@@ -21,14 +22,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="app-header">
       {/* 1. Left: Brand Logo */}
-      <div className="brand-container">
-        <img className="brand-logo-img" src="assets/logo_3d.png" alt="XuperTV" />
-        <div className="brand-title">
-          <span className="tizen">TIZEN</span>
-          <span className="xuper">XUPER</span>
-          <span className="tv">TV</span>
-        </div>
-      </div>
+      <BrandLogo />
 
       {/* 2. Center: Direct Navigation Tabs (Apple TV single-bar style) */}
       <nav className="header-navbar">

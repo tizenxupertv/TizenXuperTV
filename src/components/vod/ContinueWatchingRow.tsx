@@ -1,7 +1,8 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useLayoutEffect } from 'react';
 import { HistoryItem } from '../../types/history';
 import { ContinueWatchingCard } from './ContinueWatchingCard';
 import { scrollHorizontalSlider } from '../../utils/scrollHelper';
+import { preloadCardNeighbors } from '../../lib/imageCache';
 
 interface ContinueWatchingRowProps {
   items: HistoryItem[];
@@ -16,12 +17,13 @@ const ContinueWatchingRowComponent: React.FC<ContinueWatchingRowProps> = ({
 }) => {
   const sliderRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (focusedIndex !== null && sliderRef.current) {
       const target = sliderRef.current.children[focusedIndex] as HTMLElement;
       scrollHorizontalSlider(sliderRef.current, target, focusedIndex, 48, 160);
+      preloadCardNeighbors(items, focusedIndex, 3, false);
     }
-  }, [focusedIndex]);
+  }, [focusedIndex, items]);
 
   if (!items || !items.length) return null;
 

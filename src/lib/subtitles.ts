@@ -24,25 +24,72 @@ const LANG_NAMES: Record<string, string> = {
   tr: 'Turco', tur: 'Turco'
 };
 
-/** "es" / "spa" / "es-MX" -> "Español"; unknown codes are shown upper-cased */
+/** Distinguishes Spanish dialects (Latino vs España / Castellano) and languages */
 export function languageName(code: string | undefined): string {
-  const c = String(code || '').trim().toLowerCase();
+  const raw = String(code || '').trim();
+  const c = raw.toLowerCase();
   if (!c) return 'Original';
-  const known = LANG_NAMES[c] || LANG_NAMES[c.split(/[-_]/)[0]];
-  if (known) return known;
-  // Already a language name ("Español", "Inglés · 720p")
-  const names = Object.keys(LANG_NAMES).map(k => LANG_NAMES[k]);
-  for (const n of names) {
-    if (c === n.toLowerCase() || c.indexOf(n.toLowerCase()) === 0) return n;
+
+  // Explicit Latin American Spanish variants
+  if (/latino|latam|latin|419|es[-_]419|es[-_]la|es[-_]mx|es[-_]ar|es[-_]co|spa[-_]lat/i.test(c)) {
+    return 'Español (Latino)';
   }
-  return c.toUpperCase();
+  // Explicit Spain / Castilian variants
+  if (/castellano|castilian|es[-_]es|spa[-_]es|españa|espana|iberian/i.test(c)) {
+    return 'Español (España)';
+  }
+
+  // Base code check
+  const base = c.split(/[-_]/)[0];
+  if (base === 'es' || base === 'spa' || base === 'esp') {
+    if (c.includes('419') || c.includes('mx') || c.includes('ar') || c.includes('co') || c.includes('cl') || c.includes('lat')) {
+      return 'Español (Latino)';
+    }
+    if (c.includes('es')) {
+      return 'Español (España)';
+    }
+    return 'Español';
+  }
+
+  const known = LANG_NAMES[c] || LANG_NAMES[base];
+  if (known) return known;
+
+  // Already human-readable formatted names
+  if (c.startsWith('español (latino)') || c.startsWith('espanol (latino)')) return 'Español (Latino)';
+  if (c.startsWith('español (españa)') || c.startsWith('espanol (espana)') || c.startsWith('español (castellano)')) return 'Español (España)';
+  if (c.startsWith('español') || c.startsWith('espanol')) return 'Español';
+  if (c.startsWith('inglés') || c.startsWith('ingles')) return 'Inglés';
+  if (c.startsWith('portugués') || c.startsWith('portugues')) return 'Portugués';
+
+  return raw.toUpperCase();
 }
 
 /** Order of the language preference stored in the profile settings */
-export const PREF_LANG_CODES = ['es', 'pt', 'en'];
+export const PREF_LANG_CODES = ['es-lat', 'es-es', 'pt', 'en'];
 
 export function sameLanguage(code: string | undefined, pref: string): boolean {
-  return languageName(code) === languageName(pref);
+  const trackLang = languageName(code);
+  const prefLang = languageName(pref);
+
+  // Exact match
+  if (trackLang === prefLang) return true;
+
+  // Dialect preference matching with generic fallback
+  if (pref === 'es-lat' || prefLang === 'Español (Latino)') {
+    if (trackLang === 'Español (Latino)') return true;
+    if (trackLang === 'Español') return true; // generic Spanish is acceptable fallback
+    return false;
+  }
+  if (pref === 'es-es' || prefLang === 'Español (España)') {
+    if (trackLang === 'Español (España)') return true;
+    if (trackLang === 'Español') return true; // generic Spanish fallback
+    return false;
+  }
+  if (pref === 'es' || prefLang === 'Español') {
+    if (trackLang.startsWith('Español')) return true;
+  }
+
+  return trackLang === prefLang;
 }
 
 function toSeconds(stamp: string): number {

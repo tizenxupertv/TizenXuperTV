@@ -10,43 +10,9 @@
   var isTizen = (typeof tizen !== 'undefined');
   var isWebOS = (typeof webOS !== 'undefined' && webOS.platform && webOS.platform.tv);
 
-  // ---- Temporary remote log forwarder (debug only) ----
-  var REMOTE_LOG_URL = 'http://192.168.1.6:8098/log';
-  (function setupRemoteLog() {
-    var queue = [];
-    var timer = null;
-    function flush() {
-      timer = null;
-      if (!queue.length) return;
-      var batch = queue.splice(0, queue.length);
-      try {
-        var x = new XMLHttpRequest();
-        x.open('POST', REMOTE_LOG_URL, true);
-        x.setRequestHeader('Content-Type', 'text/plain');
-        x.send(JSON.stringify(batch));
-      } catch (e) {}
-    }
-    function push(level, args) {
-      var parts = [];
-      for (var i = 0; i < args.length; i++) {
-        var a = args[i];
-        try { parts.push(typeof a === 'string' ? a : JSON.stringify(a)); } catch (e) { parts.push(String(a)); }
-      }
-      queue.push({ t: Date.now(), l: level, m: parts.join(' ').slice(0, 2000) });
-      if (!timer) timer = setTimeout(flush, 400);
-    }
-    ['log', 'warn', 'error'].forEach(function (lvl) {
-      var orig = console[lvl];
-      console[lvl] = function () {
-        push(lvl, arguments);
-        if (orig) orig.apply(console, arguments);
-      };
-    });
-    window.addEventListener('error', function (ev) {
-      push('error', ['[window.onerror]', ev.message, ev.filename + ':' + ev.lineno]);
-    });
-    window.__xuperLog = function () { push('log', arguments); };
-  })();
+  window.__xuperLog = function () {
+    if (console && console.log) console.log.apply(console, arguments);
+  };
 
   window.XuperPlatform = {
     name: isTizen ? 'tizen' : (isWebOS ? 'webos' : 'browser'),
@@ -58,7 +24,13 @@
   if (isTizen) {
     if (window.tizen && tizen.tvinputdevice) {
       try {
-        var mediaKeys = ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaStop', 'MediaFastForward', 'MediaRewind', 'Info', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        var mediaKeys = [
+          'MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaStop',
+          'MediaFastForward', 'MediaRewind', 'MediaTrackPrevious', 'MediaTrackNext',
+          'ChannelUp', 'ChannelDown', 'Info',
+          'ColorF0Red', 'ColorF1Green', 'ColorF2Yellow', 'ColorF3Blue',
+          '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+        ];
         mediaKeys.forEach(function(k) {
           try { tizen.tvinputdevice.registerKey(k); } catch(e) {}
         });
@@ -117,6 +89,139 @@
     }
     return { width: window.innerWidth || 1920, height: window.innerHeight || 1080 };
   };
+
+  // ---- Screensaver management (Jellyfin / Tizen pattern) ----
+  window.XuperPlatform.setScreenSaver = function (enable) {
+    if (!isTizen || !window.webapis || !webapis.appcommon || !webapis.appcommon.setScreenSaver) return;
+    try {
+      var state = enable
+        ? webapis.appcommon.AppCommonScreenSaverState.SCREEN_SAVER_ON
+        : webapis.appcommon.AppCommonScreenSaverState.SCREEN_SAVER_OFF;
+      webapis.appcommon.setScreenSaver(state);
+      console.log('[TizenBridge] ScreenSaver set to:', enable ? 'ON' : 'OFF');
+    } catch (e) {
+      console.warn('[TizenBridge] Failed to setScreenSaver:', e);
+    }
+  };
+
+  // ---- UHD / 4K Detection (Jellyfin pattern) ----
+  window.XuperPlatform.isUhdSupported = function () {
+    if (!isTizen || !window.webapis || !webapis.productinfo) return false;
+    try {
+      if (typeof webapis.productinfo.is8KPanelSupported === 'function' && webapis.productinfo.is8KPanelSupported()) return true;
+      if (typeof webapis.productinfo.isUdPanelSupported === 'function' && webapis.productinfo.isUdPanelSupported()) return true;
+    } catch (e) {}
+    return false;
+  };
+  window.XuperPlatform.is4KPanel = window.XuperPlatform.isUhdSupported;
+
+  // ---- Network status & connection type (Jellyfin / Samsung WebAPI pattern) ----
+  window.XuperPlatform.isNetworkConnected = function () {
+    if (isTizen && window.webapis && webapis.network) {
+      try {
+        if (typeof webapis.network.isConnectedToGateway === 'function') {
+          if (!webapis.network.isConnectedToGateway()) return false;
+        }
+        if (typeof webapis.network.getActiveConnectionType === 'function') {
+          var type = webapis.network.getActiveConnectionType();
+          var types = webapis.network.NetworkActiveConnectionType || {};
+          var disconnected = (types.DISCONNECTED !== undefined) ? (type === types.DISCONNECTED) : (type === 0);
+          return !disconnected;
+        }
+      } catch (e) {}
+    }
+    return typeof navigator.onLine === 'boolean' ? navigator.onLine : true;
+  };
+
+  window.XuperPlatform.getConnectionType = function () {
+    if (isTizen && window.webapis && webapis.network && typeof webapis.network.getActiveConnectionType === 'function') {
+      try {
+        var t = webapis.network.getActiveConnectionType();
+        var types = webapis.network.NetworkActiveConnectionType || {};
+        if (t === types.WIFI || t === 1) return 'wifi';
+        if (t === types.ETHERNET || t === 3) return 'ethernet';
+        if (t === types.CELLULAR || t === 2) return 'cellular';
+        if (t === types.DISCONNECTED || t === 0) return 'none';
+      } catch (e) {}
+    }
+    return navigator.onLine ? 'online' : 'none';
+  };
+
+  window.XuperPlatform.getIpAddress = function () {
+    if (isTizen && window.webapis && webapis.network && typeof webapis.network.getIP === 'function') {
+      try {
+        return webapis.network.getIP() || '';
+      } catch (e) {}
+    }
+    return '';
+  };
+
+  window.XuperPlatform.waitForNetwork = function (maxWaitMs, callback) {
+    maxWaitMs = maxWaitMs || 5000;
+    callback = callback || function () {};
+    if (window.XuperPlatform.isNetworkConnected()) {
+      return setTimeout(function () { callback(true); }, 250);
+    }
+    var done = false;
+    var timer = null;
+    var pollTimer = null;
+    function finish(ok) {
+      if (done) return;
+      done = true;
+      if (timer) clearTimeout(timer);
+      if (pollTimer) clearInterval(pollTimer);
+      window.removeEventListener('xuper-network-change', onNet);
+      callback(ok);
+    }
+    function onNet(e) {
+      if (e && e.detail && e.detail.online) finish(true);
+    }
+    window.addEventListener('xuper-network-change', onNet);
+    pollTimer = setInterval(function () {
+      if (window.XuperPlatform.isNetworkConnected()) finish(true);
+    }, 400);
+    timer = setTimeout(function () { finish(window.XuperPlatform.isNetworkConnected()); }, maxWaitMs);
+  };
+
+  // ---- Native Tizen Network Change Listener + Browser online/offline fallback ----
+  (function setupNetworkListener() {
+    function emitNetworkChange(online, type) {
+      console.log('[Network] Status change: online=' + online + ' type=' + type);
+      window.dispatchEvent(new CustomEvent('xuper-network-change', {
+        detail: {
+          online: online,
+          type: type || (online ? 'online' : 'none'),
+          ip: window.XuperPlatform.getIpAddress ? window.XuperPlatform.getIpAddress() : ''
+        }
+      }));
+    }
+
+    if (isTizen && window.webapis && webapis.network && typeof webapis.network.addNetworkStateChangeListener === 'function') {
+      try {
+        var listenerId = webapis.network.addNetworkStateChangeListener(function (val) {
+          var types = webapis.network.NetworkActiveConnectionType || {};
+          var disconnected = (types.DISCONNECTED !== undefined) ? (val === types.DISCONNECTED) : (val === 0);
+          var typeStr = 'unknown';
+          if (val === types.WIFI || val === 1) typeStr = 'wifi';
+          else if (val === types.ETHERNET || val === 3) typeStr = 'ethernet';
+          else if (val === types.CELLULAR || val === 2) typeStr = 'cellular';
+          else if (disconnected) typeStr = 'none';
+
+          emitNetworkChange(!disconnected, typeStr);
+        });
+        console.log('[TizenBridge] Registered native Tizen network listener ID:', listenerId);
+      } catch (e) {
+        console.warn('[TizenBridge] Failed to register network state listener:', e);
+      }
+    }
+
+    window.addEventListener('online', function () {
+      emitNetworkChange(true, window.XuperPlatform.getConnectionType ? window.XuperPlatform.getConnectionType() : 'online');
+    });
+    window.addEventListener('offline', function () {
+      emitNetworkChange(false, 'none');
+    });
+  })();
 
   // ---- M3U Parser and storage ----
   function parseM3U(text) {
@@ -556,7 +661,23 @@
       return false;
     },
 
-    playStream: function (url, headers, videoEl) {
+    _safeStopAndClose: function () {
+      if (!isTizen || !window.webapis || !webapis.avplay) return;
+      try {
+        var state = 'NONE';
+        try { state = webapis.avplay.getState(); } catch (e) {}
+        if (state === 'PLAYING' || state === 'PAUSED') {
+          try { webapis.avplay.stop(); } catch (e) {}
+        }
+        if (state !== 'NONE') {
+          try { webapis.avplay.close(); } catch (e) {}
+        }
+      } catch (e) {
+        console.warn('[XuperAVPlay] _safeStopAndClose error:', e);
+      }
+    },
+
+    playStream: function (url, headers, videoEl, startSec) {
       var self = this;
       if (!isTizen || !window.webapis || !webapis.avplay) return false;
       self._backupIdx = 0;
@@ -564,6 +685,7 @@
       self.isPreviewActive = false;
       self.kind = self._nextKind || 'vod';
       self._nextKind = null;
+      self._initialSeekSec = (typeof startSec === 'number' && startSec > 0) ? startSec : 0;
       var homeEl = document.getElementById('screen-home');
       if (homeEl) homeEl.classList.remove('is-avplay-preview');
       return self._openAndPrepareStream(url, headers, videoEl);
@@ -572,7 +694,7 @@
     _openAndPrepareStream: function (url, headers, videoEl) {
       var self = this;
       self.videoEl = videoEl;
-      self.currentTimeSec = 0;
+      self.currentTimeSec = self._initialSeekSec || 0;
       self.durationSec = 0;
       self.isPaused = false;
 
@@ -581,7 +703,7 @@
         var spEl = document.getElementById('screen-player');
         if (spEl) spEl.style.backgroundColor = 'transparent';
 
-        try { webapis.avplay.stop(); webapis.avplay.close(); } catch (e) {}
+        self._safeStopAndClose();
 
         var cleanUrl = String(url).replace(/^https:\/\//i, 'http://');
         webapis.avplay.open(cleanUrl);
@@ -591,16 +713,46 @@
 
         var isLive = self.kind === 'live';
         try {
-          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 2 : 4);
-          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 2 : 8);
+          // Dual dynamic buffer (Jellyfin / PlayerAVPlay pattern):
+          // Fast-start: 1.5s (live) or 2s (VOD) for rapid tune-in.
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 1.5 : 2);
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 2 : 4);
         } catch (bufErr) {}
 
         webapis.avplay.setListener({
           onbufferingstart: function () {
             if (self.videoEl && self.videoEl.onwaiting) self.videoEl.onwaiting();
           },
+          onbufferingprogress: function (percent) {
+            if (self.videoEl) {
+              self.videoEl._avBufferPercent = percent;
+              if (self.videoEl.onprogress) self.videoEl.onprogress({ loaded: percent, total: 100 });
+            }
+          },
           onbufferingcomplete: function () {
             self.syncDisplayRect();
+            if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+              window.XuperPlatform.setScreenSaver(false);
+            }
+            // Expand buffer dynamically after playback starts for resilience against network jitter
+            try {
+              webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 4 : 8);
+            } catch (bufExpandErr) {}
+            // If initial seek hasn't completed yet, execute it now that buffering is complete
+            if (self._initialSeekSec > 0) {
+              var retryMs = Math.floor(self._initialSeekSec * 1000);
+              self._initialSeekSec = 0;
+              console.log('[XuperAVPlay] onbufferingcomplete: executing initial seek to ' + retryMs + 'ms');
+              try {
+                webapis.avplay.seekTo(retryMs, function () {
+                  console.log('[XuperAVPlay] onbufferingcomplete seekTo success:', retryMs);
+                }, function (err) {
+                  console.warn('[XuperAVPlay] onbufferingcomplete seekTo failed:', err);
+                });
+              } catch (e) {
+                console.warn('[XuperAVPlay] onbufferingcomplete seekTo error:', e);
+              }
+            }
             if (self.videoEl && self.videoEl.oncanplay) self.videoEl.oncanplay();
             if (self.videoEl && self.videoEl.onplaying) self.videoEl.onplaying();
           },
@@ -613,6 +765,9 @@
           },
           onerror: function (type) {
             console.error('[XuperAVPlay] AVPlay error:', type);
+            if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+              window.XuperPlatform.setScreenSaver(true);
+            }
             if (self._tryNextBackup()) return;
             if (self.kind === 'live' && self._recoverLive()) return;
             self.isActive = false;
@@ -620,6 +775,9 @@
           },
           onstreamcompleted: function () {
             self.isActive = false;
+            if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+              window.XuperPlatform.setScreenSaver(true);
+            }
             if (self.videoEl && self.videoEl.onended) self.videoEl.onended();
           }
         });
@@ -633,7 +791,6 @@
             if (dur > 0) self.durationSec = dur / 1000;
             if (self.videoEl) {
               self.videoEl._avDuration = self.durationSec;
-              if (self.videoEl.onloadedmetadata) self.videoEl.onloadedmetadata();
             }
           } catch (e) {}
 
@@ -641,14 +798,43 @@
           webapis.avplay.play();
           self.isActive = true;
           self.isPaused = false;
+
+          if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+            window.XuperPlatform.setScreenSaver(false);
+          }
           var st = document.getElementById('player-status');
           if (st) { st.textContent = ''; st.classList.remove('is-active'); }
           var pf = document.querySelector('#screen-player .player-frame');
           if (pf) pf.style.display = 'none';
+
+          // Trigger onloadedmetadata after play() and isActive=true
+          if (self.videoEl && self.videoEl.onloadedmetadata) {
+            try { self.videoEl.onloadedmetadata(); } catch (e) {}
+          }
+
+          // If there is an initial resume position, perform seek immediately
+          if (self._initialSeekSec > 0) {
+            var initMs = Math.floor(self._initialSeekSec * 1000);
+            console.log('[XuperAVPlay] Executing initial resume seek to ' + self._initialSeekSec + 's (' + initMs + 'ms)');
+            try {
+              webapis.avplay.seekTo(initMs, function () {
+                console.log('[XuperAVPlay] Initial seekTo success:', initMs);
+                self._initialSeekSec = 0;
+              }, function (seekErr) {
+                console.log('[XuperAVPlay] Initial seekTo immediate failed, will retry on buffering complete:', seekErr);
+              });
+            } catch (seekEx) {
+              console.log('[XuperAVPlay] Initial seekTo immediate exception, will retry on buffering complete:', seekEx);
+            }
+          }
+
           if (self.videoEl && self.videoEl.onplay) self.videoEl.onplay();
           if (self.videoEl && self.videoEl.onplaying) self.videoEl.onplaying();
         }, function (e) {
           console.error('[XuperAVPlay] prepareAsync error:', e);
+          if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+            window.XuperPlatform.setScreenSaver(true);
+          }
           if (self._tryNextBackup()) return;
           self.isActive = false;
           if (self.videoEl && self.videoEl.onerror) self.videoEl.onerror();
@@ -666,27 +852,86 @@
     pause: function () {
       if (this.isActive) {
         try { webapis.avplay.pause(); this.isPaused = true; } catch (e) {}
+        if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+          window.XuperPlatform.setScreenSaver(true);
+        }
       }
     },
 
     play: function () {
       if (this.isActive) {
         try { webapis.avplay.play(); this.isPaused = false; } catch (e) {}
+        if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+          window.XuperPlatform.setScreenSaver(false);
+        }
       }
     },
 
-    seekTo: function (sec) {
-      if (this.isActive) {
-        try { webapis.avplay.seekTo(Math.floor(sec * 1000)); } catch (e) {}
+    getCurrentStreamQuality: function () {
+      if (!isTizen || !window.webapis || !webapis.avplay) return null;
+      try {
+        var info = webapis.avplay.getCurrentStreamInfo();
+        if (!info || !info.length) return null;
+        for (var i = 0; i < info.length; i++) {
+          if (info[i].type === 'VIDEO') {
+            var extra = {};
+            try { extra = JSON.parse(info[i].extra_info || '{}'); } catch(e) {}
+            var w = extra.Width || extra.width || 0;
+            var h = extra.Height || extra.height || 0;
+            var codec = extra.FourCC || extra.fourcc || '';
+            var label = 'HD';
+            if (h >= 2160 || w >= 3840) label = '4K UHD';
+            else if (h >= 1080 || w >= 1920) label = 'FHD 1080p';
+            else if (h >= 720 || w >= 1280) label = 'HD 720p';
+            else if (h > 0) label = h + 'p';
+            return {
+              width: w,
+              height: h,
+              label: label,
+              codec: codec
+            };
+          }
+        }
+      } catch (e) {}
+      return null;
+    },
+
+    seekTo: function (sec, successCb, errorCb) {
+      var ms = Math.floor(sec * 1000);
+      if (ms < 0) ms = 0;
+      var state = '';
+      try { state = webapis.avplay.getState(); } catch (e) {}
+
+      // If the player is not yet fully active, queue as initial seek
+      if (!this.isActive || state === 'NONE' || state === 'IDLE') {
+        console.log('[XuperAVPlay] Player not yet active, queuing initial seek to ' + sec + 's');
+        this._initialSeekSec = sec;
+        return;
+      }
+
+      try {
+        webapis.avplay.seekTo(ms, function () {
+          console.log('[XuperAVPlay] seekTo ' + ms + 'ms succeeded');
+          if (typeof successCb === 'function') successCb();
+        }, function (err) {
+          console.warn('[XuperAVPlay] seekTo ' + ms + 'ms failed:', err);
+          if (typeof errorCb === 'function') errorCb(err);
+        });
+      } catch (e) {
+        console.warn('[XuperAVPlay] seekTo exception:', e);
+        if (typeof errorCb === 'function') errorCb(e);
       }
     },
 
     stop: function () {
       if (this.isActive) {
         this.isActive = false;
-        try { webapis.avplay.stop(); webapis.avplay.close(); } catch (e) {}
+        this._safeStopAndClose();
       }
       this.stopPreview();
+      if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+        window.XuperPlatform.setScreenSaver(true);
+      }
       var obj = document.getElementById('avplay-object');
       if (obj) obj.remove();
       document.documentElement.style.backgroundColor = '#000000';
@@ -746,7 +991,7 @@
         if (grandEl) grandEl.style.backgroundColor = 'transparent';
         if (videoEl) videoEl.style.backgroundColor = 'transparent';
 
-        try { webapis.avplay.stop(); webapis.avplay.close(); } catch (e) {}
+        self._safeStopAndClose();
 
         var cleanUrl = String(url).replace(/^https:\/\//i, 'http://');
         webapis.avplay.open(cleanUrl);
@@ -827,10 +1072,10 @@
         this._gen = (this._gen || 0) + 1;
         this.isActive = false;
         this.isPreviewActive = false;
-        if (isTizen && window.webapis && webapis.avplay) {
-          try { webapis.avplay.stop(); } catch (e) {}
-          try { webapis.avplay.close(); } catch (e) {}
-        }
+        this._safeStopAndClose();
+      }
+      if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+        window.XuperPlatform.setScreenSaver(true);
       }
       var homeEl = document.getElementById('screen-home');
       if (homeEl) {
@@ -842,7 +1087,10 @@
     stopPreview: function () {
       if (this.isPreviewActive) {
         this.isPreviewActive = false;
-        try { webapis.avplay.stop(); webapis.avplay.close(); } catch (e) {}
+        this._safeStopAndClose();
+      }
+      if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+        window.XuperPlatform.setScreenSaver(true);
       }
       var homeEl = document.getElementById('screen-home');
       if (homeEl) {
@@ -852,8 +1100,8 @@
     }
   };
 
-  // ---- Multitasking: Tizen requires AVPlay to be suspended in the background and restored on return.
-  // Without it the video plane stays black when the user comes back to the app.
+  // ---- Multitasking & Suspend / Waking Recovery (Jellyfin pattern) ----
+  // Tizen requires AVPlay to be suspended in the background and safely restored on return.
   if (isTizen) {
     document.addEventListener('visibilitychange', function () {
       if (!window.webapis || !webapis.avplay) return;
@@ -863,22 +1111,41 @@
         if (state === 'PLAYING' || state === 'PAUSED' || state === 'READY') {
           try { webapis.avplay.suspend(); window.XuperAVPlay._suspended = true; } catch (e) {}
         }
+        if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+          window.XuperPlatform.setScreenSaver(true);
+        }
         console.log('[XuperAVPlay] app hidden, state=' + state);
         return;
       }
+
       console.log('[XuperAVPlay] app visible, state=' + state + ' suspended=' + !!window.XuperAVPlay._suspended);
+      window.dispatchEvent(new CustomEvent('xuper-app-woke'));
+
       if (!window.XuperAVPlay._suspended) return;
       window.XuperAVPlay._suspended = false;
-      var restored = false;
-      try {
-        webapis.avplay.restore();
-        window.XuperAVPlay.syncDisplayRect();
-        restored = true;
-      } catch (e) {
-        console.log('[XuperAVPlay] restore failed: ' + (e && e.message));
-      }
-      // Plan B: the app reopens the stream (live channel or VOD at the same position)
-      if (!restored) window.dispatchEvent(new CustomEvent('xuper-avplay-restore-failed'));
+
+      // When waking from sleep, give Wi-Fi/network up to 4s to connect before attempting AVPlay restore
+      window.XuperPlatform.waitForNetwork(4000, function (connected) {
+        var restored = false;
+        if (connected) {
+          try {
+            webapis.avplay.restore();
+            window.XuperAVPlay.syncDisplayRect();
+            restored = true;
+            if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+              window.XuperPlatform.setScreenSaver(false);
+            }
+          } catch (e) {
+            console.log('[XuperAVPlay] restore failed: ' + (e && e.message));
+          }
+        } else {
+          console.warn('[XuperAVPlay] App resumed but network is not connected');
+        }
+        // Plan B: network is ready; trigger reopening the stream (live channel or VOD at the same position)
+        if (!restored) {
+          window.dispatchEvent(new CustomEvent('xuper-avplay-restore-failed'));
+        }
+      });
     });
   }
 

@@ -1471,9 +1471,12 @@
         var sList = asset.sameSeasonSeriesList || [];
         for (var m = 0; m < sList.length; m++) {
           if (sList[m] && trim(sList[m].contentId)) {
+            var sNum = sList[m].seasonNumber;
+            var sName = text(sList[m].name || sList[m].title || sList[m].seriesName || sList[m].alias);
             seasons.push({
               id: trim(sList[m].contentId),
-              number: sList[m].seasonNumber
+              name: sName,
+              number: sNum !== undefined && sNum !== null && !isNaN(Number(sNum)) ? Number(sNum) : undefined
             });
           }
         }

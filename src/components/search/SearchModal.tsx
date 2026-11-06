@@ -8,6 +8,7 @@ import { OnScreenKeyboard, KbState, KB_INITIAL, pressKey, moveCursor, keyAt } fr
 import { normalizeText } from '../../utils/normalizeText';
 import { normalizeChannels } from '../../lib/channelKey';
 import { allChannelEntries } from '../../lib/channelCache';
+import { BrandLogo } from '../common/BrandLogo';
 
 export interface SearchModalProps {
   isOpen: boolean;
@@ -141,6 +142,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const [remoteVod, setRemoteVod] = useState<VodItem[]>([]);
   const [remoteState, setRemoteState] = useState<'idle' | 'loading' | 'done' | 'failed'>('idle');
   const [remoteTotal, setRemoteTotal] = useState(0);
+  const searchTokenRef = useRef<number>(0);
   useEffect(() => {
     if (isTvSearch || !isOpen) return;
     const q = submittedQuery.trim();
@@ -150,16 +152,17 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       setRemoteTotal(0);
       return;
     }
+    const token = ++searchTokenRef.current;
     let alive = true;
     setRemoteState('loading');
     const timer = setTimeout(() => {
       const client = (window as any).MagisClient;
       if (!client || typeof client.search !== 'function') {
-        if (alive) setRemoteState('failed');
+        if (alive && token === searchTokenRef.current) setRemoteState('failed');
         return;
       }
       client.search(q, (err: any, res: any) => {
-        if (!alive) return;
+        if (!alive || token !== searchTokenRef.current) return;
         if (err || !res) {
           setRemoteState('failed');
           return;
@@ -171,6 +174,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     }, 200);
     return () => {
       alive = false;
+      searchTokenRef.current++;
       clearTimeout(timer);
     };
   }, [submittedQuery, isTvSearch, isOpen]);
@@ -228,8 +232,23 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   // Handle keyboard / remote navigation inside the modal (on-screen keyboard + results)
   useEffect(() => {
     if (!isOpen || hidden) return;
+    let lastRepeatTime = 0;
+    const REPEAT_MIN_INTERVAL_MS = 65;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Throttle rapid repeated keydowns to prevent event queue saturation on Tizen
+      if (e.repeat) {
+        const now = performance.now();
+        if (now - lastRepeatTime < REPEAT_MIN_INTERVAL_MS) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
+        lastRepeatTime = now;
+      } else {
+        lastRepeatTime = performance.now();
+      }
+
       const isBack = e.key === 'Escape' || e.keyCode === 10009 || e.keyCode === 461;
       const isBackspace = e.key === 'Backspace' || e.keyCode === 8;
       const cols = isTvSearch ? 2 : vodCols;
@@ -341,28 +360,32 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   return (
     <div
       className="search-modal-backdrop search-view-full"
-      style={{ display: hidden ? 'none' : 'flex' }}
+      style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}
       onClick={onClose}
     >
       <div className="search-modal-container" onClick={e => e.stopPropagation()}>
-        {/* Header */}
+        {/* Header with App Brand Logo */}
         <div className="search-modal-header">
-          <div className="search-modal-title-row">
-            <div className="search-title-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="search-modal-title">
-                {isTvSearch ? 'Buscar Canales de TV en Vivo' : 'Buscar Películas, Series y Contenido'}
-              </h2>
-              <p className="search-modal-subtitle">
-                {isTvSearch
-                  ? 'Filtra entre todos los canales disponibles por nombre o programación'
-                  : 'Busca en todo el catálogo de películas y series por título, género o reparto'}
-              </p>
+          <div className="search-header-left">
+            <BrandLogo />
+            <div className="search-header-divider" />
+            <div className="search-modal-title-row">
+              <div className="search-title-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="search-modal-title">
+                  {isTvSearch ? 'Buscar Canales de TV en Vivo' : 'Buscar Películas, Series y Contenido'}
+                </h2>
+                <p className="search-modal-subtitle">
+                  {isTvSearch
+                    ? 'Filtra entre todos los canales disponibles por nombre o programación'
+                    : 'Busca en todo el catálogo de películas y series por título, género o reparto'}
+                </p>
+              </div>
             </div>
           </div>
 

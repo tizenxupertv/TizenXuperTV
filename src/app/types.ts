@@ -26,6 +26,7 @@ export interface DetailEpisodes {
   episodes: VodEpisode[];
   seasonId?: string;
   seasonNumber?: number;
+  activeEpisodeIndex?: number;
 }
 
 export interface LiveLocation {
