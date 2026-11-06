@@ -14,12 +14,120 @@ declare global {
   }
 }
 
+/** Signal of the live channel being played: the views show an error instead of a black screen */
+export type LiveSignal = 'idle' | 'loading' | 'playing' | 'error';
+export interface LiveStatus {
+  code: string;
+  state: LiveSignal;
+}
+
+// Without a picture after this long, the channel counts as down
+const START_TIMEOUT_MS = 25000;
+// Fatal HLS errors retried before giving up: a dead stream must not retry forever
+const MAX_HLS_RETRIES = 2;
+
 class PlayerService {
   private activeChannelCode: string = '';
   private currentVideoEl: HTMLVideoElement | null = null;
   private resolveTimer: any = null;
   private isFullscreen: boolean = false;
   private lastChannel: LiveChannel | null = null;
+  private status: LiveStatus = { code: '', state: 'idle' };
+  private statusListeners: Array<(s: LiveStatus) => void> = [];
+  private watchdog: any = null;
+  private avPoll: any = null;
+  private watchedEl: HTMLVideoElement | null = null;
+  private usingAvPreview = false;
+  private onVideoPlaying = () => {
+    if (this.status.state === 'loading' && this.status.code === this.activeChannelCode) {
+      this.setStatus(this.status.code, 'playing');
+    }
+  };
+
+  public getLiveStatus(): LiveStatus {
+    return this.status;
+  }
+
+  public onLiveStatus(cb: (s: LiveStatus) => void): () => void {
+    this.statusListeners.push(cb);
+    return () => {
+      this.statusListeners = this.statusListeners.filter(l => l !== cb);
+    };
+  }
+
+  private setStatus(code: string, state: LiveSignal) {
+    if (this.status.code === code && this.status.state === state) return;
+    this.status = { code, state };
+    this.statusListeners.forEach(cb => {
+      try { cb(this.status); } catch (e) {}
+    });
+  }
+
+  private clearWatch() {
+    if (this.watchdog) clearTimeout(this.watchdog);
+    if (this.avPoll) clearInterval(this.avPoll);
+    this.watchdog = null;
+    this.avPoll = null;
+  }
+
+  /** Waits for the first picture of a channel; marks it down after START_TIMEOUT_MS */
+  private watchStart(code: string, videoEl: HTMLVideoElement) {
+    this.clearWatch();
+    this.setStatus(code, 'loading');
+    if (this.watchedEl !== videoEl) {
+      if (this.watchedEl) this.watchedEl.removeEventListener('playing', this.onVideoPlaying);
+      videoEl.addEventListener('playing', this.onVideoPlaying);
+      this.watchedEl = videoEl;
+    }
+    this.watchdog = setTimeout(() => {
+      if (this.status.code === code && this.status.state === 'loading') this.failChannel(code, 'no picture');
+    }, START_TIMEOUT_MS);
+    // AVPlay draws outside the <video>: ask the player itself
+    const av = window.webapis && window.webapis.avplay;
+    if (av && window.XuperAVPlay) {
+      this.avPoll = setInterval(() => {
+        if (this.status.code !== code || this.status.state !== 'loading') {
+          clearInterval(this.avPoll);
+          this.avPoll = null;
+          return;
+        }
+        let state = '';
+        try { state = av.getState(); } catch (e) {}
+        if (state === 'PLAYING') this.setStatus(code, 'playing');
+        else if (this.usingAvPreview && window.XuperAVPlay.isPreviewActive === false) this.failChannel(code, 'avplay error');
+      }, 1000);
+    }
+  }
+
+  /** The channel does not play: stop trying (no endless retries) and report it */
+  private failChannel(code: string, why: string) {
+    if (this.activeChannelCode !== code) return;
+    console.warn('[PlayerService] Channel down:', code, why);
+    this.clearWatch();
+    this.destroyHls();
+    if (this.usingAvPreview && window.XuperAVPlay && typeof window.XuperAVPlay.stopLive === 'function') {
+      window.XuperAVPlay.stopLive();
+    }
+    if (this.currentVideoEl) {
+      try {
+        this.currentVideoEl.pause();
+        this.currentVideoEl.removeAttribute('src');
+        this.currentVideoEl.load();
+      } catch {}
+    }
+    this.setStatus(code, 'error');
+  }
+
+  private destroyHls() {
+    if (window.__xuperPreviewHls) {
+      try {
+        window.__xuperPreviewHls.stopLoad();
+        window.__xuperPreviewHls.detachMedia();
+        window.__xuperPreviewHls.destroy();
+      } catch {}
+      window.__xuperPreviewHls = null;
+    }
+  }
 
   constructor() {
     // Coming back from the background when AVPlay could not be restored: reopen the live channel
@@ -101,15 +209,9 @@ class PlayerService {
       this.resolveTimer = null;
     }
     this.activeChannelCode = '';
-
-    if (window.__xuperPreviewHls) {
-      try {
-        window.__xuperPreviewHls.stopLoad();
-        window.__xuperPreviewHls.detachMedia();
-        window.__xuperPreviewHls.destroy();
-      } catch {}
-      window.__xuperPreviewHls = null;
-    }
+    this.clearWatch();
+    this.setStatus('', 'idle');
+    this.destroyHls();
 
     if (window.XuperAVPlay && typeof window.XuperAVPlay.stopLive === 'function') {
       window.XuperAVPlay.stopLive();
@@ -132,14 +234,19 @@ class PlayerService {
     window.XuperPlatform?.setScreenSaver?.(false);
     const code = String(channel.code || channel.id);
     console.log('[PlayerService] Resolving live channel:', channel.name, code);
+    this.usingAvPreview = false;
+    this.watchStart(code, videoEl);
 
     // If channel has direct stream URL (M3U / IPTV)
     if (channel.url && channel.url.startsWith('http')) {
       if (channel.url.includes('.m3u8')) {
-        this.streamHls(channel.url, videoEl);
+        this.streamHls(channel.url, videoEl, undefined, code);
       } else if (fullscreen && window.XuperAVPlay && window.XuperAVPlay.playStream) {
         this.playLiveStream(channel.url, null, videoEl);
       } else if (window.XuperAVPlay && window.XuperAVPlay.playPreview) {
+        // A direct link has no headers of its own: do not reuse the last portal channel's
+        window.__xuperCurrentStreamMeta = null;
+        this.usingAvPreview = true;
         window.XuperAVPlay.playPreview(channel.url, videoEl);
       } else {
         videoEl.src = channel.url;
@@ -153,6 +260,10 @@ class PlayerService {
       window.MagisClient.resolveLive(code, (err: any, streamMeta: any) => {
         if (err || !streamMeta || !streamMeta.url) {
           console.error('[PlayerService] Failed to resolve channel:', err);
+          if (!(err && /aaa10002/i.test(err.portalCode || err.message || ''))) {
+            this.failChannel(code, 'resolve');
+            return;
+          }
           if (err && /aaa10002/i.test(err.portalCode || err.message || '')) {
             try { localStorage.removeItem('xuper_magis_session_v1'); } catch (e) {}
             setTimeout(() => {
@@ -161,13 +272,14 @@ class PlayerService {
                   if (!rErr && rMeta && rMeta.url && this.activeChannelCode === code) {
                     window.__xuperCurrentStreamMeta = rMeta;
                     if (rMeta.url.includes('.m3u8')) {
-                      this.streamHls(rMeta.url, videoEl, rMeta);
+                      this.streamHls(rMeta.url, videoEl, rMeta, code);
                     } else if (fullscreen && window.XuperAVPlay && window.XuperAVPlay.playStream) {
                       this.playLiveStream(rMeta.url, rMeta.headers, videoEl);
                     } else if (window.XuperAVPlay && window.XuperAVPlay.playPreview) {
+                      this.usingAvPreview = true;
                       window.XuperAVPlay.playPreview(rMeta.url, videoEl);
                     } else {
-                      this.streamHls(rMeta.url, videoEl, rMeta);
+                      this.streamHls(rMeta.url, videoEl, rMeta, code);
                     }
                   }
                 });
@@ -186,13 +298,14 @@ class PlayerService {
 
         // Use HLS.js for .m3u8 streams on Tizen (handles custom chunk auth headers)
         if (streamMeta.url.includes('.m3u8')) {
-          this.streamHls(streamMeta.url, videoEl, streamMeta);
+          this.streamHls(streamMeta.url, videoEl, streamMeta, code);
         } else if (fullscreen && window.XuperAVPlay && window.XuperAVPlay.playStream) {
           this.playLiveStream(streamMeta.url, streamMeta.headers, videoEl);
         } else if (window.XuperAVPlay && window.XuperAVPlay.playPreview) {
+          this.usingAvPreview = true;
           window.XuperAVPlay.playPreview(streamMeta.url, videoEl);
         } else {
-          this.streamHls(streamMeta.url, videoEl, streamMeta);
+          this.streamHls(streamMeta.url, videoEl, streamMeta, code);
         }
       });
     }
@@ -203,17 +316,9 @@ class PlayerService {
     return window.XuperAVPlay.playStream(url, headers, videoEl);
   }
 
-  private streamHls(url: string, videoEl: HTMLVideoElement, streamMeta?: any) {
+  private streamHls(url: string, videoEl: HTMLVideoElement, streamMeta?: any, code?: string) {
     if (!videoEl) return;
-
-    if (window.__xuperPreviewHls) {
-      try {
-        window.__xuperPreviewHls.stopLoad();
-        window.__xuperPreviewHls.detachMedia();
-        window.__xuperPreviewHls.destroy();
-      } catch {}
-      window.__xuperPreviewHls = null;
-    }
+    this.destroyHls();
 
     const isBrowserEnv = typeof window !== 'undefined' && (
       window.location.hostname === 'localhost' ||
@@ -234,6 +339,7 @@ class PlayerService {
         window.__xuperPreviewHls = hls;
 
         let backupIdx = 0;
+        let retries = 0;
         const backups = (streamMeta && streamMeta.backupUrls) || [];
 
         hls.loadSource(effectiveUrl);
@@ -272,9 +378,14 @@ class PlayerService {
                 return;
               }
             }
+            // A dead stream (404, refused, bad format) stops after a few tries and shows the error
+            if (retries++ >= MAX_HLS_RETRIES || (data.type !== window.Hls.ErrorTypes.NETWORK_ERROR && data.type !== window.Hls.ErrorTypes.MEDIA_ERROR)) {
+              if (code && window.__xuperPreviewHls === hls) this.failChannel(code, `hls ${data.details}`);
+              return;
+            }
             if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR) {
               hls.startLoad();
-            } else if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) {
+            } else {
               hls.recoverMediaError();
             }
           }

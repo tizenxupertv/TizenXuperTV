@@ -1098,10 +1098,46 @@ html, body {
   display: none;
 }
 
+/* Stands for the rows of a long channel list that are not rendered (see listWindow in LiveTvView) */
+.live-list-spacer {
+  flex-shrink: 0;
+}
+
+/* The tuned channel does not answer (playerService live signal) */
+.live-signal-error {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: rgba(7, 9, 14, 0.86);
+  pointer-events: none;
+}
+
+.live-signal-error-title {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.live-signal-error-desc {
+  color: #94a3b8;
+  font-size: 16px;
+  font-weight: 600;
+}
+
 .live-channel-card {
   display: flex;
   align-items: center;
   gap: 14px;
+  /* Fixed: off-screen cards (content-visibility) must keep their height, the list scrolls by row pitch */
+  height: 65px;
+  flex-shrink: 0;
   padding: 10px 14px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.03);
@@ -1111,7 +1147,7 @@ html, body {
   box-sizing: border-box;
   transition: none !important;
   content-visibility: auto;
-  contain-intrinsic-size: 1px 54px;
+  contain-intrinsic-size: 1px 65px;
 }
 
 .live-channel-card.is-active-channel {
