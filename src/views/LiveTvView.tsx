@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { LiveChannel, LiveCategory } from '../types/channel';
-import { playerService } from '../services/playerService';
+import { playerService, LiveStatus } from '../services/playerService';
+import { iptvService, IPTV_CATEGORY_PREFIX, IPTV_CATEGORY_LABEL } from '../services/iptvService';
 import { getMockChannelsForCategory } from '../services/mockLiveChannels';
 import { parentalService } from '../services/parentalService';
 import { useRenderCount } from '../debug/renderCount';
@@ -122,6 +123,34 @@ function filterLockedChannels(list: LiveChannel[], cats: LiveCategory[], activeI
 }
 const globalChannelMasterCache: Record<string, LiveChannel> = {};
 
+/** Categories plus one per enabled free IPTV list, at the end (existing indexes do not move) */
+function withIptvCategories(cats: LiveCategory[]): LiveCategory[] {
+  const base = cats.filter(c => !c.iptvListId);
+  return base.concat(iptvService.enabledLists().map(l => ({
+    id: IPTV_CATEGORY_PREFIX + l.id,
+    name: IPTV_CATEGORY_LABEL + l.name,
+    iptvListId: l.id
+  })));
+}
+
+// Long lists (free IPTV: up to ~2400 channels) only keep the rows around the cursor in the DOM.
+// Row pitch = row height + list gap (.live-channel-card 65px, .pc-row 84px, gap 8px).
+const CHANNEL_PITCH = 73;
+const DRAWER_PITCH = 92;
+const LIST_GAP = 8;
+const WINDOW_FROM = 80;
+const WINDOW_BEFORE = 20;
+const WINDOW_AFTER = 30;
+function listWindow(total: number, cursor: number): [number, number] {
+  if (total <= WINDOW_FROM) return [0, total];
+  const start = Math.max(0, Math.min(cursor - WINDOW_BEFORE, total - WINDOW_BEFORE - WINDOW_AFTER));
+  return [start, Math.min(total, start + WINDOW_BEFORE + WINDOW_AFTER)];
+}
+/** Empty block standing for `rows` rows that are not rendered */
+function rowsSpacer(rows: number, pitch: number) {
+  return rows > 0 ? <div className="live-list-spacer" style={{ height: rows * pitch - LIST_GAP }} /> : null;
+}
+
 // Fast, zero-reflow nearest scroll for TV list containers: replaces scrollIntoView / offsetTop reflows
 function fastScrollList(container: HTMLElement, targetIndex: number, itemPitch: number, pad = 12) {
   const targetTop = targetIndex * itemPitch;
@@ -186,9 +215,14 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     return 4;
   }, []);
   const selectedCatIndex = focus.selectedCatIndex !== undefined ? focus.selectedCatIndex : savedCatIdx;
-  const [categories, setCategories] = useState<LiveCategory[]>(DEFAULT_LIVE_CATEGORIES);
+  const [categories, setCategories] = useState<LiveCategory[]>(() => withIptvCategories(DEFAULT_LIVE_CATEGORIES));
   const [channels, setChannels] = useState<LiveChannel[]>([]);
   const [isLoadingChannels, setIsLoadingChannels] = useState<boolean>(true);
+  // A free IPTV list that could not be downloaded
+  const [channelsError, setChannelsError] = useState<string>('');
+  // Signal of the playing channel: a channel that does not answer shows a message, not a black box
+  const [liveStatus, setLiveStatus] = useState<LiveStatus>(() => playerService.getLiveStatus());
+  useEffect(() => playerService.onLiveStatus(setLiveStatus), []);
   const [lockTick, setLockTick] = useState<number>(0);
 
   // Re-filter channel lists when the parental settings or the session lock change
@@ -244,7 +278,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         container.scrollTop = container.scrollHeight;
         return;
       }
-      fastScrollList(container, focus.channelIndex, 62, 16);
+      fastScrollList(container, focus.channelIndex, CHANNEL_PITCH, 16);
     }
   }, [isFullscreen, isFocusActive, focus.area, focus.channelIndex, channels.length]);
 
@@ -259,7 +293,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         container.scrollTop = container.scrollHeight;
         return;
       }
-      fastScrollList(container, drawerFocusIndex, 92, 16);
+      fastScrollList(container, drawerFocusIndex, DRAWER_PITCH, 16);
     }
   }, [isFullscreen, showChannelsDrawer, drawerFocusIndex, channels.length]);
 
@@ -299,9 +333,10 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   const drawerChannels = drawerSearching ? drawerResults : channels;
 
 
-  // Load Categories on mount (and when the +18 section is turned on/off) and notify parent
+  // Load Categories on mount (and when the +18 section or a free IPTV list is turned on/off) and notify parent
   const [adultTick, setAdultTick] = useState(0);
   useEffect(() => parentalService.subscribe(() => setAdultTick(t => t + 1)), []);
+  useEffect(() => iptvService.subscribe(() => setAdultTick(t => t + 1)), []);
   useEffect(() => {
     if (window.MagisClient && typeof window.MagisClient.getLiveCategories === 'function') {
       window.MagisClient.getLiveCategories((err: any, cats: any[]) => {
@@ -311,15 +346,19 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             .map(c => ({ id: c.id || c.columnId, name: c.name || c.title }))
             // The adult category ("18+") exists only while the +18 section is on
             .filter(c => adultOn || !parentalService.isAdultCategory(c.name));
-          const allCats = [{ id: 'favs', name: '★ Favoritos', isFav: true }, ...formatted];
+          const allCats = withIptvCategories([{ id: 'favs', name: '★ Favoritos', isFav: true }, ...formatted]);
           setCategories(allCats);
           if (onCategoriesLoaded) onCategoriesLoaded(allCats);
         } else {
-          if (onCategoriesLoaded) onCategoriesLoaded(DEFAULT_LIVE_CATEGORIES);
+          const fallback = withIptvCategories(DEFAULT_LIVE_CATEGORIES);
+          setCategories(fallback);
+          if (onCategoriesLoaded) onCategoriesLoaded(fallback);
         }
       });
     } else {
-      if (onCategoriesLoaded) onCategoriesLoaded(DEFAULT_LIVE_CATEGORIES);
+      const fallback = withIptvCategories(DEFAULT_LIVE_CATEGORIES);
+      setCategories(fallback);
+      if (onCategoriesLoaded) onCategoriesLoaded(fallback);
     }
   }, [adultTick]);
 
@@ -344,6 +383,14 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
 
       if (!cat || cat.id === 'favs') {
         setTimeout(prefetchStep, 40);
+        return;
+      }
+
+      // Free IPTV list: only its saved copy (for Favoritos); the download waits until it is opened
+      if (cat.iptvListId) {
+        iptvService.getSaved(cat.iptvListId).then(list => {
+          if (list && !isCancelled) list.forEach(c => { channelMasterCache.current[String(c.id)] = c; });
+        }, () => {}).then(() => setTimeout(prefetchStep, 40));
         return;
       }
 
@@ -424,6 +471,37 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       setIsLoadingChannels(false);
       if (onChannelsLoaded) onChannelsLoaded(favChannels);
       return;
+    }
+
+    // Free IPTV list: memory, saved copy or download (once), see iptvService
+    if (activeCategory.iptvListId) {
+      const listId = activeCategory.iptvListId;
+      const show = (list: LiveChannel[]) => {
+        list.forEach(c => { channelMasterCache.current[String(c.id)] = c; });
+        setChannels(list);
+        setChannelsError('');
+        setIsLoadingChannels(false);
+        if (onChannelsLoaded) onChannelsLoaded(list);
+      };
+      const ready = iptvService.peek(listId);
+      if (ready) {
+        show(ready);
+        return;
+      }
+      let alive = true;
+      setChannels([]);
+      setChannelsError('');
+      setIsLoadingChannels(true);
+      if (onChannelsLoaded) onChannelsLoaded([]);
+      iptvService.getChannels(listId).then(
+        list => { if (alive) show(list); },
+        () => {
+          if (!alive) return;
+          setChannelsError('No se pudo descargar esta lista. Revisa la conexión e inténtalo más tarde.');
+          setIsLoadingChannels(false);
+        }
+      );
+      return () => { alive = false; };
     }
 
     // 1. In-memory cache: 0ms instant display!
@@ -560,6 +638,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   const isFocusedChannelTuned = isSameChannel(tunedChannel, focusedChannel);
   const isDisplayChannelTuned = isSameChannel(tunedChannel, displayChannel);
   const isDisplayChannelFav = !!(displayChannel && favMap[channelKey(displayChannel)]);
+  const tunedIsDown = !!tunedChannel && liveStatus.state === 'error' && liveStatus.code === String(tunedChannel.code || tunedChannel.id);
+  const [chFrom, chTo] = listWindow(channels.length, focus.channelIndex);
 
   return (
     <div className={`live-tv-view-2col ${isFullscreen ? 'is-fullscreen' : ''}`}>
@@ -597,26 +677,35 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
 
         <div className="live-channel-vlist" ref={channelListRef}>
           {channels.length === 0 && isLoadingChannels ? (
-            <div className="live-loading-msg">Cargando canales...</div>
+            <div className="live-loading-msg">{activeCategory.iptvListId ? 'Descargando la lista de canales...' : 'Cargando canales...'}</div>
           ) : channels.length === 0 ? (
             <div className="live-empty-msg">
               {activeCategory.isFav
                 ? 'Aún no tienes canales en ★ Favoritos.\nSintoniza un canal y presiona Añadir a Favoritos.'
-                : 'No hay canales disponibles en esta categoría'}
+                : activeCategory.iptvListId && channelsError
+                  ? channelsError
+                  : 'No hay canales disponibles en esta categoría'}
             </div>
           ) : (
-            channels.map((ch, idx) => (
-              <ChannelRow
-                key={ch.id || idx}
-                ch={ch}
-                idx={idx}
-                focused={isFocusActive && focus.area === 'channels' && focus.channelIndex === idx}
-                tuned={isSameChannel(tunedChannel, ch)}
-                fav={!!favMap[channelKey(ch)]}
-                onTune={onTuneChannel}
-                onFullscreen={onEnterFullscreen}
-              />
-            ))
+            <>
+              {rowsSpacer(chFrom, CHANNEL_PITCH)}
+              {channels.slice(chFrom, chTo).map((ch, i) => {
+                const idx = chFrom + i;
+                return (
+                  <ChannelRow
+                    key={ch.id || idx}
+                    ch={ch}
+                    idx={idx}
+                    focused={isFocusActive && focus.area === 'channels' && focus.channelIndex === idx}
+                    tuned={isSameChannel(tunedChannel, ch)}
+                    fav={!!favMap[channelKey(ch)]}
+                    onTune={onTuneChannel}
+                    onFullscreen={onEnterFullscreen}
+                  />
+                );
+              })}
+              {rowsSpacer(channels.length - chTo, CHANNEL_PITCH)}
+            </>
           )}
         </div>
       </section>
@@ -646,6 +735,14 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             autoPlay
           />
           <div className="live-preview-overlay" />
+
+          {/* The tuned channel does not answer: say so instead of a black box */}
+          {tunedIsDown && (
+            <div className="live-signal-error">
+              <div className="live-signal-error-title">Señal no disponible</div>
+              <div className="live-signal-error-desc">Este canal no responde en este momento. Prueba con otro canal.</div>
+            </div>
+          )}
           
           <div className="live-preview-top-tags">
             <span className="live-stream-badge">
@@ -814,7 +911,13 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                       : 'No hay canales disponibles en esta categoría'}
                   </div>
                 ) : (
-                  drawerChannels.map((ch, idx) => {
+                  (() => {
+                  const [dFrom, dTo] = listWindow(drawerChannels.length, drawerFocusIndex);
+                  return (
+                  <>
+                  {rowsSpacer(dFrom, DRAWER_PITCH)}
+                  {drawerChannels.slice(dFrom, dTo).map((ch, i) => {
+                    const idx = dFrom + i;
                     const isChTuned = isSameChannel(tunedChannel, ch);
                     const isCursor = drawerArea === 'channels' && drawerFocusIndex === idx;
                     const isFav = !!favMap[channelKey(ch)];
@@ -853,7 +956,11 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                         </div>
                       </div>
                     );
-                  })
+                  })}
+                  {rowsSpacer(drawerChannels.length - dTo, DRAWER_PITCH)}
+                  </>
+                  );
+                  })()
                 )}
               </div>
               </div>

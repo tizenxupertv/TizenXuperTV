@@ -9,6 +9,7 @@ import { favoritesService } from '../services/favoritesService';
 import { settingsService } from '../services/settingsService';
 import { parentalService } from '../services/parentalService';
 import { diagnosticService, DiagReport } from '../services/diagnosticService';
+import { iptvService, IPTV_LISTS } from '../services/iptvService';
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
 
@@ -34,6 +35,7 @@ const SECTIONS = [
   { id: 'account', label: 'Mi perfil', icon: '<circle cx="16" cy="10" r="5"/><path d="M6 27c.7-6 4.3-9 10-9s9.3 3 10 9"/>' },
   { id: 'playback', label: 'Configuración global', icon: '<rect x="4" y="6" width="24" height="20" rx="3"/><path d="M13 11l8 5-8 5z"/>' },
   { id: 'parental', label: 'Bloqueo', icon: '<rect x="7" y="14" width="18" height="14" rx="2"/><path d="M11 14V10a5 5 0 0 1 10 0v4"/><path d="M16 19v4"/>' },
+  { id: 'iptv', label: 'TV abierta', icon: '<rect x="4" y="9" width="24" height="16" rx="2"/><path d="M11 4l5 5 5-5"/><path d="M12 29h8"/>' },
   { id: 'diag', label: 'Diagnóstico', icon: '<path d="M3 13a19 19 0 0 1 26 0"/><path d="M8 18a12 12 0 0 1 16 0"/><path d="M13 23a6 6 0 0 1 6 0"/><circle cx="16" cy="27.5" r="1.2"/>' },
   { id: 'donate', label: 'Apoyo y Donaciones', icon: '<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>' },
   { id: 'about', label: 'Sobre nosotros', icon: '<circle cx="16" cy="16" r="12"/><path d="M16 14v8M16 10h.1"/>' }
@@ -93,7 +95,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       historyService.subscribe(rerender),
       favoritesService.subscribe(rerender),
       settingsService.subscribe(rerender),
-      parentalService.subscribe(rerender)
+      parentalService.subscribe(rerender),
+      iptvService.subscribe(rerender)
     ];
     return () => unsubs.forEach(u => u());
   }, []);
@@ -175,6 +178,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           }
         }]);
       }
+    } else if (id === 'iptv') {
+      IPTV_LISTS.forEach(l => r.push([{ id: `iptv-${l.id}`, onActivate: () => iptvService.setEnabled(l.id, !iptvService.isEnabled(l.id)) }]));
     } else if (id === 'diag') {
       r.push([{ id: 'run', onActivate: runDiag }]);
     } else if (id === 'donate') {
@@ -373,6 +378,33 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <span className="pf-switch-knob" />
             </div>
           </div>
+        </div>
+      );
+    }
+
+    if (id === 'iptv') {
+      return (
+        <div className="pf-parental">
+          <h2 className="pf-title">TV abierta (listas gratuitas)</h2>
+          <p className="pf-note">
+            Canales públicos y gratuitos recopilados por iptv-org. Cada lista activada aparece como una categoría al final de
+            TV en vivo y se descarga la primera vez que la abres. Algunas señales pueden caerse o estar bloqueadas en tu región.
+          </p>
+          {IPTV_LISTS.map(l => {
+            const on = iptvService.isEnabled(l.id);
+            const count = iptvService.peek(l.id)?.length;
+            return (
+              <div key={l.id} className={`pf-row pf-row-wide ${isF(`iptv-${l.id}`) ? 'is-focused' : ''}`} onClick={tap(`iptv-${l.id}`)}>
+                <div className="pf-row-label">
+                  <div className="pf-row-title">{l.name}</div>
+                  <div className="pf-row-desc">{on ? `Activada${count ? ` · ${count} canales` : ''}` : 'Desactivada'}</div>
+                </div>
+                <div className={`pf-switch ${on ? 'on' : 'off'}`}>
+                  <span className="pf-switch-knob" />
+                </div>
+              </div>
+            );
+          })}
         </div>
       );
     }
