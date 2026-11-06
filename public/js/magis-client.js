@@ -296,6 +296,12 @@
     var savedSess = window.localStorage && localStorage.getItem(SESSION_STORAGE_KEY);
     if (savedSess) {
       var parsedSess = JSON.parse(savedSess);
+      // A session without snToken was borrowed from the old third-party seeds list, not created by
+      // this device: drop it so the device registers its own
+      if (parsedSess && parsedSess.userId && parsedSess.userToken && !parsedSess.snToken) {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+        parsedSess = null;
+      }
       if (parsedSess && parsedSess.userId && parsedSess.userToken) {
         session.sn = parsedSess.sn || '';
         session.userId = parsedSess.userId;
@@ -535,42 +541,6 @@
   var sessionStarting = false;
   var sessionWaiters = [];
 
-  function fetchSeedSession(origErr, notifyWaiters) {
-    try {
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', 'https://raw.githubusercontent.com/xuper-plugin/kino-plugin-xuper/seeds/seeds.json', true);
-      xhr.timeout = 6000;
-      xhr.onload = function () {
-        if (xhr.status === 200) {
-          try {
-            var parsed = JSON.parse(xhr.responseText);
-            var seeds = Array.isArray(parsed) ? parsed : (parsed && parsed.seeds) || [];
-            if (seeds.length) {
-              var pick = seeds[Math.floor(Math.random() * Math.min(seeds.length, 50))];
-              var uId = trim(pick && pick.userId);
-              var uTok = trim(pick && pick.userToken);
-              if (uId && uTok) {
-                session.userId = uId;
-                session.userToken = uTok;
-                session.sn = trim(pick.sn).toLowerCase();
-                session.snToken = '';
-                session.ready = true;
-                saveSession();
-                return notifyWaiters(null, session);
-              }
-            }
-          } catch (e) {}
-        }
-        notifyWaiters(origErr);
-      };
-      xhr.onerror = function () { notifyWaiters(origErr); };
-      xhr.ontimeout = function () { notifyWaiters(origErr); };
-      xhr.send();
-    } catch (e) {
-      notifyWaiters(origErr);
-    }
-  }
-
   function ensureSession(callback) {
     callback = callback || function () {};
     if (session.ready && session.userId && session.userToken) {
@@ -603,9 +573,9 @@
     }
 
     call('v3/snToken', fp, { baseFields: false }, function (err, res) {
-      if (err) return fetchSeedSession(err, notifyWaiters);
+      if (err) return notifyWaiters(err);
       var snToken = trim(res && res.snToken);
-      if (!snToken) return fetchSeedSession(new Error('No snToken returned'), notifyWaiters);
+      if (!snToken) return notifyWaiters(new Error('No snToken returned'));
       var sn = (res && trim(res.sn)) || md5(snToken + SNTOKEN_SALT);
       session.snToken = snToken;
       session.sn = String(sn).toLowerCase();
@@ -624,10 +594,10 @@
       };
 
       call('v8/active', activePayload, { baseFields: false }, function (aErr, aRes) {
-        if (aErr) return fetchSeedSession(aErr, notifyWaiters);
+        if (aErr) return notifyWaiters(aErr);
         var uId = trim(aRes && (aRes.userId || aRes.id || (aRes.userInfo && aRes.userInfo.userId)));
         var uTok = trim(aRes && (aRes.userToken || aRes.token || (aRes.userInfo && aRes.userInfo.userToken)));
-        if (!uId || !uTok) return fetchSeedSession(new Error('Active did not return userId/userToken'), notifyWaiters);
+        if (!uId || !uTok) return notifyWaiters(new Error('Active did not return userId/userToken'));
 
         session.userId = uId;
         session.userToken = uTok;
