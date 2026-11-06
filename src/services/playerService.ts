@@ -1,6 +1,6 @@
 import { LiveChannel } from '../types/channel';
 import { normalizeChannel } from '../lib/channelKey';
-import { hostOf, logPlayback, setPlaybackContext } from '../lib/playbackLog';
+import { hostOf, isIspBlockPage, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 
 declare global {
   interface Window {
@@ -20,6 +20,8 @@ export type LiveSignal = 'idle' | 'loading' | 'playing' | 'error';
 export interface LiveStatus {
   code: string;
   state: LiveSignal;
+  /** Why it failed, when known: 'isp' = the internet provider blocks the server */
+  reason?: 'isp';
 }
 
 // Without a picture after this long, the channel counts as down
@@ -89,12 +91,15 @@ class PlayerService {
     return window.__xuperPreviewHls ? 'HLS.js' : 'AVPlay';
   }
 
-  private setStatus(code: string, state: LiveSignal) {
+  /** An internet provider's block page was seen this session (also explains VOD errors) */
+  public ispBlocked = false;
+
+  private setStatus(code: string, state: LiveSignal, reason?: 'isp') {
     if (state === 'playing' && !(this.status.code === code && this.status.state === 'playing')) {
       logPlayback({ kind: 'start', player: this.playerName(), detail: `reproduciendo${this.pictureInfo()}` });
     }
-    if (this.status.code === code && this.status.state === state) return;
-    this.status = { code, state };
+    if (this.status.code === code && this.status.state === state && this.status.reason === reason) return;
+    this.status = reason ? { code, state, reason } : { code, state };
     this.statusListeners.forEach(cb => {
       try { cb(this.status); } catch (e) {}
     });
@@ -137,7 +142,7 @@ class PlayerService {
   }
 
   /** The channel does not play: stop trying (no endless retries) and report it */
-  private failChannel(code: string, why: string) {
+  private failChannel(code: string, why: string, reason?: 'isp') {
     if (this.activeChannelCode !== code) return;
     console.warn('[PlayerService] Channel down:', code, why);
     logPlayback({ kind: 'error', player: this.playerName(), detail: why + (this.lastHlsError ? ` · ${this.lastHlsError}` : '') });
@@ -153,7 +158,7 @@ class PlayerService {
         this.currentVideoEl.load();
       } catch {}
     }
-    this.setStatus(code, 'error');
+    this.setStatus(code, 'error', reason);
   }
 
   private destroyHls() {
@@ -384,6 +389,8 @@ class PlayerService {
         // A live playlist refresh that comes back broken (cut off, empty) while the channel plays is
         // usually a hiccup of that server: retry it before moving to the backups
         let refreshRetries = 0;
+        // Answered by an internet provider's block page instead of the playlist
+        let sawBlockPage = false;
         let currentSource = effectiveUrl;
         const backups = (streamMeta && streamMeta.backupUrls) || [];
         hls.on(window.Hls.Events.LEVEL_LOADED, () => { refreshRetries = 0; });
@@ -418,6 +425,13 @@ class PlayerService {
             } catch (e) {}
           }
           this.lastHlsError = `${data.type}/${data.details}${status}${body ? ` «${body}»` : ''}`;
+          try {
+            const nd = data.networkDetails;
+            if (nd && isIspBlockPage(typeof nd.responseText === 'string' ? nd.responseText : '', nd.responseURL)) {
+              sawBlockPage = true;
+              this.ispBlocked = true;
+            }
+          } catch (e) {}
           const host = hostOf((data.frag && data.frag.url) || data.url || (data.context && data.context.url) || (streamMeta && streamMeta.url) || url);
           if (data.fatal) logPlayback({ kind: 'error', player: 'HLS.js', detail: this.lastHlsError, host });
           else if (data.details === 'bufferStalledError') logPlayback({ kind: 'stall', player: 'HLS.js', detail: 'bufferStalledError', host });
@@ -454,7 +468,7 @@ class PlayerService {
             }
             // A dead stream (404, refused, bad format) stops after a few tries and shows the error
             if (retries++ >= MAX_HLS_RETRIES || (data.type !== window.Hls.ErrorTypes.NETWORK_ERROR && data.type !== window.Hls.ErrorTypes.MEDIA_ERROR)) {
-              if (code && window.__xuperPreviewHls === hls) this.failChannel(code, `hls ${data.details}`);
+              if (code && window.__xuperPreviewHls === hls) this.failChannel(code, `hls ${data.details}`, sawBlockPage ? 'isp' : undefined);
               return;
             }
             if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR) {

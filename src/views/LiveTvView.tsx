@@ -745,10 +745,20 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
 
           {/* The tuned channel does not answer: say so instead of a black box */}
           {tunedIsDown && (
-            <div className="live-signal-error">
-              <div className="live-signal-error-title">Señal no disponible</div>
-              <div className="live-signal-error-desc">Este canal no responde en este momento. Prueba con otro canal.</div>
-            </div>
+            liveStatus.reason === 'isp' ? (
+              <div className="live-signal-error">
+                <div className="live-signal-error-title">Tu proveedor de internet bloquea este canal</div>
+                <div className="live-signal-error-desc">
+                  Cambia el DNS de la TV a 1.1.1.1: Configuración › General › Red › Estado de la red › Configuración de IP ›
+                  Configuración de DNS › Introducir manualmente. Si sigue igual, prueba con otra red.
+                </div>
+              </div>
+            ) : (
+              <div className="live-signal-error">
+                <div className="live-signal-error-title">Señal no disponible</div>
+                <div className="live-signal-error-desc">Este canal no responde en este momento. Prueba con otro canal.</div>
+              </div>
+            )
           )}
           
           <div className="live-preview-top-tags">

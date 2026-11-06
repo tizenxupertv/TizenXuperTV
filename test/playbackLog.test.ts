@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clearPlaybackLog, hostOf, logPlayback, playbackEvents, setPlaybackContext } from '../src/lib/playbackLog.ts';
+import { clearPlaybackLog, hostOf, isIspBlockPage, logPlayback, playbackEvents, setPlaybackContext } from '../src/lib/playbackLog.ts';
 
 test('hostOf keeps only the host: no path, query, tokens or credentials', () => {
   assert.equal(hostOf('http://niguof.vynbszicd.com/live/cyx_x7b.m3u8?token=SECRET'), 'niguof.vynbszicd.com');
@@ -31,4 +31,12 @@ test('repeated stalls on one channel within 15 s count once; the log keeps the l
   const events = playbackEvents();
   assert.equal(events.length, 40);
   assert.equal(events.at(-1)!.detail, '59');
+});
+
+test('ISP block pages are recognized by their text or by the host they redirect to', () => {
+  assert.equal(isIspBlockPage('<p class="alerta">Este sitio web no se encuentra disponible desde las redes de Entel</p>', 'http://portalbloqueo.entel.cl/'), true);
+  assert.equal(isIspBlockPage('<html>Sitio bloqueado por orden judicial</html>'), true);
+  assert.equal(isIspBlockPage('', 'https://bloqueo.isp.example/aviso'), true);
+  assert.equal(isIspBlockPage('#EXTM3U\n#EXT-X-VERSION:3', 'http://niguof.vynbszicd.com/live/a.m3u8'), false);
+  assert.equal(isIspBlockPage('<html><title>404 Not Found</title></html>', 'http://cdn.example.com/x'), false);
 });

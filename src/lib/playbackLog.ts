@@ -65,6 +65,13 @@ export function playbackEvents(): PlaybackEvent[] {
   return events.slice();
 }
 
+/** An internet provider's block page instead of a stream (Chile's ISPs, for one, block these servers) */
+export function isIspBlockPage(body: string, finalUrl?: string): boolean {
+  const host = hostOf(finalUrl);
+  if (/bloqueo|block/i.test(host)) return true;
+  return /portalbloqueo|sitio (web )?(bloqueado|no se encuentra disponible)|no se encuentra disponible desde|bloqueado por orden|blocked by (your|order)|access to this (site|website) (has been|is) (blocked|denied)/i.test(String(body || ''));
+}
+
 /** For tests */
 export function clearPlaybackLog(): void {
   events = [];
