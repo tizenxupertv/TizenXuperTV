@@ -24,7 +24,7 @@ import { catalogService } from './services/catalogService';
 import { VodItem, VodEpisode } from './types/vod';
 import { LiveChannel, LiveCategory } from './types/channel';
 import { historyService } from './services/historyService';
-import { settingsService, applySubtitleChoice, subtitleChoiceIndex, PREFERRED_LANGUAGES, SUBTITLE_CHOICES } from './services/settingsService';
+import { settingsService, subtitleChoiceIndex, applySettingChoice, SETTINGS_ROW } from './services/settingsService';
 import { getResumeTarget, startAtForEpisode } from './lib/vodResume';
 import { FocusDomain, VodPlayerState } from './app/types';
 import { useCatalog } from './app/useCatalog';
@@ -384,7 +384,7 @@ export const App: React.FC = () => {
     }
     if (key === 'colorYellow') {
       if (activeDetailItem) {
-        setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'audio', modalIndex: settingsService.get().audio, actionIndex: 2 }));
+        setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: 0, actionIndex: 2 }));
         return true;
       }
       if (selectedTab === 'tv') {
@@ -683,17 +683,13 @@ export const App: React.FC = () => {
           onDetailLoaded={counts => setDetailCounts(counts)}
           onOpenAudioModal={col => {
             const st = settingsService.get();
-            const current = col === 'audio' ? st.audio : subtitleChoiceIndex(st);
-            setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: col, modalIndex: current, actionIndex: col === 'audio' ? 2 : 3 }));
+            const current = col === 'audio' ? st.audio : col === 'subs' ? subtitleChoiceIndex(st) : col === 'quality' ? st.quality || 0 : 0;
+            setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: col, modalIndex: current, actionIndex: 2 }));
           }}
-          onCloseAudioModal={() => setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: prev.modalCol === 'subs' ? 3 : 2 }))}
-          onSelectAudioOption={opt => {
-            settingsService.set({ audio: Math.max(0, PREFERRED_LANGUAGES.indexOf(opt)) });
-            setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 2 }));
-          }}
-          onSelectSubOption={sub => {
-            applySubtitleChoice(Math.max(0, SUBTITLE_CHOICES.indexOf(sub)));
-            setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 3 }));
+          onCloseAudioModal={() => setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 2 }))}
+          onSelectSetting={(col, index) => {
+            applySettingChoice(col, index);
+            setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: SETTINGS_ROW[col] }));
           }}
         />
       )}

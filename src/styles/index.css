@@ -2474,6 +2474,12 @@ html, body {
   margin-bottom: 18px;
 }
 
+/* Centred with the season button (the title's own bottom margin would lift it) */
+.vod-series-header .section-title {
+  margin: 0;
+  line-height: 1;
+}
+
 .vod-seasons-row {
   display: flex;
   align-items: center;
@@ -5975,4 +5981,35 @@ html.xuper-vod-avplay .app-root,
   max-height: 60vh;
   overflow-y: auto;
   scrollbar-width: none;
+}
+
+/* ⚙ settings list of the detail (two levels) */
+.vod-settings-menu {
+  min-width: 420px;
+}
+
+.vod-settings-value {
+  margin-left: auto;
+  padding-left: 28px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.vod-settings-chevron {
+  padding-left: 14px;
+  color: #94a3b8;
+}
+
+.vod-action-option.is-focused .vod-settings-value,
+.vod-action-option.is-focused .vod-settings-chevron {
+  color: #334155;
+}
+
+.vod-settings-head {
+  padding: 8px 16px 10px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #94a3b8;
 }

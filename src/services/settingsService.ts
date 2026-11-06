@@ -55,6 +55,16 @@ class SettingsService {
 
 export const settingsService = new SettingsService();
 
+/** Row of each setting in the detail's settings list (Audio, Subtítulos, Resolución) */
+export const SETTINGS_ROW: Record<'audio' | 'subs' | 'quality', number> = { audio: 0, subs: 1, quality: 2 };
+
+/** Applies option `index` of a setting of the detail's settings list */
+export function applySettingChoice(col: 'audio' | 'subs' | 'quality', index: number): void {
+  if (col === 'audio') settingsService.set({ audio: index });
+  else if (col === 'subs') applySubtitleChoice(index);
+  else settingsService.set({ quality: index });
+}
+
 /** Language codes in the same order as the audio / subtitle language options of the profile */
 export const PREFERRED_LANGUAGES = ['Español (Latino)', 'Español (España)', 'Portugués', 'Inglés'];
 

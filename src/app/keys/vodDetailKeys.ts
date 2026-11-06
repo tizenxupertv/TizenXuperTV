@@ -1,6 +1,6 @@
 import { TvKey } from '../../hooks/useTvRemote';
 import { favoritesService } from '../../services/favoritesService';
-import { settingsService, applySubtitleChoice, subtitleChoiceIndex, QUALITY_OPTIONS } from '../../services/settingsService';
+import { settingsService, subtitleChoiceIndex, applySettingChoice, SETTINGS_ROW, QUALITY_OPTIONS } from '../../services/settingsService';
 import { VodDetailFocus, AUDIO_OPTIONS, SUB_OPTIONS, EP_RANGE } from '../../views/VodDetailView';
 import { VodItem, VodEpisode } from '../../types/vod';
 import { DetailCounts } from '../useVodDetail';
@@ -39,35 +39,36 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
   const episodesCount = detailCounts.episodesCount;
   const relatedCount = currentRelatedItems.length;
   const hasTrailer = Boolean(detailCounts.hasTrailer || activeDetailItem.trailerUrl || (activeDetailItem as any).trailer);
-  const maxActionIndex = hasTrailer ? 5 : 4;
+  const maxActionIndex = hasTrailer ? 3 : 2;
   const rangeCount = Math.ceil(episodesCount / EP_RANGE);
 
-  // Modal has top priority for back and dpad
+  // Settings list under the ⚙ button: first level Audio / Subtítulos / Resolución, then their options
   if (area === 'audioModal') {
-    const col = detailFocus.modalCol || 'audio';
+    const col = detailFocus.modalCol || 'menu';
     const idx = detailFocus.modalIndex || 0;
-
-    // The list under the Audio (action 2) or Subtítulos (action 3) button
-    const homeAction = col === 'subs' ? 3 : 2;
-    if (key === 'back' || key === 'left' || key === 'right') {
-      setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: homeAction }));
+    const ROWS = ['audio', 'subs', 'quality'] as const;
+    if (col === 'menu') {
+      if (key === 'back' || key === 'left') {
+        setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 2 }));
+      } else if (key === 'up' || key === 'down') {
+        setDetailFocus(prev => ({ ...prev, modalIndex: key === 'up' ? Math.max(0, idx - 1) : Math.min(ROWS.length - 1, idx + 1) }));
+      } else if (key === 'enter' || key === 'right') {
+        const next = ROWS[idx];
+        const st = settingsService.get();
+        const current = next === 'audio' ? st.audio : next === 'subs' ? subtitleChoiceIndex(st) : st.quality || 0;
+        setDetailFocus(prev => ({ ...prev, modalCol: next, modalIndex: current }));
+      }
       return true;
     }
-    if (key === 'up') {
-      setDetailFocus(prev => ({ ...prev, modalIndex: Math.max(0, idx - 1) }));
-      return true;
-    }
-    if (key === 'down') {
-      const maxIdx = col === 'audio' ? AUDIO_OPTIONS.length - 1 : SUB_OPTIONS.length - 1;
-      setDetailFocus(prev => ({ ...prev, modalIndex: Math.min(maxIdx, idx + 1) }));
-      return true;
-    }
-    if (key === 'enter') {
+    const options = col === 'audio' ? AUDIO_OPTIONS : col === 'subs' ? SUB_OPTIONS : QUALITY_OPTIONS;
+    if (key === 'back' || key === 'left') {
+      setDetailFocus(prev => ({ ...prev, modalCol: 'menu', modalIndex: SETTINGS_ROW[col] }));
+    } else if (key === 'up' || key === 'down') {
+      setDetailFocus(prev => ({ ...prev, modalIndex: key === 'up' ? Math.max(0, idx - 1) : Math.min(options.length - 1, idx + 1) }));
+    } else if (key === 'enter') {
       // Same preferences as the profile (Configuración global)
-      if (col === 'audio') settingsService.set({ audio: idx });
-      else applySubtitleChoice(idx);
-      setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: homeAction }));
-      return true;
+      applySettingChoice(col, idx);
+      setDetailFocus(prev => ({ ...prev, modalCol: 'menu', modalIndex: SETTINGS_ROW[col] }));
     }
     return true;
   }
@@ -131,13 +132,8 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
       } else if (actionIndex === 1) {
         favoritesService.toggleFavorite(activeDetailItem.id);
       } else if (actionIndex === 2) {
-        setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'audio', modalIndex: settingsService.get().audio }));
-      } else if (actionIndex === 3) {
-        setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'subs', modalIndex: subtitleChoiceIndex(settingsService.get()) }));
-      } else if (actionIndex === 4) {
-        const q = settingsService.get().quality || 0;
-        settingsService.set({ quality: (q + 1) % QUALITY_OPTIONS.length });
-      } else if (actionIndex === 5 && hasTrailer) {
+        setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: 0 }));
+      } else if (actionIndex === 3 && hasTrailer) {
         playFromDetail(activeDetailItem, undefined, true);
       }
       return true;

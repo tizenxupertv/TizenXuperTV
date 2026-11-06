@@ -10,6 +10,8 @@ import { settingsService, PREFERRED_LANGUAGES, SUBTITLE_CHOICES, subtitleChoiceI
 import { getResumeTarget, getEpisodeStatus, EpisodeStatus } from '../lib/vodResume';
 import { useViewProfiler } from '../lib/perfMonitor';
 
+export type SettingsCol = 'menu' | 'audio' | 'subs' | 'quality';
+
 export type DetailFocusArea = 'back' | 'actions' | 'seasons' | 'seasonMenu' | 'epRanges' | 'episodes' | 'related' | 'audioModal';
 
 export interface VodDetailFocus {
@@ -22,7 +24,8 @@ export interface VodDetailFocus {
   seasonMenuIndex?: number;
   /** Range of 20 episodes focused in the ranges row ("1-20", "21-40"…) */
   rangeIndex?: number;
-  modalCol?: 'audio' | 'subs';
+  /** Settings list: 'menu' (Audio / Subtítulos / Resolución) or the options of one of them */
+  modalCol?: SettingsCol;
   modalIndex?: number;
 }
 
@@ -49,8 +52,10 @@ interface VodDetailViewProps {
   onSelectRelated?: (item: VodItem) => void;
   onDetailLoaded?: (counts: { seasonsCount: number; episodesCount: number; relatedCount: number; isSeries: boolean; hasTrailer?: boolean }) => void;
   onEpisodesChange?: (data: { episodes: VodEpisode[]; seasonId: string; seasonNumber?: number; activeEpisodeIndex?: number }) => void;
-  /** Opens the list under the Audio or Subtítulos button */
-  onOpenAudioModal?: (col: 'audio' | 'subs') => void;
+  /** Opens the settings list: its first level ('menu') or the options of one setting */
+  onOpenAudioModal?: (col: SettingsCol) => void;
+  /** Picks option `index` of a setting (mouse) */
+  onSelectSetting?: (col: 'audio' | 'subs' | 'quality', index: number) => void;
   onCloseAudioModal?: () => void;
   onSelectAudioOption?: (audio: string) => void;
   onSelectSubOption?: (sub: string) => void;
@@ -73,7 +78,8 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   onOpenAudioModal,
   onCloseAudioModal,
   onSelectAudioOption,
-  onSelectSubOption
+  onSelectSubOption,
+  onSelectSetting
 }) => {
   useViewProfiler('Detalle VOD');
   const [detailData, setDetailData] = useState<{
@@ -101,6 +107,12 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   const prefs = settingsService.get();
   const currentAudio = AUDIO_OPTIONS[prefs.audio] || AUDIO_OPTIONS[0];
   const currentSub = SUB_OPTIONS[subtitleChoiceIndex(prefs)] || SUB_OPTIONS[0];
+  const currentQuality = QUALITY_OPTIONS[prefs.quality] || QUALITY_OPTIONS[0];
+  const settingsRows: { col: 'audio' | 'subs' | 'quality'; label: string; value: string; options: string[] }[] = [
+    { col: 'audio', label: 'Audio', value: currentAudio, options: AUDIO_OPTIONS },
+    { col: 'subs', label: 'Subtítulos', value: currentSub, options: SUB_OPTIONS },
+    { col: 'quality', label: 'Resolución', value: currentQuality, options: QUALITY_OPTIONS }
+  ];
 
   const episodesSliderRef = useRef<HTMLDivElement>(null);
   const relatedSliderRef = useRef<HTMLDivElement>(null);
@@ -429,53 +441,60 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
             <span className="btn-icon">{isFav ? '★' : '☆'}</span>
           </button>
 
-          {/* Actions 2 and 3: Audio / Subtítulos, each with its list under the button (as in the player) */}
-          {(['audio', 'subs'] as const).map((col, k) => {
-            const options = col === 'audio' ? AUDIO_OPTIONS : SUB_OPTIONS;
-            const current = col === 'audio' ? currentAudio : currentSub;
-            const isOpen = focus.area === 'audioModal' && (focus.modalCol || 'audio') === col;
-            return (
-              <div key={col} className="vod-action-wrap">
-                <button
-                  className={`vod-action-btn secondary-btn ${
-                    (focus.area === 'actions' && focus.actionIndex === 2 + k) || isOpen ? 'is-focused' : ''
-                  }`}
-                  onClick={() => onOpenAudioModal && onOpenAudioModal(col)}
-                >
-                  <span>{col === 'audio' ? 'Audio' : 'Subtítulos'} · {current}</span>
-                  <span className="vod-action-caret">▾</span>
-                </button>
-                {isOpen && (
-                  <div className="vod-action-menu">
-                    {options.map((opt, i) => (
+          {/* Action 2: Ajustes (Audio, Subtítulos, Resolución) in one list of two levels */}
+          <div className="vod-action-wrap">
+            <button
+              className={`vod-action-btn vod-action-icon-only secondary-btn ${
+                (focus.area === 'actions' && focus.actionIndex === 2) || focus.area === 'audioModal' ? 'is-focused' : ''
+              }`}
+              onClick={() => onOpenAudioModal && onOpenAudioModal('menu')}
+              aria-label="Ajustes de reproducción"
+            >
+              <svg className="btn-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+              </svg>
+            </button>
+            {focus.area === 'audioModal' && (
+              <div className="vod-action-menu vod-settings-menu">
+                {(focus.modalCol || 'menu') === 'menu'
+                  ? settingsRows.map((row, i) => (
                       <div
-                        key={opt}
-                        className={`vod-action-option ${opt === current ? 'is-active' : ''} ${(focus.modalIndex || 0) === i ? 'is-focused' : ''}`}
-                        onClick={() => (col === 'audio' ? onSelectAudioOption : onSelectSubOption)?.(opt)}
+                        key={row.col}
+                        className={`vod-action-option ${(focus.modalIndex || 0) === i ? 'is-focused' : ''}`}
+                        onClick={() => onOpenAudioModal && onOpenAudioModal(row.col)}
                       >
-                        <span>{opt}</span>
-                        {opt === current && <span className="vod-season-check">✓</span>}
+                        <span>{row.label}</span>
+                        <span className="vod-settings-value">{row.value}</span>
+                        <span className="vod-settings-chevron">›</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  : (() => {
+                      const row = settingsRows.find(r => r.col === focus.modalCol) || settingsRows[0];
+                      return (
+                        <>
+                          <div className="vod-settings-head">‹ {row.label}</div>
+                          {row.options.map((opt, i) => (
+                            <div
+                              key={opt}
+                              className={`vod-action-option ${opt === row.value ? 'is-active' : ''} ${(focus.modalIndex || 0) === i ? 'is-focused' : ''}`}
+                              onClick={() => onSelectSetting && onSelectSetting(row.col, i)}
+                            >
+                              <span>{opt}</span>
+                              {opt === row.value && <span className="vod-season-check">✓</span>}
+                            </div>
+                          ))}
+                        </>
+                      );
+                    })()}
               </div>
-            );
-          })}
+            )}
+          </div>
 
-          {/* Action 4: Resolution (OK cycles Auto / 1080p / 720p / 480p; used when the title has several) */}
-          <button
-            className={`vod-action-btn secondary-btn ${focus.area === 'actions' && focus.actionIndex === 4 ? 'is-focused' : ''}`}
-            onClick={() => settingsService.set({ quality: (prefs.quality + 1) % QUALITY_OPTIONS.length })}
-          >
-            <span className="btn-icon">⚙</span>
-            <span>Resolución · {QUALITY_OPTIONS[prefs.quality] || QUALITY_OPTIONS[0]}</span>
-          </button>
-
-          {/* Action 5: Trailer (Only if trailer exists) */}
+          {/* Action 3: Trailer (Only if trailer exists) */}
           {hasTrailer && (
             <button
-              className={`vod-action-btn secondary-btn ${focus.area === 'actions' && focus.actionIndex === 5 ? 'is-focused' : ''}`}
+              className={`vod-action-btn secondary-btn ${focus.area === 'actions' && focus.actionIndex === 3 ? 'is-focused' : ''}`}
               onClick={() => onPlay(currentItem, undefined, true)}
             >
               <span className="btn-icon">🎬</span>
