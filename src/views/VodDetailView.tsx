@@ -12,7 +12,7 @@ import { useViewProfiler } from '../lib/perfMonitor';
 
 export type SettingsCol = 'menu' | 'audio' | 'subs' | 'quality';
 
-export type DetailFocusArea = 'back' | 'actions' | 'seasons' | 'seasonMenu' | 'epRanges' | 'episodes' | 'related' | 'audioModal';
+export type DetailFocusArea = 'back' | 'actions' | 'quick' | 'seasons' | 'seasonMenu' | 'epRanges' | 'episodes' | 'related' | 'audioModal';
 
 export interface VodDetailFocus {
   area: DetailFocusArea;
@@ -20,6 +20,8 @@ export interface VodDetailFocus {
   seasonIndex: number;
   episodeIndex: number;
   relatedIndex: number;
+  /** Small buttons under the big ones: Mi lista, Ajustes, Tráiler */
+  quickIndex?: number;
   /** Season highlighted in the open season list (the season loads only when picked) */
   seasonMenuIndex?: number;
   /** Range of 20 episodes focused in the ranges row ("1-20", "21-40"…) */
@@ -43,14 +45,15 @@ interface VodDetailViewProps {
   isFavorite: boolean;
   relatedItems?: VodItem[];
   onBack: () => void;
-  onPlay: (item: VodItem, episode?: VodEpisode, isTrailer?: boolean) => void;
+  /** fromStart: "Reiniciar" (the resume episode from the beginning) */
+  onPlay: (item: VodItem, episode?: VodEpisode, isTrailer?: boolean, fromStart?: boolean) => void;
   onToggleFavorite: (item: VodItem) => void;
   onSelectSeason?: (seasonIndex: number) => void;
   onSelectEpisode?: (episodeIndex: number) => void;
   /** Opens the season list (mouse) */
   onOpenSeasonMenu?: () => void;
   onSelectRelated?: (item: VodItem) => void;
-  onDetailLoaded?: (counts: { seasonsCount: number; episodesCount: number; relatedCount: number; isSeries: boolean; hasTrailer?: boolean }) => void;
+  onDetailLoaded?: (counts: { seasonsCount: number; episodesCount: number; relatedCount: number; isSeries: boolean; hasTrailer?: boolean; canRestart?: boolean }) => void;
   onEpisodesChange?: (data: { episodes: VodEpisode[]; seasonId: string; seasonNumber?: number; activeEpisodeIndex?: number }) => void;
   /** Opens the settings list: its first level ('menu') or the options of one setting */
   onOpenAudioModal?: (col: SettingsCol) => void;
@@ -263,6 +266,11 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   void historyTick;
   const isSeries = Boolean(currentItem.isSeries || currentItem.kind === 'serie' || seasons.length > 0 || episodes.length > 0);
   const hasTrailer = Boolean(currentItem.trailerUrl || (currentItem as any).trailer);
+  // Big buttons: Reproducir / Continuar, then Reiniciar when there is progress (else Tráiler)
+  const canRestart = !!resume.startAt && resume.startAt > 0;
+  const secondary: 'restart' | 'trailer' | null = canRestart ? 'restart' : hasTrailer ? 'trailer' : null;
+  // Small buttons with their label under the big ones
+  const quickItems: ('fav' | 'settings' | 'trailer')[] = ['fav', 'settings', ...(hasTrailer && secondary !== 'trailer' ? ['trailer' as const] : [])];
 
   // Parent callbacks are new functions on every render: keep the latest in refs so the
   // effects below only fire when the data changes (otherwise they loop forever)
@@ -279,10 +287,11 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         episodesCount: episodes.length,
         relatedCount: relatedItems.length,
         isSeries,
-        hasTrailer
+        hasTrailer,
+        canRestart
       });
     }
-  }, [seasons.length, episodes.length, relatedItems.length, isSeries, hasTrailer]);
+  }, [seasons.length, episodes.length, relatedItems.length, isSeries, hasTrailer, canRestart]);
 
   // Auto-scroll horizontal episode slider with comfortable threshold
   useEffect(() => {
@@ -326,7 +335,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   // Auto-scroll vertical page when navigating between top actions and bottom rows
   useEffect(() => {
     if (!rootScrollRef.current) return;
-    if (focus.area === 'back' || focus.area === 'actions') {
+    if (focus.area === 'back' || focus.area === 'actions' || focus.area === 'quick' || focus.area === 'audioModal') {
       rootScrollRef.current.scrollTop = 0;
     } else if (focus.area === 'seasons' || focus.area === 'seasonMenu' || focus.area === 'epRanges' || focus.area === 'episodes') {
       // The whole series section (selector, ranges, tiles) just under the header
@@ -415,92 +424,108 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         </div>
 
         {/* Action Buttons Row */}
-        <div className="vod-detail-actions-row">
-          {/* Action 0: Play / Resume */}
+        {/* Big buttons (as streaming apps): Reproducir / Continuar, Reiniciar or Tráiler */}
+        <div className="vod-detail-actions-row vod-actions-main">
           <button
-            className={`vod-action-btn primary-btn ${focus.area === 'actions' && focus.actionIndex === 0 ? 'is-focused' : ''}`}
+            className={`vod-main-btn is-primary ${focus.area === 'actions' && focus.actionIndex === 0 ? 'is-focused' : ''}`}
             onClick={() => onPlay(currentItem, resume.episode)}
           >
-            <span className="btn-icon">▶</span>
-            <span>{resume.label}</span>
+            <span className="vod-main-icon">▶</span>
+            <span className="vod-main-label">{resume.label}</span>
           </button>
-
-          {/* Action 1: Favorite (Icon-only) */}
-          <button
-            className={`vod-action-btn vod-action-icon-only secondary-btn ${isFav ? 'is-fav' : ''} ${focus.area === 'actions' && focus.actionIndex === 1 ? 'is-focused' : ''}`}
-            onClick={() => {
-              if (onToggleFavorite) {
-                onToggleFavorite(currentItem);
-              } else {
-                favoritesService.toggleFavorite(currentItem.id);
-              }
-            }}
-            title={isFav ? 'Quitar de Favoritos' : 'Añadir a Favoritos'}
-            aria-label="Favoritos"
-          >
-            <span className="btn-icon">{isFav ? '★' : '☆'}</span>
-          </button>
-
-          {/* Action 2: Ajustes (Audio, Subtítulos, Resolución) in one list of two levels */}
-          <div className="vod-action-wrap">
+          {secondary && (
             <button
-              className={`vod-action-btn vod-action-icon-only secondary-btn ${
-                (focus.area === 'actions' && focus.actionIndex === 2) || focus.area === 'audioModal' ? 'is-focused' : ''
-              }`}
-              onClick={() => onOpenAudioModal && onOpenAudioModal('menu')}
-              aria-label="Ajustes de reproducción"
+              className={`vod-main-btn ${focus.area === 'actions' && focus.actionIndex === 1 ? 'is-focused' : ''}`}
+              onClick={() => (secondary === 'restart' ? onPlay(currentItem, resume.episode, false, true) : onPlay(currentItem, undefined, true))}
             >
-              <svg className="btn-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-              </svg>
-            </button>
-            {focus.area === 'audioModal' && (
-              <div className="vod-action-menu vod-settings-menu">
-                {(focus.modalCol || 'menu') === 'menu'
-                  ? settingsRows.map((row, i) => (
-                      <div
-                        key={row.col}
-                        className={`vod-action-option ${(focus.modalIndex || 0) === i ? 'is-focused' : ''}`}
-                        onClick={() => onOpenAudioModal && onOpenAudioModal(row.col)}
-                      >
-                        <span>{row.label}</span>
-                        <span className="vod-settings-value">{row.value}</span>
-                        <span className="vod-settings-chevron">›</span>
-                      </div>
-                    ))
-                  : (() => {
-                      const row = settingsRows.find(r => r.col === focus.modalCol) || settingsRows[0];
-                      return (
-                        <>
-                          <div className="vod-settings-head">‹ {row.label}</div>
-                          {row.options.map((opt, i) => (
-                            <div
-                              key={opt}
-                              className={`vod-action-option ${opt === row.value ? 'is-active' : ''} ${(focus.modalIndex || 0) === i ? 'is-focused' : ''}`}
-                              onClick={() => onSelectSetting && onSelectSetting(row.col, i)}
-                            >
-                              <span>{opt}</span>
-                              {opt === row.value && <span className="vod-season-check">✓</span>}
-                            </div>
-                          ))}
-                        </>
-                      );
-                    })()}
-              </div>
-            )}
-          </div>
-
-          {/* Action 3: Trailer (Only if trailer exists) */}
-          {hasTrailer && (
-            <button
-              className={`vod-action-btn secondary-btn ${focus.area === 'actions' && focus.actionIndex === 3 ? 'is-focused' : ''}`}
-              onClick={() => onPlay(currentItem, undefined, true)}
-            >
-              <span className="btn-icon">🎬</span>
-              <span>Ver Tráiler</span>
+              <span className="vod-main-icon">{secondary === 'restart' ? '↻' : '🎬'}</span>
+              <span className="vod-main-label">{secondary === 'restart' ? 'Reiniciar' : 'Ver tráiler'}</span>
             </button>
           )}
+        </div>
+
+        {/* Small buttons with their label: Mi lista, Ajustes (Audio / Subtítulos / Resolución), Tráiler */}
+        <div className="vod-actions-quick">
+          {quickItems.map((q, i) => {
+            const focused = (focus.area === 'quick' && focus.quickIndex === i) || (q === 'settings' && focus.area === 'audioModal');
+            if (q === 'settings') {
+              return (
+                <div key={q} className="vod-action-wrap">
+                  <button
+                    className={`vod-quick-btn ${focused ? 'is-focused' : ''}`}
+                    onClick={() => onOpenAudioModal && onOpenAudioModal('menu')}
+                  >
+                    <span className="vod-quick-circle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+                    </svg></span>
+                    <span>Ajustes</span>
+                  </button>
+                  {focus.area === 'audioModal' && (
+                    <div className="vod-action-menu vod-settings-menu">
+                      {(focus.modalCol || 'menu') === 'menu'
+                        ? settingsRows.map((row, r) => (
+                            <div
+                              key={row.col}
+                              className={`vod-action-option ${(focus.modalIndex || 0) === r ? 'is-focused' : ''}`}
+                              onClick={() => onOpenAudioModal && onOpenAudioModal(row.col)}
+                            >
+                              <span>{row.label}</span>
+                              <span className="vod-settings-value">{row.value}</span>
+                              <span className="vod-settings-chevron">›</span>
+                            </div>
+                          ))
+                        : (() => {
+                            const row = settingsRows.find(x => x.col === focus.modalCol) || settingsRows[0];
+                            return (
+                              <>
+                                <div className="vod-settings-head">‹ {row.label}</div>
+                                {row.options.map((opt, o) => (
+                                  <div
+                                    key={opt}
+                                    className={`vod-action-option ${opt === row.value ? 'is-active' : ''} ${(focus.modalIndex || 0) === o ? 'is-focused' : ''}`}
+                                    onClick={() => onSelectSetting && onSelectSetting(row.col, o)}
+                                  >
+                                    <span>{opt}</span>
+                                    {opt === row.value && <span className="vod-season-check">✓</span>}
+                                  </div>
+                                ))}
+                              </>
+                            );
+                          })()}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            if (q === 'fav') {
+              return (
+                <button
+                  key={q}
+                  className={`vod-quick-btn ${focused ? 'is-focused' : ''}`}
+                  onClick={() => (onToggleFavorite ? onToggleFavorite(currentItem) : favoritesService.toggleFavorite(currentItem.id))}
+                >
+                  <span className="vod-quick-circle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    {isFav ? <path d="M5 12.5l4.5 4.5L19 7.5" /> : <path d="M12 5v14M5 12h14" />}
+                  </svg></span>
+                  <span>{isFav ? 'En mi lista' : 'Mi lista'}</span>
+                </button>
+              );
+            }
+            return (
+              <button
+                key={q}
+                className={`vod-quick-btn ${focused ? 'is-focused' : ''}`}
+                onClick={() => onPlay(currentItem, undefined, true)}
+              >
+                <span className="vod-quick-circle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round">
+                  <rect x="3.5" y="9" width="17" height="11" rx="1.5" />
+                  <path d="M3.5 9l2.2-4.5 15 0-2.2 4.5M8.5 4.5L7 9M14 4.5L12.5 9" />
+                </svg></span>
+                <span>Tráiler</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Series Section: Seasons Selector + Episodes Slider */}

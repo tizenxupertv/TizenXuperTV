@@ -147,16 +147,18 @@ export const App: React.FC = () => {
   } = detail;
 
   // Starts playback from the detail screen: resume / next episode / chosen episode / trailer
-  const playFromDetail = (item: VodItem, episode?: VodEpisode, isTrailer?: boolean) => {
+  const playFromDetail = (item: VodItem, episode?: VodEpisode, isTrailer?: boolean, fromStart?: boolean) => {
     if (isTrailer) {
       setActiveVodPlayer({ item, isTrailer: true });
       return;
     }
     const entry = historyService.getEntry(item.id);
     const { episodes, seasonId, seasonNumber } = detailEpisodes;
-    const target = episode
+    const found = episode
       ? { episode, startAt: startAtForEpisode(episode, entry) }
       : getResumeTarget(item, episodes, entry, seasonNumber, seasonId);
+    // "Reiniciar": the same episode from the beginning
+    const target = fromStart ? { ...found, startAt: 0 } : found;
     setActiveVodPlayer({
       item,
       episode: target.episode,
@@ -398,7 +400,7 @@ export const App: React.FC = () => {
     }
     if (key === 'colorYellow') {
       if (activeDetailItem) {
-        setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: 0, actionIndex: 2 }));
+        setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: 0, quickIndex: 1 }));
         return true;
       }
       if (selectedTab === 'tv') {
@@ -684,7 +686,7 @@ export const App: React.FC = () => {
           isFavorite={favoritesService.isFavorite(activeDetailItem.id)}
           relatedItems={currentRelatedItems}
           onBack={detail.handleBackDetail}
-          onPlay={(it, ep, isTrailer) => playFromDetail(it, ep, isTrailer)}
+          onPlay={(it, ep, isTrailer, fromStart) => playFromDetail(it, ep, isTrailer, fromStart)}
           onEpisodesChange={data => setDetailEpisodes(data)}
           onToggleFavorite={it => favoritesService.toggleFavorite(it.id)}
           onSelectSeason={sIdx => setDetailFocus(prev => ({
@@ -701,9 +703,9 @@ export const App: React.FC = () => {
           onOpenAudioModal={col => {
             const st = settingsService.get();
             const current = col === 'audio' ? st.audio : col === 'subs' ? subtitleChoiceIndex(st) : col === 'quality' ? st.quality || 0 : 0;
-            setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: col, modalIndex: current, actionIndex: 2 }));
+            setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: col, modalIndex: current, quickIndex: 1 }));
           }}
-          onCloseAudioModal={() => setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 2 }))}
+          onCloseAudioModal={() => setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: 1 }))}
           onSelectSetting={(col, index) => {
             applySettingChoice(col, index);
             setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: SETTINGS_ROW[col] }));

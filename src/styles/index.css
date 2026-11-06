@@ -6058,3 +6058,94 @@ html.xuper-vod-avplay .app-root,
 .pf-row-wide .pf-switch {
   flex-shrink: 0;
 }
+
+/* ==========================================================================
+   Detail actions: two big buttons, then small round buttons with their label
+   (same rounded style as the rest of the app: dark glass at rest, white when focused)
+   ========================================================================== */
+.vod-detail-actions-row.vod-actions-main {
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.vod-main-btn {
+  flex: 0 0 360px;
+  height: 58px;
+  padding: 0 28px;
+  border-radius: 9999px;
+  border: 3px solid rgba(255, 255, 255, 0.22);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 19px;
+  font-weight: 800;
+  transition: none !important;
+}
+
+.vod-main-btn.is-primary {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.vod-main-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vod-main-icon {
+  font-size: 18px;
+}
+
+.vod-main-btn.is-focused {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+}
+
+.vod-actions-quick {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 44px;
+}
+
+.vod-quick-btn {
+  width: 96px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #cbd5e1;
+  font-size: 15px;
+  font-weight: 700;
+  transition: none !important;
+}
+
+.vod-quick-circle {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.12);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+
+.vod-quick-btn.is-focused {
+  color: #ffffff;
+}
+
+.vod-quick-btn.is-focused .vod-quick-circle {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
