@@ -32,7 +32,7 @@ import { useCatalog } from './app/useCatalog';
 import { useLiveTv } from './app/useLiveTv';
 import { useVodDetail } from './app/useVodDetail';
 import { useParentalGuards } from './app/useParentalGuards';
-import { heroItemsForTab, buildTabRows, rowHasSeeAll, browseTargetForRow } from './app/tabRows';
+import { heroItemsForTab, buildTabRows, rowHasSeeAll, browseTargetForRow, portalRootForTab } from './app/tabRows';
 import { handleFullscreenLiveKeys } from './app/keys/fullscreenLiveKeys';
 import { handleVodDetailKeys } from './app/keys/vodDetailKeys';
 import { handleHeaderKeys } from './app/keys/headerKeys';
@@ -147,18 +147,16 @@ export const App: React.FC = () => {
   } = detail;
 
   // Starts playback from the detail screen: resume / next episode / chosen episode / trailer
-  const playFromDetail = (item: VodItem, episode?: VodEpisode, isTrailer?: boolean, fromStart?: boolean) => {
+  const playFromDetail = (item: VodItem, episode?: VodEpisode, isTrailer?: boolean) => {
     if (isTrailer) {
       setActiveVodPlayer({ item, isTrailer: true });
       return;
     }
     const entry = historyService.getEntry(item.id);
     const { episodes, seasonId, seasonNumber } = detailEpisodes;
-    const found = episode
+    const target = episode
       ? { episode, startAt: startAtForEpisode(episode, entry) }
       : getResumeTarget(item, episodes, entry, seasonNumber, seasonId);
-    // "Reiniciar": the same episode from the beginning
-    const target = fromStart ? { ...found, startAt: 0 } : found;
     setActiveVodPlayer({
       item,
       episode: target.episode,
@@ -171,6 +169,16 @@ export const App: React.FC = () => {
 
   const { stack, push, pop } = useScreenStack();
   const { requestPin, guardLiveCat, guardTab } = useParentalGuards(push, liveCategoriesRef, liveTvFocus);
+
+  // A collection tile (portal aggregation row) opens its column in the tab's catalog; any other
+  // card opens its detail
+  const openVodCard = useCallback((it: VodItem) => {
+    if (it.collectionId) {
+      push({ id: 'browse', root: portalRootForTab(selectedTab) || 'kids', title: it.title, column: it.title });
+      return;
+    }
+    handleOpenDetail(it);
+  }, [selectedTab, push, handleOpenDetail]);
 
   // Deep links for testing: ?detail=<id|title>&detailArea=..&vodPlayer=1&scrollTop=..
   function applyDeepLink(loaded: { featured?: VodItem[]; movies?: VodItem[]; series?: VodItem[]; kids?: VodItem[]; anime?: VodItem[] }) {
@@ -483,7 +491,7 @@ export const App: React.FC = () => {
       setActiveHeroIndex,
       destacadosFocus,
       setDestacadosFocus,
-      handleOpenDetail,
+      handleOpenDetail: openVodCard,
       currentHeroItems,
       currentRows,
       totalRows,
@@ -672,7 +680,7 @@ export const App: React.FC = () => {
             const vod = findVod(it);
             handleOpenDetail(vod);
           }}
-          onActivateVod={it => handleOpenDetail(it)}
+          onActivateVod={openVodCard}
           onSeeAll={openSeeAll}
         />
         </div>
@@ -686,7 +694,7 @@ export const App: React.FC = () => {
           isFavorite={favoritesService.isFavorite(activeDetailItem.id)}
           relatedItems={currentRelatedItems}
           onBack={detail.handleBackDetail}
-          onPlay={(it, ep, isTrailer, fromStart) => playFromDetail(it, ep, isTrailer, fromStart)}
+          onPlay={(it, ep, isTrailer) => playFromDetail(it, ep, isTrailer)}
           onEpisodesChange={data => setDetailEpisodes(data)}
           onToggleFavorite={it => favoritesService.toggleFavorite(it.id)}
           onSelectSeason={sIdx => setDetailFocus(prev => ({

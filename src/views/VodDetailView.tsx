@@ -45,15 +45,14 @@ interface VodDetailViewProps {
   isFavorite: boolean;
   relatedItems?: VodItem[];
   onBack: () => void;
-  /** fromStart: "Reiniciar" (the resume episode from the beginning) */
-  onPlay: (item: VodItem, episode?: VodEpisode, isTrailer?: boolean, fromStart?: boolean) => void;
+  onPlay: (item: VodItem, episode?: VodEpisode, isTrailer?: boolean) => void;
   onToggleFavorite: (item: VodItem) => void;
   onSelectSeason?: (seasonIndex: number) => void;
   onSelectEpisode?: (episodeIndex: number) => void;
   /** Opens the season list (mouse) */
   onOpenSeasonMenu?: () => void;
   onSelectRelated?: (item: VodItem) => void;
-  onDetailLoaded?: (counts: { seasonsCount: number; episodesCount: number; relatedCount: number; isSeries: boolean; hasTrailer?: boolean; canRestart?: boolean }) => void;
+  onDetailLoaded?: (counts: { seasonsCount: number; episodesCount: number; relatedCount: number; isSeries: boolean; hasTrailer?: boolean }) => void;
   onEpisodesChange?: (data: { episodes: VodEpisode[]; seasonId: string; seasonNumber?: number; activeEpisodeIndex?: number }) => void;
   /** Opens the settings list: its first level ('menu') or the options of one setting */
   onOpenAudioModal?: (col: SettingsCol) => void;
@@ -266,11 +265,8 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   void historyTick;
   const isSeries = Boolean(currentItem.isSeries || currentItem.kind === 'serie' || seasons.length > 0 || episodes.length > 0);
   const hasTrailer = Boolean(currentItem.trailerUrl || (currentItem as any).trailer);
-  // Big buttons: Reproducir / Continuar, then Reiniciar when there is progress (else Tráiler)
-  const canRestart = !!resume.startAt && resume.startAt > 0;
-  const secondary: 'restart' | 'trailer' | null = canRestart ? 'restart' : hasTrailer ? 'trailer' : null;
-  // Small buttons with their label under the big ones
-  const quickItems: ('fav' | 'settings' | 'trailer')[] = ['fav', 'settings', ...(hasTrailer && secondary !== 'trailer' ? ['trailer' as const] : [])];
+  // Round buttons after Reproducir, in the same row
+  const quickItems: ('fav' | 'settings' | 'trailer')[] = ['fav', 'settings', ...(hasTrailer ? ['trailer' as const] : [])];
 
   // Parent callbacks are new functions on every render: keep the latest in refs so the
   // effects below only fire when the data changes (otherwise they loop forever)
@@ -287,11 +283,10 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         episodesCount: episodes.length,
         relatedCount: relatedItems.length,
         isSeries,
-        hasTrailer,
-        canRestart
+        hasTrailer
       });
     }
-  }, [seasons.length, episodes.length, relatedItems.length, isSeries, hasTrailer, canRestart]);
+  }, [seasons.length, episodes.length, relatedItems.length, isSeries, hasTrailer]);
 
   // Auto-scroll horizontal episode slider with comfortable threshold
   useEffect(() => {
@@ -423,29 +418,16 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
           </div>
         </div>
 
-        {/* Action Buttons Row */}
-        {/* Big buttons (as streaming apps): Reproducir / Continuar, Reiniciar or Tráiler */}
+        {/* One row (as streaming apps): Reproducir / Continuar, then round buttons (Mi lista, Ajustes,
+            Tráiler) whose label shows under the focused one */}
         <div className="vod-detail-actions-row vod-actions-main">
           <button
-            className={`vod-main-btn is-primary ${focus.area === 'actions' && focus.actionIndex === 0 ? 'is-focused' : ''}`}
+            className={`vod-main-btn is-primary ${focus.area === 'actions' ? 'is-focused' : ''}`}
             onClick={() => onPlay(currentItem, resume.episode)}
           >
             <span className="vod-main-icon">▶</span>
             <span className="vod-main-label">{resume.label}</span>
           </button>
-          {secondary && (
-            <button
-              className={`vod-main-btn ${focus.area === 'actions' && focus.actionIndex === 1 ? 'is-focused' : ''}`}
-              onClick={() => (secondary === 'restart' ? onPlay(currentItem, resume.episode, false, true) : onPlay(currentItem, undefined, true))}
-            >
-              <span className="vod-main-icon">{secondary === 'restart' ? '↻' : '🎬'}</span>
-              <span className="vod-main-label">{secondary === 'restart' ? 'Reiniciar' : 'Ver tráiler'}</span>
-            </button>
-          )}
-        </div>
-
-        {/* Small buttons with their label: Mi lista, Ajustes (Audio / Subtítulos / Resolución), Tráiler */}
-        <div className="vod-actions-quick">
           {quickItems.map((q, i) => {
             const focused = (focus.area === 'quick' && focus.quickIndex === i) || (q === 'settings' && focus.area === 'audioModal');
             if (q === 'settings') {
@@ -459,7 +441,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                       <circle cx="12" cy="12" r="3" />
                       <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
                     </svg></span>
-                    <span>Ajustes</span>
+                    {focus.area === 'quick' && focused && <span className="vod-quick-label">Ajustes</span>}
                   </button>
                   {focus.area === 'audioModal' && (
                     <div className="vod-action-menu vod-settings-menu">
@@ -508,7 +490,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                   <span className="vod-quick-circle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                     {isFav ? <path d="M5 12.5l4.5 4.5L19 7.5" /> : <path d="M12 5v14M5 12h14" />}
                   </svg></span>
-                  <span>{isFav ? 'En mi lista' : 'Mi lista'}</span>
+                  {focused && <span className="vod-quick-label">{isFav ? 'En mi lista' : 'Mi lista'}</span>}
                 </button>
               );
             }
@@ -522,7 +504,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                   <rect x="3.5" y="9" width="17" height="11" rx="1.5" />
                   <path d="M3.5 9l2.2-4.5 15 0-2.2 4.5M8.5 4.5L7 9M14 4.5L12.5 9" />
                 </svg></span>
-                <span>Tráiler</span>
+                {focused && <span className="vod-quick-label">Tráiler</span>}
               </button>
             );
           })}

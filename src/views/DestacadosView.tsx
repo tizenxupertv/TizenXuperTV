@@ -27,6 +27,8 @@ export interface ContentRowDef {
   items: VodItem[] | HistoryItem[];
   /** Portal root of a row sent by the portal: "Ver todo" opens that column there */
   portalRoot?: BrowseRoot;
+  /** Collection tiles (each opens its own column): no "Ver todo" */
+  isCollections?: boolean;
 }
 
 interface DestacadosViewProps {

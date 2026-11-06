@@ -17,7 +17,7 @@ export interface VodDetailKeysCtx {
   handleOpenDetail: (item: VodItem) => void;
   currentRelatedItems: VodItem[];
   detailEpisodes: DetailEpisodes;
-  playFromDetail: (item: VodItem, episode?: VodEpisode, isTrailer?: boolean, fromStart?: boolean) => void;
+  playFromDetail: (item: VodItem, episode?: VodEpisode, isTrailer?: boolean) => void;
 }
 
 export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean {
@@ -33,17 +33,14 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
     detailEpisodes,
     playFromDetail
   } = ctx;
-  const { area, actionIndex, seasonIndex, episodeIndex, relatedIndex } = detailFocus;
+  const { area, seasonIndex, episodeIndex, relatedIndex } = detailFocus;
   const isSeries = Boolean(activeDetailItem.isSeries || activeDetailItem.kind === 'serie' || detailCounts.isSeries);
   const seasonsCount = detailCounts.seasonsCount;
   const episodesCount = detailCounts.episodesCount;
   const relatedCount = currentRelatedItems.length;
   const hasTrailer = Boolean(detailCounts.hasTrailer || activeDetailItem.trailerUrl || (activeDetailItem as any).trailer);
-  // Big buttons: Reproducir / Continuar, then Reiniciar (with progress) or Tráiler
-  const secondary: 'restart' | 'trailer' | null = detailCounts.canRestart ? 'restart' : hasTrailer ? 'trailer' : null;
-  const mainCount = secondary ? 2 : 1;
-  // Small buttons: Mi lista, Ajustes, Tráiler (when not already a big button)
-  const quick: ('fav' | 'settings' | 'trailer')[] = ['fav', 'settings', ...(hasTrailer && secondary !== 'trailer' ? ['trailer' as const] : [])];
+  // One row: Reproducir ('actions'), then the round buttons ('quick'): Mi lista, Ajustes, Tráiler
+  const quick: ('fav' | 'settings' | 'trailer')[] = ['fav', 'settings', ...(hasTrailer ? ['trailer' as const] : [])];
   const SETTINGS_QUICK = 1;
   const rangeCount = Math.ceil(episodesCount / EP_RANGE);
 
@@ -102,49 +99,51 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
     return true;
   }
 
+  // Below the action row: seasons, episodes or related titles
+  const goBelowActions = () => {
+    if (isSeries && seasonsCount > 1) {
+      setDetailFocus(prev => ({ ...prev, area: 'seasons' }));
+    } else if (isSeries && episodesCount > 0) {
+      setDetailFocus(prev => {
+        const targetEp = (prev.episodeIndex !== undefined && prev.episodeIndex > 0)
+          ? prev.episodeIndex
+          : (detailEpisodes.activeEpisodeIndex ?? prev.episodeIndex ?? 0);
+        const safeEp = Math.min(episodesCount - 1, Math.max(0, targetEp));
+        return { ...prev, area: 'episodes', episodeIndex: safeEp };
+      });
+    } else if (relatedCount > 0) {
+      setDetailFocus(prev => ({ ...prev, area: 'related', relatedIndex: 0 }));
+    }
+  };
+  // Up from the sections below lands on Reproducir
+  const toActions = () => setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 0 }));
+
   if (area === 'actions') {
+    if (key === 'up') {
+      setDetailFocus(prev => ({ ...prev, area: 'back' }));
+    } else if (key === 'down') {
+      goBelowActions();
+    } else if (key === 'right') {
+      setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: 0 }));
+    } else if (key === 'enter') {
+      playFromDetail(activeDetailItem);
+    }
+    return true;
+  }
+
+  // Round buttons after Reproducir
+  if (area === 'quick') {
+    const qi = Math.min(quick.length - 1, detailFocus.quickIndex ?? 0);
     if (key === 'up') {
       setDetailFocus(prev => ({ ...prev, area: 'back' }));
       return true;
     }
     if (key === 'down') {
-      setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: Math.min(quick.length - 1, prev.quickIndex ?? 0) }));
+      goBelowActions();
       return true;
     }
-    if (key === 'left' || key === 'right') {
-      setDetailFocus(prev => ({ ...prev, actionIndex: key === 'left' ? 0 : Math.min(mainCount - 1, prev.actionIndex + 1) }));
-      return true;
-    }
-    if (key === 'enter') {
-      if (actionIndex === 0) playFromDetail(activeDetailItem);
-      else if (secondary === 'restart') playFromDetail(activeDetailItem, undefined, false, true);
-      else if (secondary === 'trailer') playFromDetail(activeDetailItem, undefined, true);
-      return true;
-    }
-    return true;
-  }
-
-  // Small buttons under the big ones
-  if (area === 'quick') {
-    const qi = Math.min(quick.length - 1, detailFocus.quickIndex ?? 0);
-    if (key === 'up') {
-      setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: Math.min(prev.actionIndex, mainCount - 1) }));
-      return true;
-    }
-    if (key === 'down') {
-      if (isSeries && seasonsCount > 1) {
-        setDetailFocus(prev => ({ ...prev, area: 'seasons' }));
-      } else if (isSeries && episodesCount > 0) {
-        setDetailFocus(prev => {
-          const targetEp = (prev.episodeIndex !== undefined && prev.episodeIndex > 0)
-            ? prev.episodeIndex
-            : (detailEpisodes.activeEpisodeIndex ?? prev.episodeIndex ?? 0);
-          const safeEp = Math.min(episodesCount - 1, Math.max(0, targetEp));
-          return { ...prev, area: 'episodes', episodeIndex: safeEp };
-        });
-      } else if (relatedCount > 0) {
-        setDetailFocus(prev => ({ ...prev, area: 'related', relatedIndex: 0 }));
-      }
+    if (key === 'left' && qi === 0) {
+      toActions();
       return true;
     }
     if (key === 'left' || key === 'right') {
@@ -188,7 +187,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
 
   if (area === 'seasons') {
     if (key === 'up') {
-      setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: 0 }));
+      toActions();
       return true;
     }
     if (key === 'enter') {
@@ -227,7 +226,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
     }
     if (key === 'up') {
       if (seasonsCount > 1) setDetailFocus(prev => ({ ...prev, area: 'seasons' }));
-      else setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: 0 }));
+      else toActions();
       return true;
     }
     return true;
@@ -240,7 +239,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
       } else if (seasonsCount > 1) {
         setDetailFocus(prev => ({ ...prev, area: 'seasons' }));
       } else {
-        setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: 0 }));
+        toActions();
       }
       return true;
     }
@@ -271,7 +270,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
       if (isSeries && episodesCount > 0) {
         setDetailFocus(prev => ({ ...prev, area: 'episodes' }));
       } else {
-        setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: 0 }));
+        toActions();
       }
       return true;
     }

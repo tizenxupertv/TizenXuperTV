@@ -9,8 +9,6 @@ export interface DetailCounts {
   relatedCount: number;
   isSeries: boolean;
   hasTrailer?: boolean;
-  /** There is progress to resume: the "Reiniciar" button is shown */
-  canRestart?: boolean;
 }
 
 interface DetailHistoryEntry {
