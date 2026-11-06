@@ -450,8 +450,17 @@ class PlayerService {
         hls.on(window.Hls.Events.ERROR, (event: any, data: any) => {
           console.error('[HLS error]', data.type, data.details, data.fatal);
           const status = data.response && data.response.code ? ` ${data.response.code}` : '';
-          this.lastHlsError = `${data.type}/${data.details}${status}`;
-          const host = hostOf((data.frag && data.frag.url) || data.url || (data.context && data.context.url));
+          // What the server sent instead of a playlist (an ISP block page, a portal error): links removed
+          let body = '';
+          if (/Parsing|Load/i.test(String(data.details || ''))) {
+            try {
+              const nd = data.networkDetails;
+              const text = nd && typeof nd.responseText === 'string' ? nd.responseText : '';
+              body = text.replace(/https?:\/\/\S+/g, '[url]').replace(/\s+/g, ' ').trim().slice(0, 70);
+            } catch (e) {}
+          }
+          this.lastHlsError = `${data.type}/${data.details}${status}${body ? ` «${body}»` : ''}`;
+          const host = hostOf((data.frag && data.frag.url) || data.url || (data.context && data.context.url) || (streamMeta && streamMeta.url) || url);
           if (data.fatal) logPlayback({ kind: 'error', player: 'HLS.js', detail: this.lastHlsError, host });
           else if (data.details === 'bufferStalledError') logPlayback({ kind: 'stall', player: 'HLS.js', detail: 'bufferStalledError', host });
           if (data.fatal) {

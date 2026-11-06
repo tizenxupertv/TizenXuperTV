@@ -591,7 +591,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   useEffect(() => {
     if (isActiveTab && tunedChannel && previewVideoRef.current) {
       // The category goes into the problem report (portal channels do not carry its name)
-      const category = tunedChannel.categoryName || (categories.find(c => String(c.id) === String(tunedChannel.colId)) || activeCategory || { name: '' }).name;
+      const category = tunedChannel.categoryName || (categories.find(c => String(c.id) === String(tunedChannel.colId)) || { name: '' }).name;
       playerService.playLivePreview(category && !tunedChannel.categoryName ? { ...tunedChannel, categoryName: category } : tunedChannel, previewVideoRef.current);
     } else if (!isActiveTab) {
       playerService.stop();
