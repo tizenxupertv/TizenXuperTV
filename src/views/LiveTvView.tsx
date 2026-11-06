@@ -108,7 +108,7 @@ const hasClockTime = (t?: string): boolean => !!t && /\d/.test(t);
 // Hides channels that belong to a PIN-locked category (so they cannot leak through
 // "Favoritos" or aggregate categories such as "Todos los canales").
 function filterLockedChannels(list: LiveChannel[], cats: LiveCategory[], activeId: string): LiveChannel[] {
-  const lockedCats = cats.filter(c => !c.isFav && String(c.id) !== activeId && parentalService.isLiveCatLocked(c.id));
+  const lockedCats = cats.filter(c => !c.isFav && String(c.id) !== activeId && parentalService.isAdultCategory(c.name));
   if (lockedCats.length === 0) return list;
   const blocked = new Set<string>();
   lockedCats.forEach(c => {
@@ -299,12 +299,18 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   const drawerChannels = drawerSearching ? drawerResults : channels;
 
 
-  // Load Categories on mount and notify parent
+  // Load Categories on mount (and when the +18 section is turned on/off) and notify parent
+  const [adultTick, setAdultTick] = useState(0);
+  useEffect(() => parentalService.subscribe(() => setAdultTick(t => t + 1)), []);
   useEffect(() => {
     if (window.MagisClient && typeof window.MagisClient.getLiveCategories === 'function') {
       window.MagisClient.getLiveCategories((err: any, cats: any[]) => {
         if (!err && Array.isArray(cats) && cats.length) {
-          const formatted: LiveCategory[] = cats.map(c => ({ id: c.id || c.columnId, name: c.name || c.title }));
+          const adultOn = parentalService.isAdultEnabled();
+          const formatted: LiveCategory[] = cats
+            .map(c => ({ id: c.id || c.columnId, name: c.name || c.title }))
+            // The adult category ("18+") exists only while the +18 section is on
+            .filter(c => adultOn || !parentalService.isAdultCategory(c.name));
           const allCats = [{ id: 'favs', name: '★ Favoritos', isFav: true }, ...formatted];
           setCategories(allCats);
           if (onCategoriesLoaded) onCategoriesLoaded(allCats);
@@ -315,7 +321,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     } else {
       if (onCategoriesLoaded) onCategoriesLoaded(DEFAULT_LIVE_CATEGORIES);
     }
-  }, []);
+  }, [adultTick]);
 
   const activeCategory = categories[selectedCatIndex] || categories[0];
 
@@ -794,7 +800,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                     }`}
                   >
                     <span className="pc-cat-name">{cat.name}</span>
-                    {!cat.isFav && parentalService.isLiveCatLocked(cat.id) && <span className="pc-cat-lock">🔒</span>}
+                    {!cat.isFav && parentalService.isAdultCategory(cat.name) && <span className="pc-cat-lock">🔒</span>}
                   </div>
                 ))}
               </div>

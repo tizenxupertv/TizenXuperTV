@@ -39,19 +39,12 @@ const SECTIONS = [
   { id: 'about', label: 'Sobre nosotros', icon: '<circle cx="16" cy="16" r="12"/><path d="M16 14v8M16 10h.1"/>' }
 ];
 
-const VOD_TABS = [
-  { id: 'peliculas', label: 'Películas' },
-  { id: 'series', label: 'Series' },
-  { id: 'kids', label: 'Kids' },
-  { id: 'anime', label: 'Anime' }
-];
 
 const DISPLAY_OPTS = ['Ajustar (con bandas)', 'Pantalla completa', 'Automático'];
 const AUDIO_OPTS = ['Español (Latino)', 'Español (España)', 'Portugués', 'Inglés'];
 const SIZE_OPTS = ['Normal', 'Grande', 'Pequeño'];
 const STYLE_OPTS = ['Aa', 'Aa', 'Aa'];
 const GRID_COLS = 7;
-const LOCK_COLS = 4;
 const MAX_LIST = 30;
 
 const VERDICTS: Record<string, { cls: string; text: string }> = {
@@ -143,15 +136,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listTab, catalogItems, historyService.getHistory().length, favoritesService.getFavoriteIds().join(',')]);
 
-  const guardedToggle = (apply: () => void) => {
-    if (parentalService.hasPin() && !parentalService.isSessionUnlocked()) {
-      onRequestPin('unlock', apply);
-    } else {
-      apply();
-    }
-  };
-
-  const lockCats = liveCategories.filter(c => !c.isFav && String(c.id) !== 'favs');
 
   // Build the focusable grid of the active panel: rows of cells.
   const rows: Cell[][] = (() => {
@@ -190,16 +174,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             else onRequestPin('unlock', () => parentalService.setAdultEnabled(true));
           }
         }]);
-        for (let i = 0; i < lockCats.length; i += LOCK_COLS) {
-          r.push(lockCats.slice(i, i + LOCK_COLS).map(c => ({
-            id: 'live-' + c.id,
-            onActivate: () => guardedToggle(() => parentalService.toggleLiveCat(c.id))
-          })));
-        }
-        r.push(VOD_TABS.map(t => ({
-          id: 'tab-' + t.id,
-          onActivate: () => guardedToggle(() => parentalService.toggleVodTab(t.id))
-        })));
       }
     } else if (id === 'diag') {
       r.push([{ id: 'run', onActivate: runDiag }]);
@@ -368,8 +342,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <div className="pf-parental">
             <h2 className="pf-title">Control parental</h2>
             <p className="pf-note">
-              Crea un PIN de 4 dígitos para proteger las categorías de TV en vivo y las pestañas de contenido que elijas.
-              La sección para adultos (+18) también necesita el PIN. Si lo olvidas, deberás reinstalar la app.
+              Crea un PIN de 4 dígitos para poder activar la sección para adultos (+18); se pedirá cada vez que entres a ella.
+              Si lo olvidas, deberás reinstalar la app.
             </p>
             <div className={`pf-btn ${isF('create') ? 'is-focused' : ''}`} onClick={tap('create')}>Crear PIN</div>
           </div>
@@ -379,44 +353,25 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         <div className="pf-parental">
           <h2 className="pf-title">Control parental</h2>
           <p className="pf-note">
-            Las categorías marcadas piden el PIN al abrirlas. Tras desbloquear, no se vuelve a pedir hasta cerrar la app.
+            El PIN protege solo el contenido para adultos: se pide para activar la sección +18 y cada vez que entras a ella
+            (la pestaña +18 y la categoría 18+ de TV en vivo).
           </p>
           <div className="pf-btn-row">
             <div className={`pf-btn ${isF('change') ? 'is-focused' : ''}`} onClick={tap('change')}>Cambiar PIN</div>
             <div className={`pf-btn pf-btn-danger ${isF('disable') ? 'is-focused' : ''}`} onClick={tap('disable')}>Desactivar bloqueo</div>
           </div>
-          <h3 className="pf-subtitle">Sección para adultos (+18)</h3>
-          <div className="pf-row">
+          <div className={`pf-row pf-row-wide ${isF('adult') ? 'is-focused' : ''}`} onClick={tap('adult')}>
             <div className="pf-row-label">
+              <div className="pf-row-title">Sección para adultos (+18)</div>
+              <div className="pf-row-desc">
               {parentalService.isAdultEnabled()
                 ? 'Activada: aparece la pestaña +18 y pide el PIN al entrar'
                 : 'Desactivada: el contenido para adultos está oculto (activarla pide el PIN)'}
+              </div>
             </div>
-            <div className={`pf-switch ${parentalService.isAdultEnabled() ? 'on' : 'off'} ${isF('adult') ? 'is-focused' : ''}`} onClick={tap('adult')}>
+            <div className={`pf-switch ${parentalService.isAdultEnabled() ? 'on' : 'off'}`}>
               <span className="pf-switch-knob" />
             </div>
-          </div>
-          <h3 className="pf-subtitle">Canales en vivo</h3>
-          <div className="pf-lock-grid">
-            {lockCats.map(c => (
-              <div key={String(c.id)} className={`pf-lock-item ${isF('live-' + c.id) ? 'is-focused' : ''}`} onClick={tap('live-' + c.id)}>
-                <span>{c.name}</span>
-                <span className={`pf-lock-badge ${parentalService.isLiveCatMarked(c.id) ? 'on' : ''}`}>
-                  {parentalService.isLiveCatMarked(c.id) ? 'Bloqueada' : 'Libre'}
-                </span>
-              </div>
-            ))}
-          </div>
-          <h3 className="pf-subtitle">Pestañas de contenido</h3>
-          <div className="pf-lock-grid">
-            {VOD_TABS.map(t => (
-              <div key={t.id} className={`pf-lock-item ${isF('tab-' + t.id) ? 'is-focused' : ''}`} onClick={tap('tab-' + t.id)}>
-                <span>{t.label}</span>
-                <span className={`pf-lock-badge ${parentalService.isVodTabMarked(t.id) ? 'on' : ''}`}>
-                  {parentalService.isVodTabMarked(t.id) ? 'Bloqueada' : 'Libre'}
-                </span>
-              </div>
-            ))}
           </div>
         </div>
       );

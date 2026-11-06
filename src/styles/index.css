@@ -179,10 +179,15 @@ html, body {
   line-height: 1;
 }
 
+/* Active tab: the brand gradient (logo colours) as a solid fill, deep enough for white text; no glow */
 .nav-tab-btn.is-selected {
   color: #ffffff;
-  background: linear-gradient(135deg, rgba(0, 229, 255, 0.16) 0%, rgba(168, 85, 247, 0.25) 100%);
-  border-color: rgba(168, 85, 247, 0.55);
+  background: linear-gradient(135deg, #0891b2 0%, #7c3aed 100%);
+  border-color: transparent;
+}
+
+.nav-tab-btn.is-selected .nav-tab-icon {
+  color: #ffffff;
 }
 
 .nav-tab-btn.is-focused {
@@ -3725,7 +3730,7 @@ html, body {
   width: 58px; height: 32px; border-radius: 16px; background: rgba(255, 255, 255, 0.14);
   position: relative; border: 3px solid transparent; box-sizing: border-box;
 }
-.pf-switch.on { background: var(--gradient-brand); }
+.pf-switch.on { background: #16a34a; } /* solid: clearer than the gradient */
 .pf-switch-knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
 .pf-switch.on .pf-switch-knob { transform: translateX(26px); }
 .pf-switch.is-focused { border-color: #fff; }
@@ -6012,4 +6017,44 @@ html.xuper-vod-avplay .app-root,
   letter-spacing: 1.2px;
   text-transform: uppercase;
   color: #94a3b8;
+}
+
+/* Perfil › Bloqueo: the +18 switch as a full-width row, the toggle at the right */
+.pf-row.pf-row-wide {
+  justify-content: space-between;
+  gap: 32px;
+  max-width: 1380px;
+  margin-top: 26px;
+  padding: 18px 24px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 3px solid transparent;
+  box-sizing: border-box;
+}
+
+.pf-row.pf-row-wide.is-focused {
+  border-color: #ffffff;
+}
+
+.pf-row-wide .pf-row-label {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.pf-row-title {
+  font-size: 19px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.pf-row-desc {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.pf-row-wide .pf-switch {
+  flex-shrink: 0;
 }
