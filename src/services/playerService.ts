@@ -26,6 +26,9 @@ export interface LiveStatus {
 const START_TIMEOUT_MS = 25000;
 // Fatal HLS errors retried before giving up: a dead stream must not retry forever
 const MAX_HLS_RETRIES = 2;
+/** HLS.js shows no picture on some portal streams the TV plays natively (MP3 audio, for one): after
+ * this long without a picture, the channel is retried once with AVPlay before it is marked down */
+const HLS_PICTURE_MS = 10000;
 
 class PlayerService {
   private activeChannelCode: string = '';
@@ -58,6 +61,37 @@ class PlayerService {
 
   /** Last HLS.js error of the current channel, added to the report when the channel fails */
   private lastHlsError = '';
+  private hlsFallbackTimer: any = null;
+  /** Channel already retried with AVPlay (only once per tune) */
+  private avFallbackCode = '';
+  private fullscreenMode = false;
+
+  private clearHlsFallback() {
+    if (this.hlsFallbackTimer) clearTimeout(this.hlsFallbackTimer);
+    this.hlsFallbackTimer = null;
+  }
+
+  /** Retries a portal channel with AVPlay; false when it cannot (not a TV, already tried, switched away) */
+  private tryAvFallback(code: string, meta: any, videoEl: HTMLVideoElement, why: string): boolean {
+    this.clearHlsFallback();
+    const av = window.XuperAVPlay;
+    if (!meta || !meta.url || !av || !(window.webapis && window.webapis.avplay)) return false;
+    if (this.activeChannelCode !== code || this.avFallbackCode === code) return false;
+    this.avFallbackCode = code;
+    console.warn('[PlayerService] HLS.js without picture, retrying with AVPlay:', code, why);
+    logPlayback({ kind: 'error', player: 'HLS.js', detail: `${why}${this.lastHlsError ? ` · ${this.lastHlsError}` : ''} → probando AVPlay` });
+    this.destroyHls();
+    window.__xuperCurrentStreamMeta = meta;
+    this.watchStart(code, videoEl);
+    if (this.fullscreenMode && av.playStream) {
+      this.usingAvPreview = false;
+      this.playLiveStream(meta.url, meta.headers, videoEl);
+    } else if (av.playPreview) {
+      this.usingAvPreview = true;
+      av.playPreview(meta.url, videoEl);
+    }
+    return true;
+  }
 
   /** Picture size and codecs when playback starts: 0x0 means sound without picture */
   private pictureInfo(): string {
@@ -140,6 +174,7 @@ class PlayerService {
     console.warn('[PlayerService] Channel down:', code, why);
     logPlayback({ kind: 'error', player: this.playerName(), detail: why + (this.lastHlsError ? ` · ${this.lastHlsError}` : '') });
     this.clearWatch();
+    this.clearHlsFallback();
     this.destroyHls();
     if (this.usingAvPreview && window.XuperAVPlay && typeof window.XuperAVPlay.stopLive === 'function') {
       window.XuperAVPlay.stopLive();
@@ -246,6 +281,7 @@ class PlayerService {
     }
     this.activeChannelCode = '';
     this.clearWatch();
+    this.clearHlsFallback();
     this.setStatus('', 'idle');
     this.destroyHls();
 
@@ -272,6 +308,9 @@ class PlayerService {
     console.log('[PlayerService] Resolving live channel:', channel.name, code);
     setPlaybackContext({ channel: channel.name, category: channel.categoryName, source: channel.url ? 'directo' : 'portal' });
     this.lastHlsError = '';
+    this.clearHlsFallback();
+    this.avFallbackCode = '';
+    this.fullscreenMode = fullscreen;
     this.usingAvPreview = false;
     this.watchStart(code, videoEl);
 
@@ -384,6 +423,16 @@ class PlayerService {
         hls.loadSource(effectiveUrl);
         hls.attachMedia(videoEl);
 
+        // Portal stream without a picture after HLS_PICTURE_MS: try AVPlay (the TV's own player) once
+        this.clearHlsFallback();
+        if (streamMeta && code) {
+          this.hlsFallbackTimer = setTimeout(() => {
+            if (window.__xuperPreviewHls === hls && this.status.code === code && this.status.state === 'loading') {
+              this.tryAvFallback(code, streamMeta, videoEl, `sin imagen en ${HLS_PICTURE_MS / 1000} s`);
+            }
+          }, HLS_PICTURE_MS);
+        }
+
         hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
           try {
             videoEl.muted = false;
@@ -424,7 +473,11 @@ class PlayerService {
             }
             // A dead stream (404, refused, bad format) stops after a few tries and shows the error
             if (retries++ >= MAX_HLS_RETRIES || (data.type !== window.Hls.ErrorTypes.NETWORK_ERROR && data.type !== window.Hls.ErrorTypes.MEDIA_ERROR)) {
-              if (code && window.__xuperPreviewHls === hls) this.failChannel(code, `hls ${data.details}`);
+              if (code && window.__xuperPreviewHls === hls) {
+                // A format HLS.js cannot handle may still play in AVPlay
+                if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR && this.tryAvFallback(code, streamMeta, videoEl, `hls ${data.details}`)) return;
+                this.failChannel(code, `hls ${data.details}`);
+              }
               return;
             }
             if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR) {
