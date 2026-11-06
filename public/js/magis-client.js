@@ -1334,6 +1334,32 @@
     if (item && item.id) itemCache[item.id] = item;
   }
 
+  // Row name for the aggregation tiles (the portal sends that row without a name)
+  var COLLECTIONS_ROW = 'Colecciones';
+
+  // One tile of an aggregation row: a column of the root, not a title
+  function collectionFromColumn(column, cat) {
+    var colId = parseInt(column && (column.columnId || column.id), 10);
+    if (!colId) return null;
+    var art = imageOf(column, 'poster') || imageOf(column, 'banner');
+    return {
+      id: 'collection:' + colId,
+      title: text(column.name || column.alias),
+      category: cat || '',
+      kind: 'coleccion',
+      collectionId: colId,
+      score: '',
+      year: '',
+      genres: ['Colección'],
+      poster: art,
+      landscape: art,
+      backdrop: art,
+      row: COLLECTIONS_ROW,
+      streamUrl: '',
+      portal: true
+    };
+  }
+
   function itemFromAsset(asset, cat, defaultKind) {
     if (!asset || !trim(asset.contentId)) return null;
     var pType = trim(asset.programType) || 'movie';
@@ -1497,6 +1523,12 @@
               }
               items.push(it);
             }
+          }
+          // Aggregation row (e.g. Kids: Minions, Toy Story…): tiles that open a column of the root
+          var agg = col && col.aggregationList || [];
+          for (var g = 0; g < agg.length; g++) {
+            var tile = collectionFromColumn(agg[g], cat);
+            if (tile) items.push(tile);
           }
         }
         treeCache[cacheKey] = { at: Date.now(), items: items };

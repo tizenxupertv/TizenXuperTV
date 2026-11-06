@@ -27,7 +27,22 @@ export interface PortalRow {
 
 function normalizeItem(raw: any, index: number): VodItem {
   if (!raw) return { id: `item-${index}`, title: 'Sin título' };
-  
+  // Collection tile: no score, year or synopsis defaults (it is a column, not a title)
+  if (raw.collectionId) {
+    return {
+      id: String(raw.id),
+      title: String(raw.title || raw.name || ''),
+      category: raw.category || '',
+      kind: 'coleccion',
+      genres: Array.isArray(raw.genres) ? raw.genres : ['Colección'],
+      poster: raw.poster || 'assets/placeholder_vertical.png',
+      landscape: raw.landscape || raw.poster || '',
+      backdrop: raw.backdrop || raw.poster || '',
+      row: String(raw.row || ''),
+      collectionId: Number(raw.collectionId)
+    };
+  }
+
   const id = String(raw.id || raw.vodId || raw.programId || raw.program_id || `item-${index}`);
   const title = String(raw.title || raw.name || raw.programName || raw.programTitle || 'Sin título');
   const score = raw.score || raw.vote_average || raw.rating || raw.movieRate || raw.programScore || '8.5';
@@ -247,7 +262,9 @@ class CatalogService {
     const rowIndex: Record<string, PortalRow> = {};
     for (const raw of rawItems) {
       if (!raw || isAdultItem(raw)) continue;
-      const { item: grouped, isFresh } = collector.add(raw);
+      // Collection tiles only live in their portal row (not in the title lists, hero or search)
+      const isCollection = !!raw.collectionId;
+      const { item: grouped, isFresh } = isCollection ? { item: raw, isFresh: false } : collector.add(raw);
       if (isFresh) items.push(grouped);
       const root = (raw.category || '').split(',')[0].trim();
       if (!root || !raw.row) continue;

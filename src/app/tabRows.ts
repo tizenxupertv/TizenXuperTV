@@ -44,8 +44,14 @@ function portalTabRows(selectedTab: TabId, data: TabRowsData): ContentRowDef[] {
       // Not sent by the portal: ranking numbers for its "TOP15" rows, landscape cards for trailers
       isRanked: /\btop\s?\d+/i.test(r.name),
       isWide: /tr[aá]iler/i.test(r.name),
+      isCollections: r.items.every(it => !!it.collectionId),
       portalRoot: target!.root
     }));
+}
+
+/** Portal root of a VOD tab (where its collection tiles and "Ver todo" open) */
+export function portalRootForTab(selectedTab: TabId): BrowseRoot | undefined {
+  return TAB_PORTAL_ROOT[selectedTab]?.root;
 }
 
 /** Hero carousel items for a VOD tab */
@@ -426,7 +432,7 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
 
 /** VOD rows (not history, not the ranked Top 10) end with a "Ver todo" card */
 export function rowHasSeeAll(row: ContentRowDef | undefined): boolean {
-  return !!row && row.type === 'vod' && !row.isRanked && row.items.length > 0;
+  return !!row && row.type === 'vod' && !row.isRanked && !row.isCollections && row.items.length > 0;
 }
 
 // Row title words -> portal genre tag, so "Ver todo" opens already filtered

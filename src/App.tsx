@@ -32,7 +32,7 @@ import { useCatalog } from './app/useCatalog';
 import { useLiveTv } from './app/useLiveTv';
 import { useVodDetail } from './app/useVodDetail';
 import { useParentalGuards } from './app/useParentalGuards';
-import { heroItemsForTab, buildTabRows, rowHasSeeAll, browseTargetForRow } from './app/tabRows';
+import { heroItemsForTab, buildTabRows, rowHasSeeAll, browseTargetForRow, portalRootForTab } from './app/tabRows';
 import { handleFullscreenLiveKeys } from './app/keys/fullscreenLiveKeys';
 import { handleVodDetailKeys } from './app/keys/vodDetailKeys';
 import { handleHeaderKeys } from './app/keys/headerKeys';
@@ -171,6 +171,16 @@ export const App: React.FC = () => {
 
   const { stack, push, pop } = useScreenStack();
   const { requestPin, guardLiveCat, guardTab } = useParentalGuards(push, liveCategoriesRef, liveTvFocus);
+
+  // A collection tile (portal aggregation row) opens its column in the tab's catalog; any other
+  // card opens its detail
+  const openVodCard = useCallback((it: VodItem) => {
+    if (it.collectionId) {
+      push({ id: 'browse', root: portalRootForTab(selectedTab) || 'kids', title: it.title, column: it.title });
+      return;
+    }
+    handleOpenDetail(it);
+  }, [selectedTab, push, handleOpenDetail]);
 
   // Deep links for testing: ?detail=<id|title>&detailArea=..&vodPlayer=1&scrollTop=..
   function applyDeepLink(loaded: { featured?: VodItem[]; movies?: VodItem[]; series?: VodItem[]; kids?: VodItem[]; anime?: VodItem[] }) {
@@ -483,7 +493,7 @@ export const App: React.FC = () => {
       setActiveHeroIndex,
       destacadosFocus,
       setDestacadosFocus,
-      handleOpenDetail,
+      handleOpenDetail: openVodCard,
       currentHeroItems,
       currentRows,
       totalRows,
@@ -672,7 +682,7 @@ export const App: React.FC = () => {
             const vod = findVod(it);
             handleOpenDetail(vod);
           }}
-          onActivateVod={it => handleOpenDetail(it)}
+          onActivateVod={openVodCard}
           onSeeAll={openSeeAll}
         />
         </div>

@@ -39,5 +39,7 @@ export interface VodItem {
   seasons?: VodSeason[];
   episodes?: VodEpisode[];
   row?: string;
+  /** Collection tile (portal aggregation row): the column of the tab's root it opens */
+  collectionId?: number;
   _portal?: boolean;
 }
