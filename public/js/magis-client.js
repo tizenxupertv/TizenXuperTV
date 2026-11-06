@@ -56,7 +56,8 @@
     series: 'masnew_series',
     anime: 'masnew_anime',
     kids: 'masnew_kids',
-    free: 'masnew_free'
+    free: 'masnew_free',
+    explorar: 'masnew_explorar'
   };
 
   var ROOT_CATEGORY = {
@@ -65,7 +66,8 @@
     series: 'serie',
     anime: 'anime',
     kids: 'infantil',
-    free: 'gratis'
+    free: 'gratis',
+    explorar: 'explorar'
   };
 
   var DEVICE_FIXED = {
@@ -1471,9 +1473,12 @@
         var sList = asset.sameSeasonSeriesList || [];
         for (var m = 0; m < sList.length; m++) {
           if (sList[m] && trim(sList[m].contentId)) {
+            var sNum = sList[m].seasonNumber;
+            var sName = text(sList[m].name || sList[m].title || sList[m].seriesName || sList[m].alias);
             seasons.push({
               id: trim(sList[m].contentId),
-              number: sList[m].seasonNumber
+              name: sName,
+              number: sNum !== undefined && sNum !== null && !isNaN(Number(sNum)) ? Number(sNum) : undefined
             });
           }
         }
@@ -1536,10 +1541,75 @@
     movies: 76177,
     series: 76178,
     kids: 76783,
-    anime: 76180
+    anime: 76180,
+    explorar: 76784,
+    // "Hot Search-Ranking": its child "Busca popular" holds the titles of the search screen
+    search: 76301,
+    // Adult (restricted): its children only come with specialFlag "1"; the app opens it after the PIN
+    adult: 76300
   };
 
-  // Full catalog of a root, page by page; filters: { tags, year, originalCountry } (portal values, in English)
+  // Category tree (v3/getColumnContents): children of a column, as the official app's sidebar.
+  // Sorted by the portal's `sequence`; restricted (adult) columns are left out unless opts.special
+  // (specialFlag "1", the adult section opened after the PIN).
+  var columnCache = {};
+  function columns(columnId, callback, opts) {
+    var special = !!(opts && opts.special);
+    var key = String(columnId) + (special ? ':s' : '');
+    var hit = columnCache[key];
+    if (hit && Date.now() - hit.at < TREE_TTL) return callback(null, hit.list);
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      var body = { columnId: columnId, pageNum: 1, pageSize: 1000 };
+      if (special) body.specialFlag = '1';
+      call('v3/getColumnContents', body, { low: !!(opts && opts.low) }, function (cErr, cRes) {
+        if (cErr) return callback(cErr);
+        var raw = cRes && cRes.childColumnList || [];
+        var list = [];
+        for (var i = 0; i < raw.length; i++) {
+          var c = raw[i];
+          if (!c || !c.id || (!special && String(c.restricted) === '1')) continue;
+          list.push({ id: c.id, code: text(c.code), name: text(c.name), free: String(c.free) === '1', sequence: parseInt(c.sequence, 10) || 0 });
+        }
+        list.sort(function (a, b) { return a.sequence - b.sequence; });
+        columnCache[key] = { at: Date.now(), list: list };
+        callback(null, list);
+      });
+    });
+  }
+
+  // Titles of one column, page by page (v3/getShelveData). Kept for the `freshTime` the portal sends.
+  var shelfCache = {};
+  var shelfCount = 0;
+  function columnPage(columnId, pageNum, pageSize, callback, opts) {
+    pageNum = Math.max(1, parseInt(pageNum, 10) || 1);
+    pageSize = pageSize || 42;
+    var key = columnId + ':' + pageNum + ':' + pageSize;
+    var hit = shelfCache[key];
+    if (hit && Date.now() < hit.until) return callback(null, { items: hit.items, total: hit.total, cached: true });
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      call('v3/getShelveData', { columnId: columnId, columnType: '2', pageNum: pageNum, pageSize: pageSize }, { low: !!(opts && opts.low) }, function (sErr, sRes) {
+        if (sErr) return callback(sErr);
+        var list = sRes && sRes.assetList || [];
+        var items = [];
+        for (var i = 0; i < list.length; i++) {
+          var it = itemFromAsset(list[i], '', null);
+          if (it) items.push(it);
+        }
+        var total = parseInt(sRes && sRes.assetListTotalSize, 10) || items.length;
+        var fresh = parseInt(sRes && sRes.freshTime, 10) || 600;
+        if (++shelfCount > 120) {
+          shelfCache = {};
+          shelfCount = 0;
+        }
+        shelfCache[key] = { until: Date.now() + fresh * 1000, items: items, total: total };
+        callback(null, { items: items, total: total, cached: false });
+      });
+    });
+  }
+
+  // Full catalog of a root, page by page; filters: { tags, year, originalCountry, audio } (portal values: English names, audio key)
   // opts.low: prefetch, waits behind every other request
   function browse(root, filters, pageNum, pageSize, callback, opts) {
     var columnId = ROOT_IDS[root];
@@ -1549,6 +1619,7 @@
     if (filters.tags) body.tags = filters.tags;
     if (filters.year) body.year = filters.year;
     if (filters.originalCountry) body.originalCountry = filters.originalCountry;
+    if (filters.audio) body.audio = filters.audio;
     ensureSession(function (err) {
       if (err) return callback(err);
       call('v3/filterByContent', body, { low: !!(opts && opts.low) }, function (fErr, fRes) {
@@ -1565,7 +1636,7 @@
   }
 
   var filterCache = {};
-  // Filter values of a root: { tags: [...], year: [...], originalCountry: [...] }
+  // Filter values of a root: { tags: [...], year: [...], originalCountry: [...], audio: [{ key, value }] }
   function browseFilters(root, callback) {
     var columnId = ROOT_IDS[root];
     if (!columnId) return callback(new Error('unknown root ' + root));
@@ -1577,7 +1648,8 @@
         filterCache[root] = {
           tags: gRes && gRes.tags || [],
           year: gRes && gRes.year || [],
-          originalCountry: gRes && gRes.originalCountry || []
+          originalCountry: gRes && gRes.originalCountry || [],
+          audio: gRes && gRes.audio || []
         };
         callback(null, filterCache[root]);
       });
@@ -1632,6 +1704,9 @@
     home: home,
     browse: browse,
     browseFilters: browseFilters,
+    columns: columns,
+    columnPage: columnPage,
+    rootIds: ROOT_IDS,
     search: search,
     getLiveCategories: getLiveCategories,
     getLiveChannels: getLiveChannels,

@@ -34,6 +34,7 @@ export interface VodItem {
   landscape?: string;
   backdrop?: string;
   streamUrl?: string;
+  trailerUrl?: string;
   isSeries?: boolean;
   seasons?: VodSeason[];
   episodes?: VodEpisode[];

@@ -18,6 +18,7 @@ interface LivePlayerFullscreenProps {
   onToggleFavorite: (channel: LiveChannel) => void;
   onToggleGuide: (show?: boolean) => void;
   onToggleOsd: () => void;
+  numericBuffer?: string;
 }
 
 export const LivePlayerFullscreen: React.FC<LivePlayerFullscreenProps> = ({
@@ -35,10 +36,22 @@ export const LivePlayerFullscreen: React.FC<LivePlayerFullscreenProps> = ({
   onPrevChannel,
   onToggleFavorite,
   onToggleGuide,
-  onToggleOsd
+  onToggleOsd,
+  numericBuffer
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const guideListRef = useRef<HTMLDivElement>(null);
+  const [streamQuality, setStreamQuality] = useState<string>('FHD 1080p');
+
+  // Detect real hardware stream resolution on Tizen AVPlay
+  useEffect(() => {
+    if (showOsd && (window as any).XuperAVPlay && (window as any).XuperAVPlay.getCurrentStreamQuality) {
+      try {
+        const q = (window as any).XuperAVPlay.getCurrentStreamQuality();
+        if (q && q.label) setStreamQuality(q.label);
+      } catch (e) {}
+    }
+  }, [showOsd, channel]);
 
   // Play fullscreen stream on mount or channel step
   useEffect(() => {
@@ -113,6 +126,14 @@ export const LivePlayerFullscreen: React.FC<LivePlayerFullscreenProps> = ({
         </aside>
       )}
 
+      {/* Direct Channel Number Tuning Floating Overlay */}
+      {numericBuffer && (
+        <div className="osd-numeric-banner">
+          <span className="osd-numeric-label">CANAL</span>
+          <span className="osd-numeric-digits">{numericBuffer}</span>
+        </div>
+      )}
+
       {/* Elegant OSD Overlay (Bottom) */}
       <div className={`fullscreen-osd ${showOsd && !showGuide ? 'is-visible' : 'is-hidden'}`}>
         <div className="osd-channel-header">
@@ -134,7 +155,7 @@ export const LivePlayerFullscreen: React.FC<LivePlayerFullscreenProps> = ({
             <span className="live-pulse-dot" /> EN VIVO
           </div>
           <div className="live-quality-tag" style={{ fontSize: 13, padding: '4px 10px' }}>
-            FHD 1080p
+            {streamQuality}
           </div>
         </div>
 

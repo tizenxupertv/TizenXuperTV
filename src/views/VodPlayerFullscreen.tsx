@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { VodItem, VodEpisode } from '../types/vod';
 import { historyService } from '../services/historyService';
 import { playerService } from '../services/playerService';
-import { settingsService } from '../services/settingsService';
+import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
   SubtitleTrack,
   SubtitleCue,
@@ -201,6 +201,14 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const saveProgressRef = useRef(saveProgress);
   saveProgressRef.current = saveProgress;
 
+  // Manage TV screensaver during playback (Jellyfin / Tizen pattern)
+  useEffect(() => {
+    window.XuperPlatform?.setScreenSaver?.(!isPlaying);
+    return () => {
+      window.XuperPlatform?.setScreenSaver?.(true);
+    };
+  }, [isPlaying]);
+
   // Next-episode countdown
   useEffect(() => {
     if (nextCountdown === null) return;
@@ -247,6 +255,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       // AVPlay draws below the page: everything above it must be transparent
       document.documentElement.classList.add('xuper-vod-avplay');
       console.log('[VodPlayer] AVPlay open', res.mime, String(res.url).slice(0, 60), 'startAt=' + startedAtRef.current);
+      // If resuming at an offset, ignore initial 0s updates until seek settles
+      if (startedAtRef.current > 5) {
+        pendingSeekRef.current = { target: startedAtRef.current, until: Date.now() + 6000 };
+      }
       // tizen-bridge reads backup CDNs from here when a stream fails
       window.__xuperCurrentStreamMeta = res;
       video.onloadedmetadata = () => {
@@ -300,7 +312,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           setError('No se pudo reproducir este contenido.');
         }
       };
-      const ok = window.XuperAVPlay.playStream(res.url, res.headers, video);
+      const ok = window.XuperAVPlay.playStream(res.url, res.headers, video, startedAtRef.current);
       console.log('[VodPlayer] playStream returned', ok);
       if (!ok) failed('No se pudo iniciar el reproductor de la TV.');
     };
@@ -336,7 +348,14 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         audioPrefAppliedRef.current = true;
         const tracksNow: any[] = Array.isArray(res.tracks) ? res.tracks : [];
         const prefCode = PREF_LANG_CODES[settingsService.get().audio] || 'es';
-        const wanted = tracksNow.find(t => sameLanguage(t.audio, prefCode));
+        // "Resolución" of the detail: among the tracks in that language, the preferred quality
+        const qPref = QUALITY_OPTIONS[settingsService.get().quality || 0];
+        const qWanted = qPref && qPref !== QUALITY_OPTIONS[0] ? qPref.replace('p', '') : '';
+        const byAudio = tracksNow.filter(t => sameLanguage(t.audio, prefCode));
+        const pool = byAudio.length ? byAudio : (qWanted ? tracksNow : []);
+        const wanted = pool.length
+          ? (qWanted && pool.find(t => String(t.quality || '').indexOf(qWanted) !== -1)) || pool[0]
+          : undefined;
         if (wanted && wanted.index !== res.trackIndex) {
           console.log('[VodPlayer] preferred audio', prefCode, '-> track', wanted.index, 'instead of', res.trackIndex);
           portalTrackRef.current = wanted.index;
@@ -446,14 +465,25 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     };
   }, [browserUrl]);
 
-  // Back from the background and AVPlay could not be restored: reopen at the same position
+  // Back from background / network reconnect: reopen at the same position
   useEffect(() => {
     const onRestoreFailed = () => {
       if (useAvPlayRef.current) setRetryTick(t => t + 1);
     };
+    const onNetworkRecovered = (e: any) => {
+      if (e?.detail?.online && error) {
+        flash('Conexión restablecida. Reanudando…');
+        setError(null);
+        setRetryTick(t => t + 1);
+      }
+    };
     window.addEventListener('xuper-avplay-restore-failed', onRestoreFailed);
-    return () => window.removeEventListener('xuper-avplay-restore-failed', onRestoreFailed);
-  }, []);
+    window.addEventListener('xuper-network-change', onNetworkRecovered);
+    return () => {
+      window.removeEventListener('xuper-avplay-restore-failed', onRestoreFailed);
+      window.removeEventListener('xuper-network-change', onNetworkRecovered);
+    };
+  }, [error]);
 
   // Load the selected subtitle file
   useEffect(() => {
@@ -519,6 +549,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   // Seeking: each press moves the timeline at once and adds to the previous target; the real
   // seek (slow on AVPlay) is sent once, 350 ms after the last press. Until the player reaches the
   // target, its time updates are ignored so the bar does not jump back.
+  const accumulatedSkipRef = useRef(0);
   const seekBy = (delta: number) => {
     const d = timeRef.current.d;
     const pending = pendingSeekRef.current;
@@ -527,9 +558,16 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     pendingSeekRef.current = { target, until: 0 };
     timeRef.current.t = target;
     setCurrentTime(target);
+
+    // Visual scrubbing pill feedback (+10s, +20s, -10s)
+    accumulatedSkipRef.current += delta;
+    const sign = accumulatedSkipRef.current > 0 ? '+' : '';
+    flash(`${accumulatedSkipRef.current > 0 ? '⏩ ' : '⏪ '}${sign}${accumulatedSkipRef.current}s`);
+
     if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
     seekTimerRef.current = setTimeout(() => {
       seekTimerRef.current = null;
+      accumulatedSkipRef.current = 0;
       if (useAvPlayRef.current && window.XuperAVPlay) {
         window.XuperAVPlay.seekTo(target);
       } else if (videoRef.current) {
@@ -602,15 +640,45 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     const onKeyDown = (e: KeyboardEvent) => {
       const code = e.keyCode;
       const key = e.key;
-      const isBack = code === 10009 || code === 27 || code === 461 || key === 'Escape' || key === 'Backspace';
-      const isEnter = code === 13 || code === 32 || code === 19 || code === 415 || code === 10252;
+      const isBack = code === 10009 || code === 27 || code === 461 || key === 'Escape' || key === 'Backspace' || code === 413 || key === 'MediaStop';
+      const isPlay = code === 415 || key === 'MediaPlay';
+      const isPause = code === 19 || key === 'MediaPause';
+      const isPlayPause = code === 10252 || key === 'MediaPlayPause';
+      const isFastForward = code === 417 || key === 'MediaFastForward';
+      const isRewind = code === 412 || key === 'MediaRewind';
+      const isEnter = code === 13 || code === 32;
       const isLeft = code === 37 || key === 'ArrowLeft';
       const isRight = code === 39 || key === 'ArrowRight';
       const isUp = code === 38 || key === 'ArrowUp';
       const isDown = code === 40 || key === 'ArrowDown';
-      if (!(isBack || isEnter || isLeft || isRight || isUp || isDown)) return;
+      if (!(isBack || isEnter || isLeft || isRight || isUp || isDown || isPlay || isPause || isPlayPause || isFastForward || isRewind)) return;
       e.preventDefault();
       e.stopPropagation();
+
+      // Dedicated Samsung Media Remote Keys
+      if (isPlay) {
+        if (!isPlaying) togglePause();
+        triggerOsd();
+        return;
+      }
+      if (isPause) {
+        if (isPlaying) togglePause();
+        triggerOsd();
+        return;
+      }
+      if (isPlayPause) {
+        togglePause();
+        triggerOsd();
+        return;
+      }
+      if (isFastForward) {
+        seekBy(30);
+        return;
+      }
+      if (isRewind) {
+        seekBy(-30);
+        return;
+      }
 
       // "Next episode" card
       if (nextCountdown !== null) {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { TabId, TABS } from './components/layout/TopNavbar';
+import { TabId, TABS, getTabs } from './components/layout/TopNavbar';
+import { parentalService } from './services/parentalService';
 import { Header } from './components/layout/Header';
 import { DestacadosView, DestacadosFocus, ContentRowDef } from './views/DestacadosView';
 import { LiveTvView } from './views/LiveTvView';
@@ -7,7 +8,10 @@ import { VodDetailView } from './views/VodDetailView';
 import { VodPlayerFullscreen } from './views/VodPlayerFullscreen';
 import { SearchModal } from './components/search/SearchModal';
 import { ProfileScreen } from './screens/ProfileScreen';
-import { BrowseScreen } from './screens/BrowseScreen';
+import { BrowseScreen, resolveCategoryIdForRow } from './screens/BrowseScreen';
+import { FilterScreen } from './screens/FilterScreen';
+import { BrowseRoot, FilterRoot } from './lib/screenStack';
+import { PerfHud } from './components/common/PerfHud';
 import { PinDialog } from './screens/PinDialog';
 import { WelcomeModal } from './components/common/WelcomeModal';
 import { playerService } from './services/playerService';
@@ -21,7 +25,7 @@ import { catalogService } from './services/catalogService';
 import { VodItem, VodEpisode } from './types/vod';
 import { LiveChannel, LiveCategory } from './types/channel';
 import { historyService } from './services/historyService';
-import { settingsService, applySubtitleChoice, PREFERRED_LANGUAGES, SUBTITLE_CHOICES } from './services/settingsService';
+import { settingsService, subtitleChoiceIndex, applySettingChoice, SETTINGS_ROW } from './services/settingsService';
 import { getResumeTarget, startAtForEpisode } from './lib/vodResume';
 import { FocusDomain, VodPlayerState } from './app/types';
 import { useCatalog } from './app/useCatalog';
@@ -93,8 +97,41 @@ export const App: React.FC = () => {
     setShowFullscreenOsd,
     triggerOsd,
     toggleLiveFavorite,
-    locateLiveChannel
+    locateLiveChannel,
+    numericBuffer
   } = live;
+
+  // Double-Back exit prompt state
+  const [showExitToast, setShowExitToast] = useState(false);
+  const lastBackPressRef = useRef(0);
+  const exitToastTimerRef = useRef<any>(null);
+
+  // Inactivity screensaver for OLED/QLED panels (5 minutes without remote input)
+  const screensaverTimerRef = useRef<any>(null);
+  const resetScreensaverTimer = useCallback(() => {
+    if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+      window.XuperPlatform.setScreenSaver(false);
+    }
+    if (screensaverTimerRef.current) clearTimeout(screensaverTimerRef.current);
+    screensaverTimerRef.current = setTimeout(() => {
+      // Only engage screensaver if not actively playing fullscreen video
+      if (!activeVodPlayer && !isFullscreenLive) {
+        if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+          window.XuperPlatform.setScreenSaver(true);
+        }
+      }
+    }, 5 * 60 * 1000);
+  }, [activeVodPlayer, isFullscreenLive]);
+
+  useEffect(() => {
+    resetScreensaverTimer();
+    const onActivity = () => resetScreensaverTimer();
+    window.addEventListener('keydown', onActivity, { passive: true });
+    return () => {
+      window.removeEventListener('keydown', onActivity);
+      if (screensaverTimerRef.current) clearTimeout(screensaverTimerRef.current);
+    };
+  }, [resetScreensaverTimer]);
 
   const detail = useVodDetail(featuredItems, movieItems, seriesItems);
   const {
@@ -110,16 +147,18 @@ export const App: React.FC = () => {
   } = detail;
 
   // Starts playback from the detail screen: resume / next episode / chosen episode / trailer
-  const playFromDetail = (item: VodItem, episode?: VodEpisode, isTrailer?: boolean) => {
+  const playFromDetail = (item: VodItem, episode?: VodEpisode, isTrailer?: boolean, fromStart?: boolean) => {
     if (isTrailer) {
       setActiveVodPlayer({ item, isTrailer: true });
       return;
     }
     const entry = historyService.getEntry(item.id);
     const { episodes, seasonId, seasonNumber } = detailEpisodes;
-    const target = episode
+    const found = episode
       ? { episode, startAt: startAtForEpisode(episode, entry) }
       : getResumeTarget(item, episodes, entry, seasonNumber, seasonId);
+    // "Reiniciar": the same episode from the beginning
+    const target = fromStart ? { ...found, startAt: 0 } : found;
     setActiveVodPlayer({
       item,
       episode: target.episode,
@@ -189,34 +228,23 @@ export const App: React.FC = () => {
   );
   const currentRows = useMemo(
     () => buildTabRows(selectedTab, catalog),
-    [selectedTab, historyItems, seriesItems, movieItems, featuredItems, kidsItems, animeItems, catalog.catalogRows]
+    [selectedTab, historyItems, seriesItems, movieItems, featuredItems, kidsItems, animeItems, catalog.catalogRows, catalog.portalRows]
   );
   const totalRows = currentRows.length;
 
-  // Auto-rotate Hero showcase every 6 seconds when user is browsing rows or header
+  // Auto-rotate Hero showcase only when hero is visible at top (paused while browsing rows below to prevent background re-renders)
   useEffect(() => {
     if (selectedTab === 'tv' || activeVodPlayer || isFullscreenLive || isSearchOpen || activeDetailItem || stack.length > 0) return;
-    if (focusDomain === 'content' && destacadosFocus.area === 'hero') return;
+    if (focusDomain === 'content' && destacadosFocus.area === 'row') return;
     const heroCount = Math.min(10, currentHeroItems.length);
     if (heroCount <= 1) return;
 
     const timer = setInterval(() => {
-      setActiveHeroIndex(prev => {
-        const next = (prev + 1) % heroCount;
-        const upcoming = currentHeroItems[(next + 1) % heroCount];
-        const nextBg = upcoming && (upcoming.backdrop || upcoming.landscape || upcoming.poster);
-        if (nextBg) {
-          try {
-            const img = new Image();
-            img.src = nextBg;
-          } catch (_) {}
-        }
-        return next;
-      });
-    }, 6000);
+      setActiveHeroIndex(prev => (prev + 1) % heroCount);
+    }, 8000);
 
     return () => clearInterval(timer);
-  }, [selectedTab, activeVodPlayer, isFullscreenLive, isSearchOpen, activeDetailItem, stack.length, focusDomain, destacadosFocus.area, currentHeroItems]);
+  }, [selectedTab, activeVodPlayer, isFullscreenLive, isSearchOpen, activeDetailItem, stack.length, focusDomain, destacadosFocus.area, currentHeroItems.length]);
 
   // Splash (index.html): a real loading screen, see lib/splash.ts
   useEffect(() => { startSplash(); }, []);
@@ -263,18 +291,24 @@ export const App: React.FC = () => {
     if (!row) return 0;
     return row.items.length + (rowHasSeeAll(row) ? 1 : 0);
   }, [currentRows]);
-  // "Ver todo" of a row: the section's full catalog, filtered by the row's genre or year
+  // "Ver todo" of a row: opens the Categorized Catalog view focused on that row's category
   const openSeeAll = useCallback((row: ContentRowDef) => {
+    const category = resolveCategoryIdForRow(row.title);
+    // A portal row is a column of its tab's root: the catalog opens on that same column
+    if (row.portalRoot) {
+      push({ id: 'browse', root: row.portalRoot, title: row.title, column: row.title, items: row.items as VodItem[], category });
+      return;
+    }
     const target = browseTargetForRow(row, selectedTab);
     if (target.column) {
       // The column's titles (all roots) plus the row's own, without repeats
       const seen = new Set<string>();
       const items = [...(catalog.catalogRows[target.column] || []), ...(row.items as VodItem[])]
         .filter(it => (seen.has(it.id) ? false : (seen.add(it.id), true)));
-      push({ id: 'browse', root: target.root, title: row.title, items });
+      push({ id: 'browse', root: target.root, title: row.title, items, category, column: target.column });
       return;
     }
-    push({ id: 'browse', root: target.root, title: row.title, tag: target.tag, year: target.year });
+    push({ id: 'browse', root: target.root, title: row.title, tag: target.tag, year: target.year, category });
   }, [selectedTab, push, catalog.catalogRows]);
 
   // Each VOD tab remembers its focus, hero slide and scroll; a new tab starts at the top
@@ -307,12 +341,33 @@ export const App: React.FC = () => {
     push({ id: 'profile' });
   }, [push]);
 
+  // "+18" tab: shown only when enabled in Perfil › Bloqueo; opens the adult section after the PIN
+  const [adultEnabled, setAdultEnabled] = useState<boolean>(() => parentalService.isAdultEnabled());
+  useEffect(() => parentalService.subscribe(() => setAdultEnabled(parentalService.isAdultEnabled())), []);
+  const tabs = useMemo(() => getTabs(adultEnabled), [adultEnabled]);
+  const openAdult = useCallback(() => {
+    const go = () => push({ id: 'browse', root: 'adult', title: 'Adultos +18' });
+    if (parentalService.isAdultEnabled()) requestPin('unlock', go);
+  }, [push, requestPin]);
+  const selectTab = useCallback((tab: TabId) => {
+    if (tab === 'adultos') openAdult();
+    else guardTab(tab, () => setSelectedTab(tab));
+  }, [openAdult, guardTab]);
+
+  // Filter screen, on the type of the current tab (movies elsewhere)
+  const openFilter = useCallback((root?: FilterRoot) => {
+    const byTab: Partial<Record<TabId, FilterRoot>> = { peliculas: 'movies', series: 'series', kids: 'kids', anime: 'anime' };
+    playerService.stop();
+    push({ id: 'filter', root: root || byTab[selectedTab] || 'movies' });
+  }, [push, selectedTab]);
+
   // Handle D-pad Navigation: routes each key to the handler of the active screen.
   // Kept in a ref so the window listener never runs with stale state.
   const handleKeyRef = useRef<(key: TvKey, ev?: KeyboardEvent) => boolean>(() => true);
   handleKeyRef.current = (key: TvKey, ev?: KeyboardEvent): boolean => {
-    // Search modal owns the keyboard while open (typing, arrows, Enter, Back)
-    if (isSearchOpen) return false;
+    // Search modal owns the keyboard while open (typing, arrows, Enter, Back); a detail or the
+    // player opened from it sits on top and takes the keys (the search waits hidden underneath)
+    if (isSearchOpen && !activeDetailItem && !activeVodPlayer) return false;
 
     // Fullscreen VOD Player (handles its own keys; back closes player)
     if (activeVodPlayer) {
@@ -328,6 +383,52 @@ export const App: React.FC = () => {
       return handleVodDetailKeys(key, { ...detail, activeDetailItem, setActiveVodPlayer, playFromDetail });
     }
 
+    // Global Color Shortcuts (Samsung TV Remote)
+    if (key === 'colorGreen') {
+      setIsSearchOpen(true);
+      return true;
+    }
+    if (key === 'colorRed') {
+      if (selectedTab === 'tv' && tunedLiveChannel) {
+        toggleLiveFavorite(tunedLiveChannel);
+        return true;
+      }
+      if (activeDetailItem) {
+        favoritesService.toggleFavorite(activeDetailItem.id);
+        return true;
+      }
+    }
+    if (key === 'colorYellow') {
+      if (activeDetailItem) {
+        setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: 0, quickIndex: 1 }));
+        return true;
+      }
+      if (selectedTab === 'tv') {
+        triggerOsd();
+        return true;
+      }
+      if ((window as any).__togglePerfHud) {
+        (window as any).__togglePerfHud();
+        return true;
+      }
+    }
+    if (key === 'colorBlue') {
+      if (selectedTab === 'tv') {
+        setShowFullscreenGuide(prev => !prev);
+        return true;
+      }
+      if (activeDetailItem && detail.detailCounts?.hasTrailer) {
+        playFromDetail(activeDetailItem, undefined, true);
+        return true;
+      }
+      // The stack always holds the home screen: length 1 means nothing is open on top of it
+      if (!activeDetailItem && !activeVodPlayer && stack.length <= 1) {
+        // Universal category exploration gives access to the full combined catalog
+        push({ id: 'browse', root: 'explorar', title: 'Explorar', category: 'all' });
+        return true;
+      }
+    }
+
     // Helper to return to the active tab in header
     const returnToHeader = () => {
       setFocusDomain('header');
@@ -335,13 +436,24 @@ export const App: React.FC = () => {
       setHeaderFocusIndex(curTabIdx !== -1 ? curTabIdx : 1);
     };
 
-    // Global Back key: return to header if in content
+    // Global Back key: return to header if in content, or double-press from header to exit
     if (key === 'back') {
       if (focusDomain === 'content') {
         returnToHeader();
         return true;
       }
-      return false; // let system handle exit
+      // Currently in header: double-press within 2.5s to exit
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2500) {
+        if (exitToastTimerRef.current) clearTimeout(exitToastTimerRef.current);
+        window.XuperPlatform.exit();
+        return true;
+      }
+      lastBackPressRef.current = now;
+      setShowExitToast(true);
+      if (exitToastTimerRef.current) clearTimeout(exitToastTimerRef.current);
+      exitToastTimerRef.current = window.setTimeout(() => setShowExitToast(false), 2500);
+      return true;
     }
 
     if (focusDomain === 'header') {
@@ -355,7 +467,10 @@ export const App: React.FC = () => {
         setLiveTvFocus,
         setIsSearchOpen,
         guardTab,
-        openProfile
+        openProfile,
+        openFilter: () => openFilter(),
+        tabs,
+        selectTab
       });
     }
 
@@ -439,15 +554,67 @@ export const App: React.FC = () => {
     return item ? favoritesService.isFavorite(item.id) : false;
   }, [currentHeroItems, activeHeroIndex]);
 
+  // Network connectivity status (Phase 3 resilience)
+  const [networkToast, setNetworkToast] = useState<{ visible: boolean; online: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    let hideTimer: any = null;
+
+    const onNetChange = (e: any) => {
+      const isOnline = !!e?.detail?.online;
+      if (!isOnline) {
+        if (hideTimer) clearTimeout(hideTimer);
+        setNetworkToast({
+          visible: true,
+          online: false,
+          message: 'Sin conexión a internet · Esperando reconexión…'
+        });
+      } else {
+        setNetworkToast(prev => {
+          if (!prev || !prev.visible) return null; // Don't show toast on fresh boot if already connected
+          return {
+            visible: true,
+            online: true,
+            message: 'Conexión a internet restablecida'
+          };
+        });
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => {
+          setNetworkToast(null);
+        }, 2800);
+      }
+    };
+
+    window.addEventListener('xuper-network-change', onNetChange);
+    return () => {
+      window.removeEventListener('xuper-network-change', onNetChange);
+      if (hideTimer) clearTimeout(hideTimer);
+    };
+  }, []);
+
+  const [favTick, setFavTick] = useState<number>(0);
+  useEffect(() => favoritesService.subscribe(() => setFavTick(t => t + 1)), []);
+  void favTick;
+
   return (
     <div className="app-root theme-apple-dark">
+      {/* Network Connectivity Toast (Tizen Resilience) */}
+      {networkToast && networkToast.visible && (
+        <div className={`network-status-toast ${networkToast.online ? 'is-online' : 'is-offline'}`}>
+          <span className="network-status-dot" />
+          <span>{networkToast.message}</span>
+        </div>
+      )}
+
       {/* Unified Single Header Bar (68px) - Hide when in Fullscreen or Detail Screen! */}
       {!isFullscreenLive && !activeDetailItem && (
         <Header
           selectedTab={selectedTab}
           focusedIndex={focusDomain === 'header' ? headerFocusIndex : null}
-          onSelectTab={tab => guardTab(tab, () => setSelectedTab(tab))}
+          tabs={tabs}
+          onSelectTab={selectTab}
           onSearchClick={() => setIsSearchOpen(true)}
+          onFilterClick={() => openFilter()}
           onProfileClick={openProfile}
         />
       )}
@@ -456,7 +623,9 @@ export const App: React.FC = () => {
       <div
         className="tab-pane-live-tv"
         style={{
-          display: selectedTab === 'tv' && !activeDetailItem && !activeVodPlayer ? 'contents' : 'none'
+          display: selectedTab === 'tv' ? 'contents' : 'none',
+          visibility: selectedTab === 'tv' && (activeDetailItem || activeVodPlayer) ? 'hidden' : undefined,
+          pointerEvents: selectedTab === 'tv' && (activeDetailItem || activeVodPlayer) ? 'none' : undefined,
         }}
       >
         <LiveTvView
@@ -474,11 +643,12 @@ export const App: React.FC = () => {
           drawerKb={fullscreenKb}
           drawerCatIndex={fullscreenCatCursor}
           fullscreenFocusBtn="none"
+          numericBuffer={numericBuffer}
           {...liveViewHandlers}
         />
       </div>
 
-      {/* View: VOD TABS (Destacados, Películas, Series, Kids, Anime, Historial) */}
+      {/* View: VOD TABS (Destacados, Películas, Series, Kids, Anime, Explorar) */}
       {/* Stays mounted under the detail / player (hidden) so Back returns to the same row, card and scroll */}
       {selectedTab !== 'tv' && (
         <div
@@ -516,21 +686,29 @@ export const App: React.FC = () => {
           isFavorite={favoritesService.isFavorite(activeDetailItem.id)}
           relatedItems={currentRelatedItems}
           onBack={detail.handleBackDetail}
-          onPlay={(it, ep, isTrailer) => playFromDetail(it, ep, isTrailer)}
+          onPlay={(it, ep, isTrailer, fromStart) => playFromDetail(it, ep, isTrailer, fromStart)}
           onEpisodesChange={data => setDetailEpisodes(data)}
           onToggleFavorite={it => favoritesService.toggleFavorite(it.id)}
-          onSelectSeason={sIdx => setDetailFocus(prev => ({ ...prev, seasonIndex: sIdx, episodeIndex: 0 }))}
+          onSelectSeason={sIdx => setDetailFocus(prev => ({
+            ...prev,
+            // Picking from the open season list closes it
+            area: prev.area === 'seasonMenu' ? 'seasons' : prev.area,
+            seasonIndex: sIdx,
+            episodeIndex: prev.seasonIndex === sIdx ? prev.episodeIndex : 0
+          }))}
+          onSelectEpisode={epIdx => setDetailFocus(prev => ({ ...prev, episodeIndex: epIdx }))}
+          onOpenSeasonMenu={() => setDetailFocus(prev => ({ ...prev, area: 'seasonMenu', seasonMenuIndex: prev.seasonIndex }))}
           onSelectRelated={rel => handleOpenDetail(rel)}
           onDetailLoaded={counts => setDetailCounts(counts)}
-          onOpenAudioModal={() => setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'audio', modalIndex: 0 }))}
-          onCloseAudioModal={() => setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 2 }))}
-          onSelectAudioOption={opt => {
-            settingsService.set({ audio: Math.max(0, PREFERRED_LANGUAGES.indexOf(opt)) });
-            setDetailFocus(prev => ({ ...prev }));
+          onOpenAudioModal={col => {
+            const st = settingsService.get();
+            const current = col === 'audio' ? st.audio : col === 'subs' ? subtitleChoiceIndex(st) : col === 'quality' ? st.quality || 0 : 0;
+            setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: col, modalIndex: current, quickIndex: 1 }));
           }}
-          onSelectSubOption={sub => {
-            applySubtitleChoice(Math.max(0, SUBTITLE_CHOICES.indexOf(sub)));
-            setDetailFocus(prev => ({ ...prev }));
+          onCloseAudioModal={() => setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: 1 }))}
+          onSelectSetting={(col, index) => {
+            applySettingChoice(col, index);
+            setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: SETTINGS_ROW[col] }));
           }}
         />
       )}
@@ -590,7 +768,30 @@ export const App: React.FC = () => {
               title={screen.title}
               initialTag={screen.tag}
               initialYear={screen.year}
+              initialCategory={screen.category}
+              initialColumn={screen.column}
               fixedItems={screen.items}
+              catalogRows={catalog.catalogRows}
+              catalogItems={[...featuredItems, ...movieItems, ...seriesItems, ...kidsItems, ...animeItems]}
+              onClose={pop}
+              onOpenVod={it => handleOpenDetail(it)}
+              onOpenSearch={() => setIsSearchOpen(true)}
+              onOpenFilter={screen.root === 'adult' ? undefined : () => {
+                const r = screen.root;
+                openFilter(r === 'movies' || r === 'series' || r === 'kids' || r === 'anime' ? r : 'movies');
+              }}
+            />
+          );
+        }
+        if (screen.id === 'filter') {
+          // Stays under a detail opened from it, so Back returns to the same filters and grid position
+          return (
+            <FilterScreen
+              key={`filter-${idx}`}
+              isTop={isTop}
+              hidden={!!activeDetailItem || !!activeVodPlayer}
+              isSearchOpen={isSearchOpen}
+              initialRoot={screen.root}
               onClose={pop}
               onOpenVod={it => handleOpenDetail(it)}
               onOpenSearch={() => setIsSearchOpen(true)}
@@ -649,6 +850,16 @@ export const App: React.FC = () => {
 
       {/* First-Run Welcome & Remote Control Guide */}
       <WelcomeModal />
+
+      {/* Double-Back Exit Toast */}
+      {showExitToast && (
+        <div className="xuper-exit-toast">
+          <span>Presione ATRÁS de nuevo para salir</span>
+        </div>
+      )}
+
+      {/* Real-Time Performance Monitor & Profiler Overlay */}
+      <PerfHud />
     </div>
   );
 };

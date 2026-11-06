@@ -1,6 +1,6 @@
 import { kvGet, kvSet } from '../lib/kvStore';
 import { VodItem, VodEpisode, VodSeason } from '../types/vod';
-import { organizeCatalogItems, belongsToSection } from '../lib/catalogOrganizer';
+import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../lib/catalogOrganizer';
 
 declare global {
   interface Window {
@@ -17,6 +17,12 @@ declare global {
       items: any[];
     };
   }
+}
+
+/** One home row of a portal root, as getNextColumns sends it (e.g. "Horror", "Netflix Series") */
+export interface PortalRow {
+  name: string;
+  items: VodItem[];
 }
 
 function normalizeItem(raw: any, index: number): VodItem {
@@ -65,6 +71,7 @@ function normalizeItem(raw: any, index: number): VodItem {
     isSeries,
     row: rowName,
     streamUrl: raw.streamUrl || raw.stream_url || '',
+    trailerUrl: raw.trailerUrl || raw.trailer_url || raw.trailer || raw.previewUrl || raw.preview_url || undefined,
     seasons: raw.seasons || [],
     episodes: raw.episodes || []
   };
@@ -93,7 +100,7 @@ function formatEpisodeDuration(raw: any): string {
 //  - once the app is idle, and when it comes back to the front, a copy older than
 //    LIVE_REFRESH_AFTER_MS is downloaded again for the next start.
 const LIVE_KEY = 'xuper_live_catalog_v1';
-const LIVE_ROOTS = ['featured', 'movies', 'series', 'kids', 'anime', 'free'];
+const LIVE_ROOTS = ['featured', 'movies', 'series', 'kids', 'anime', 'free', 'explorar'];
 const LIVE_WAIT_MS = 6000;
 const LIVE_FRESH_MS = 2 * 60 * 60 * 1000;
 const LIVE_REFRESH_AFTER_MS = 30 * 60 * 1000;
@@ -175,6 +182,7 @@ class CatalogService {
     kids: VodItem[];
     anime: VodItem[];
     rowsByGroup: Record<string, VodItem[]>;
+    portalRows: Record<string, PortalRow[]>;
   } | null = null;
 
   public async fetchCatalog(): Promise<{
@@ -184,12 +192,15 @@ class CatalogService {
     kids: VodItem[];
     anime: VodItem[];
     rowsByGroup: Record<string, VodItem[]>;
+    portalRows: Record<string, PortalRow[]>;
   }> {
     if (this.cache) return this.cache;
 
     // 0. Live catalog: a recent saved copy, else fresh from the portal, else any saved copy
     const saved = await readLiveCatalog();
-    if (saved && Date.now() - saved.at < LIVE_FRESH_MS) {
+    // A copy saved before the Explorar root was downloaded lacks its rows: not fresh
+    const savedComplete = !!saved && saved.items.some((it: any) => String(it.category || '').split(',')[0] === 'explorar');
+    if (saved && savedComplete && Date.now() - saved.at < LIVE_FRESH_MS) {
       return this.categorize(saved.items.map((it: any, idx: number) => normalizeItem(it, idx)));
     }
     const fresh = await Promise.race([
@@ -228,8 +239,27 @@ class CatalogService {
   }
 
   private categorize(rawItems: VodItem[]) {
-    // 1. Group series seasons and filter adult content
-    const items = organizeCatalogItems(rawItems);
+    // 1. Group series seasons and filter adult content. On the way, keep the portal's rows per root
+    //    (getNextColumns): the same rows, names and order as the official app's tabs.
+    const collector = new SeriesCollector();
+    const items: VodItem[] = [];
+    const portalRows: Record<string, PortalRow[]> = {};
+    const rowIndex: Record<string, PortalRow> = {};
+    for (const raw of rawItems) {
+      if (!raw || isAdultItem(raw)) continue;
+      const { item: grouped, isFresh } = collector.add(raw);
+      if (isFresh) items.push(grouped);
+      const root = (raw.category || '').split(',')[0].trim();
+      if (!root || !raw.row) continue;
+      const key = `${root}\u0000${raw.row}`;
+      let row = rowIndex[key];
+      if (!row) {
+        row = rowIndex[key] = { name: raw.row, items: [] };
+        (portalRows[root] || (portalRows[root] = [])).push(row);
+      }
+      // Seasons of a series share one entry, so a row never shows the same series twice
+      if (row.items.indexOf(grouped) === -1) row.items.push(grouped);
+    }
 
     const featured: VodItem[] = [];
     const movies: VodItem[] = [];
@@ -268,7 +298,8 @@ class CatalogService {
       series: series.length >= 4 ? series : items.slice(0, 50),
       kids: kids.length >= 4 ? kids : items.slice(0, 30),
       anime: anime.length >= 4 ? anime : items.slice(0, 30),
-      rowsByGroup
+      rowsByGroup,
+      portalRows
     };
 
     return this.cache;
@@ -824,6 +855,8 @@ class CatalogService {
           if (!detailItem.backdrop && item.backdrop) detailItem.backdrop = item.backdrop;
           if (!detailItem.poster && item.poster) detailItem.poster = item.poster;
           if (!detailItem.landscape && item.landscape) detailItem.landscape = item.landscape;
+          const rawTrailer = res.item?.trailerUrl || res.item?.trailer_url || res.item?.trailer || res.trailerUrl || res.trailer || res.trailer_url || res.previewUrl || '';
+          if (rawTrailer) detailItem.trailerUrl = String(rawTrailer);
 
           const episodes: VodEpisode[] = (res.episodes || []).map((ep: any, idx: number) => ({
             id: String(ep.id || ep.contentId || idx + 1),
@@ -837,20 +870,86 @@ class CatalogService {
             description: ep.description || ep.desc || ep.synopsis || 'Sin descripción disponible para este episodio.'
           }));
 
-          const seasons: VodSeason[] = (res.seasons || []).map((s: any, sIdx: number) => ({
-            id: String(s.id || sIdx + 1),
-            name: s.name || `Temporada ${s.number || sIdx + 1}`,
-            number: Number(s.number) || sIdx + 1,
-            episodes: []
-          })).sort((a: VodSeason, b: VodSeason) => a.number - b.number);
+          const rawSeasons: any[] = res.seasons || [];
+          const itemSeasons: VodSeason[] = item.seasons || [];
+
+          // Build clean, deduplicated list of seasons
+          const seenNumbers = new Set<number>();
+          const seenIds = new Set<string>();
+          const cleanedSeasons: VodSeason[] = [];
+
+          const addSeason = (candidate: { id: string; name?: string; number?: number }) => {
+            const sid = String(candidate.id || '').trim();
+            if (!sid || seenIds.has(sid)) return;
+
+            let snum = candidate.number ? Number(candidate.number) : 0;
+            let sname = (candidate.name || '').trim();
+
+            if (!snum && sname) {
+              const p = parseSeason(sname);
+              if (p.number) snum = p.number;
+            }
+
+            if (!snum) {
+              let nextNum = 1;
+              while (seenNumbers.has(nextNum)) nextNum++;
+              snum = nextNum;
+            }
+
+            if (seenNumbers.has(snum)) {
+              // Duplicate season number (e.g. duplicate Season 1 entry in portal)
+              if (sid === String(item.id)) {
+                const existingIdx = cleanedSeasons.findIndex(x => x.number === snum);
+                if (existingIdx !== -1) {
+                  seenIds.delete(cleanedSeasons[existingIdx].id);
+                  cleanedSeasons[existingIdx] = {
+                    id: sid,
+                    name: sname || `Temporada ${snum}`,
+                    number: snum,
+                    episodes: []
+                  };
+                  seenIds.add(sid);
+                }
+              }
+              return;
+            }
+
+            seenIds.add(sid);
+            seenNumbers.add(snum);
+            cleanedSeasons.push({
+              id: sid,
+              name: sname || `Temporada ${snum}`,
+              number: snum,
+              episodes: []
+            });
+          };
+
+          // Priority 1: Current item being viewed
+          if (detailItem.isSeries || item.isSeries || episodes.length > 0) {
+            const p = parseSeason(item.title);
+            addSeason({
+              id: String(item.id),
+              name: p.number ? `Temporada ${p.number}` : undefined,
+              number: p.number || undefined
+            });
+          }
+
+          // Priority 2: Seasons discovered by SeriesCollector in catalog
+          for (const s of itemSeasons) {
+            addSeason(s);
+          }
+
+          // Priority 3: Related seasons from sameSeasonSeriesList in portal
+          for (const s of rawSeasons) {
+            addSeason(s);
+          }
+
+          cleanedSeasons.sort((a, b) => a.number - b.number);
 
           return {
             item: detailItem,
-            // Real portal data only: no invented episodes when the portal returns none
             episodes,
-            seasons: seasons.length > 0
-              ? seasons
-              : (detailItem.isSeries || episodes.length > 0 ? [{ id: item.id, name: 'Temporada 1', number: 1, episodes: [] }] : [])
+            seasons: cleanedSeasons
           };
         }
       } catch (e) {
@@ -908,3 +1007,121 @@ class CatalogService {
 }
 
 export const catalogService = new CatalogService();
+
+// ---------- Portal category tree (the official app's sidebar)
+// v3/getColumnContents gives the children of a column (Netflix, Hulu, Acción…), v3/getShelveData
+// the titles of one of them, page by page. The tree is saved, so the sidebar shows at once next time
+// (and when the portal does not answer).
+
+export interface PortalColumn {
+  id: number;
+  code: string;
+  name: string;
+  free: boolean;
+  sequence: number;
+}
+
+/** Portal column id of a root ('movies', 'series', 'kids', 'anime', 'featured', 'explorar') */
+export function portalRootId(root: string): number | undefined {
+  const ids = window.MagisClient?.rootIds as Record<string, number> | undefined;
+  return ids ? ids[root] : undefined;
+}
+
+/** opts.special: restricted children too (adult section, opened after the PIN) */
+export function getPortalColumns(columnId: number, opts?: { special?: boolean }): Promise<PortalColumn[]> {
+  const special = !!(opts && opts.special);
+  const key = `xuper_columns_v1_${columnId}${special ? '_s' : ''}`;
+  return new Promise<PortalColumn[]>((resolve, reject) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.columns !== 'function') return reject(new Error('no portal client'));
+    client.columns(columnId, (err: any, list: PortalColumn[]) => (err ? reject(err) : resolve(list || [])), { special });
+  }).then(
+    list => {
+      if (list.length) kvSet(key, list);
+      return list;
+    },
+    async err => {
+      const saved = await kvGet<PortalColumn[]>(key);
+      if (saved && saved.length) return saved;
+      throw err;
+    }
+  );
+}
+
+// ---------- Filter screen (v3/filterGenre values, v3/filterByContent titles)
+
+export interface FilterOptions {
+  tags: string[];
+  year: string[];
+  originalCountry: string[];
+  audio: { key: string; value: string }[];
+}
+
+/** Selected values, as the portal names them ('' = all) */
+export interface FilterValues {
+  tags: string;
+  year: string;
+  originalCountry: string;
+  audio: string;
+}
+
+export function getFilterOptions(root: string): Promise<FilterOptions> {
+  return new Promise((resolve, reject) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.browseFilters !== 'function') return reject(new Error('no portal client'));
+    client.browseFilters(root, (err: any, res: any) => {
+      if (err) return reject(err);
+      resolve({
+        tags: res.tags || [],
+        year: (res.year || []).map(String),
+        originalCountry: res.originalCountry || [],
+        audio: res.audio || []
+      });
+    });
+  });
+}
+
+export function getFilteredPage(
+  root: string,
+  filters: FilterValues,
+  pageNum: number,
+  pageSize: number
+): Promise<{ items: VodItem[]; total: number }> {
+  return new Promise((resolve, reject) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.browse !== 'function') return reject(new Error('no portal client'));
+    client.browse(root, filters, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
+      if (err) return reject(err);
+      const offset = (pageNum - 1) * pageSize;
+      resolve({ items: (res.items || []).map((raw, i) => normalizeItem(raw, offset + i)), total: res.total || 0 });
+    });
+  });
+}
+
+/** "Búsqueda popular" of the search screen: the titles of the first child of the hot-search root */
+export async function getPopularSearchPage(pageNum: number, pageSize: number): Promise<{ items: VodItem[]; total: number }> {
+  const rootId = portalRootId('search');
+  if (rootId === undefined) throw new Error('no portal client');
+  const cols = await getPortalColumns(rootId);
+  if (!cols.length) return { items: [], total: 0 };
+  return getPortalColumnPage(cols[0].id, pageNum, pageSize);
+}
+
+export function getPortalColumnPage(
+  columnId: number,
+  pageNum: number,
+  pageSize: number
+): Promise<{ items: VodItem[]; total: number }> {
+  return new Promise((resolve, reject) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.columnPage !== 'function') return reject(new Error('no portal client'));
+    client.columnPage(columnId, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
+      if (err) return reject(err);
+      const offset = (pageNum - 1) * pageSize;
+      resolve({
+        items: (res.items || []).map((raw, i) => normalizeItem(raw, offset + i)),
+        total: res.total || 0
+      });
+    });
+  });
+}

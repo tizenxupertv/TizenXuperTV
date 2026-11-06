@@ -1,8 +1,10 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useRenderCount } from '../debug/renderCount';
+import { useViewProfiler } from '../lib/perfMonitor';
 import { setTrackOffset } from '../utils/scrollHelper';
 import { VodItem } from '../types/vod';
 import { HistoryItem } from '../types/history';
+import { BrowseRoot } from '../lib/screenStack';
 import { HeroShowcase } from '../components/vod/HeroShowcase';
 import { ContentSlider } from '../components/vod/ContentSlider';
 import { ContinueWatchingRow } from '../components/vod/ContinueWatchingRow';
@@ -23,6 +25,8 @@ export interface ContentRowDef {
   isRanked?: boolean;
   isWide?: boolean;
   items: VodItem[] | HistoryItem[];
+  /** Portal root of a row sent by the portal: "Ver todo" opens that column there */
+  portalRoot?: BrowseRoot;
 }
 
 interface DestacadosViewProps {
@@ -61,38 +65,14 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
   onSeeAll
 }) => {
   useRenderCount('DestacadosView');
+  useViewProfiler('Destacados');
   const containerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const currentHero = heroItems[activeHeroIndex] || heroItems[0];
 
-  // Zero-Reflow Vertical Framing: row offsets are measured and cached once (or on resize),
-  // completely eliminating Layout Thrashing (offsetTop / querySelectorAll) during Up/Down navigation.
-  const rowOffsetsRef = useRef<number[]>([]);
-  const cachedMaxYRef = useRef<number>(0);
-
-  const updateRowMetrics = useCallback(() => {
-    const track = trackRef.current;
-    const container = containerRef.current;
-    if (!track || !container) return;
-    const sections = track.querySelectorAll('.content-section');
-    const offsets: number[] = [];
-    sections.forEach(s => {
-      offsets.push((s as HTMLElement).offsetTop);
-    });
-    rowOffsetsRef.current = offsets;
-    cachedMaxYRef.current = Math.max(0, track.scrollHeight - container.clientHeight + 60);
-  }, []);
-
-  useEffect(() => {
-    // Schedule one initial measure after layout settles
-    const t = setTimeout(updateRowMetrics, 60);
-    window.addEventListener('resize', updateRowMetrics, { passive: true });
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener('resize', updateRowMetrics);
-    };
-  }, [updateRowMetrics]);
-
+  // Vertical framing reads the focused row's offset when the row changes (Up/Down only). Offsets
+  // measured once go stale: rows off screen are laid out at a placeholder height
+  // (content-visibility) until they first render, and a portal tab has up to ~30 rows.
   useEffect(() => {
     const track = trackRef.current;
     const container = containerRef.current;
@@ -101,18 +81,9 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
     if (focus.area === 'hero') {
       setTrackOffset(track, 'y', 0);
     } else if (focus.area === 'row') {
-      let targetY = rowOffsetsRef.current[focus.rowIndex];
-      if (targetY === undefined) {
-        const sections = track.querySelectorAll('.content-section');
-        const secEl = sections[focus.rowIndex] as HTMLElement | undefined;
-        if (secEl) {
-          targetY = secEl.offsetTop;
-          rowOffsetsRef.current[focus.rowIndex] = targetY;
-        } else {
-          targetY = 0;
-        }
-      }
-      const max = cachedMaxYRef.current || Math.max(0, track.scrollHeight - container.clientHeight + 60);
+      const secEl = track.querySelectorAll('.content-section')[focus.rowIndex] as HTMLElement | undefined;
+      const targetY = secEl ? secEl.offsetTop : 0;
+      const max = Math.max(0, track.scrollHeight - container.clientHeight + 60);
       setTrackOffset(track, 'y', Math.min(max, Math.max(0, targetY - 24)));
     }
   }, [isFocusActive, focus.area, focus.rowIndex]);
@@ -198,6 +169,9 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
           );
         }
 
+        const activeRowIdx = isFocusActive && focus.area === 'row' ? focus.rowIndex : 0;
+        const isNearFocus = Math.abs(rowIdx - activeRowIdx) <= 2;
+
         return (
           <ContentSlider
             key={row.id}
@@ -205,7 +179,7 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
             subtitle={row.subtitle}
             items={row.items as VodItem[]}
             isRanked={row.isRanked}
-            nearFocus={rowIdx <= (isFocusActive && focus.area === 'row' ? focus.rowIndex : 0) + 2}
+            nearFocus={isNearFocus}
             isWide={row.isWide}
             focusedIndex={focusedIndex}
             onActivate={onActivateVod}

@@ -1,13 +1,15 @@
 import SHA256 from 'crypto-js/sha256';
+import { isAdultLabel } from '../lib/catalogOrganizer';
 
 const KEY = 'xuper_parental_v1';
 const MAX_FAILS = 5;
 const COOLDOWN_MS = 30000;
 
+/** The PIN only guards adult content: the +18 section and the adult live category */
 interface ParentalState {
   pinHash?: string;
-  lockedLiveCats: string[];
-  lockedVodTabs: string[];
+  /** "Sección para adultos (+18)": off unless enabled with the PIN in Perfil › Bloqueo */
+  adultEnabled?: boolean;
 }
 
 export type VerifyResult = 'ok' | 'bad' | 'cooldown';
@@ -27,14 +29,10 @@ class ParentalService {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const p = JSON.parse(raw);
-        return {
-          pinHash: p.pinHash,
-          lockedLiveCats: Array.isArray(p.lockedLiveCats) ? p.lockedLiveCats : [],
-          lockedVodTabs: Array.isArray(p.lockedVodTabs) ? p.lockedVodTabs : []
-        };
+        return { pinHash: p.pinHash, adultEnabled: !!p.adultEnabled && !!p.pinHash };
       }
     } catch (e) {}
-    return { lockedLiveCats: [], lockedVodTabs: [] };
+    return {};
   }
 
   private emit() {
@@ -52,6 +50,18 @@ class ParentalService {
 
   public hasPin(): boolean {
     return !!this.read().pinHash;
+  }
+
+  /** The +18 section exists only with a PIN (removing the PIN turns it off) */
+  public isAdultEnabled(): boolean {
+    const state = this.read();
+    return !!state.pinHash && !!state.adultEnabled;
+  }
+
+  public setAdultEnabled(on: boolean) {
+    const state = this.read();
+    state.adultEnabled = on && !!state.pinHash;
+    this.write(state);
   }
 
   public isSessionUnlocked(): boolean {
@@ -92,45 +102,12 @@ class ParentalService {
 
   public clear() {
     this.sessionUnlocked = false;
-    this.write({ lockedLiveCats: [], lockedVodTabs: [] });
+    this.write({});
   }
 
-  private isLocked(list: string[], id: string): boolean {
-    const state = this.read();
-    return !!state.pinHash && !this.sessionUnlocked && list.indexOf(id) !== -1;
-  }
-
-  public isLiveCatLocked(id: string | number): boolean {
-    return this.isLocked(this.read().lockedLiveCats, String(id));
-  }
-
-  public isVodTabLocked(tab: string): boolean {
-    return this.isLocked(this.read().lockedVodTabs, tab);
-  }
-
-  public isLiveCatMarked(id: string | number): boolean {
-    return this.read().lockedLiveCats.indexOf(String(id)) !== -1;
-  }
-
-  public isVodTabMarked(tab: string): boolean {
-    return this.read().lockedVodTabs.indexOf(tab) !== -1;
-  }
-
-  private toggle(field: 'lockedLiveCats' | 'lockedVodTabs', id: string) {
-    const state = this.read();
-    const list = state[field];
-    const idx = list.indexOf(id);
-    if (idx === -1) list.push(id);
-    else list.splice(idx, 1);
-    this.write(state);
-  }
-
-  public toggleLiveCat(id: string | number) {
-    this.toggle('lockedLiveCats', String(id));
-  }
-
-  public toggleVodTab(tab: string) {
-    this.toggle('lockedVodTabs', tab);
+  /** Adult live category ("18+"): hidden while the +18 section is off, behind the PIN while on */
+  public isAdultCategory(name: string | undefined): boolean {
+    return isAdultLabel(name);
   }
 
   public subscribe(cb: () => void): () => void {

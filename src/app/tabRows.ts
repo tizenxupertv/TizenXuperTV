@@ -3,6 +3,7 @@ import { ContentRowDef } from '../views/DestacadosView';
 import { VodItem } from '../types/vod';
 import { HistoryItem } from '../types/history';
 import { BrowseRoot } from '../lib/screenStack';
+import type { PortalRow } from '../services/catalogService';
 
 export interface TabRowsData {
   historyItems: HistoryItem[];
@@ -12,11 +13,49 @@ export interface TabRowsData {
   kidsItems: VodItem[];
   animeItems: VodItem[];
   catalogRows: Record<string, VodItem[]>;
+  /** Portal rows per root category ('destacado', 'pelicula', 'serie', 'infantil', 'anime', 'explorar') */
+  portalRows?: Record<string, PortalRow[]>;
+}
+
+/** Portal root of each VOD tab: its category in the catalog, and its column tree */
+const TAB_PORTAL_ROOT: Partial<Record<TabId, { category: string; root: BrowseRoot }>> = {
+  destacados: { category: 'destacado', root: 'featured' },
+  peliculas: { category: 'pelicula', root: 'movies' },
+  series: { category: 'serie', root: 'series' },
+  kids: { category: 'infantil', root: 'kids' },
+  anime: { category: 'anime', root: 'anime' },
+  explorar: { category: 'explorar', root: 'explorar' }
+};
+
+/**
+ * The tab's rows exactly as the portal sends them (getNextColumns of its root): names, order and
+ * titles of the official app. Empty when the catalog has no portal rows (offline demo data).
+ */
+function portalTabRows(selectedTab: TabId, data: TabRowsData): ContentRowDef[] {
+  const target = TAB_PORTAL_ROOT[selectedTab];
+  const rows = target && data.portalRows ? data.portalRows[target.category] || [] : [];
+  return rows
+    .filter(r => r.items.length > 0)
+    .map((r, i) => ({
+      id: `portal:${target!.category}:${i}:${r.name}`,
+      title: r.name,
+      type: 'vod' as const,
+      items: r.items,
+      // Not sent by the portal: ranking numbers for its "TOP15" rows, landscape cards for trailers
+      isRanked: /\btop\s?\d+/i.test(r.name),
+      isWide: /tr[aá]iler/i.test(r.name),
+      portalRoot: target!.root
+    }));
 }
 
 /** Hero carousel items for a VOD tab */
 export function heroItemsForTab(selectedTab: TabId, data: TabRowsData): VodItem[] {
   const { featuredItems, movieItems, seriesItems, kidsItems, animeItems } = data;
+  if (selectedTab === 'explorar') {
+    // One title per platform row (Netfix, Disney+, Prime Video…)
+    const heroes = (data.portalRows?.explorar || []).map(r => r.items[0]).filter(Boolean);
+    return heroes.length ? heroes.slice(0, 8) : featuredItems.slice(0, 8);
+  }
   if (selectedTab === 'peliculas') return movieItems.slice(0, 8);
   if (selectedTab === 'series') return seriesItems.slice(0, 8);
   if (selectedTab === 'kids') return kidsItems.slice(0, 8);
@@ -29,6 +68,15 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
   const { historyItems, featuredItems, movieItems, seriesItems, kidsItems, animeItems, catalogRows } = data;
   const list: ContentRowDef[] = [];
 
+  const portal = portalTabRows(selectedTab, data);
+  if (portal.length > 0) {
+    if (selectedTab === 'destacados' && historyItems && historyItems.length > 0) {
+      list.push({ id: 'history', title: 'Seguir viendo', type: 'history', items: historyItems });
+    }
+    return list.concat(portal);
+  }
+
+  // Offline (no portal rows): rows composed by the app from the item lists
   if (selectedTab === 'destacados') {
     if (historyItems && historyItems.length > 0) {
       list.push({ id: 'history', title: 'Seguir viendo', type: 'history', items: historyItems });
@@ -362,18 +410,15 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
       isWide: true,
       items: items.slice(2, 10)
     });
-  } else if (selectedTab === 'historial') {
-    if (historyItems && historyItems.length > 0) {
-      list.push({ id: 'history', title: 'Seguir viendo', type: 'history', items: historyItems });
-    }
-    if (movieItems && movieItems.length > 0) {
-      list.push({
-        id: 'history_recommended',
-        title: 'Recomendados para ti',
-        type: 'vod',
-        items: movieItems.slice(0, 12)
-      });
-    }
+  } else if (selectedTab === 'explorar') {
+    // The platform columns found in the saved catalog
+    const platforms = ['Netflix Series', 'Netflix Movie', 'HBO Series', 'HBO Movie', 'Disney Series', 'Disney Movie',
+      'Prime Video Series', 'Prime Video Movie', 'Apple TV+ Series', 'Apple TV+ Movie', 'Hulu Series', 'Hulu Movie',
+      'Paramount + Series', 'Paramount + Movie'];
+    platforms.forEach(name => {
+      const items = catalogRows[name];
+      if (items && items.length > 0) list.push({ id: `platform:${name}`, title: name, type: 'vod', items });
+    });
   }
 
   return list;

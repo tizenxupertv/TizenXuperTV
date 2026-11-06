@@ -7,7 +7,11 @@ export interface PlaybackSettings {
   subLang: number;
   size: number;      // 0 = Normal, 1 = Grande, 2 = Pequeño
   style: number;
+  quality: number;   // index in QUALITY_OPTIONS (0 = Automática)
 }
+
+/** "Resolución" of the detail: preferred quality among the portal's tracks of a title */
+export const QUALITY_OPTIONS = ['Auto', '1080p', '720p', '480p'];
 
 const DEFAULTS: PlaybackSettings = {
   display: 0,
@@ -15,7 +19,8 @@ const DEFAULTS: PlaybackSettings = {
   subtitle: true,
   subLang: 0,
   size: 0,
-  style: 0
+  style: 0,
+  quality: 0
 };
 
 class SettingsService {
@@ -50,10 +55,20 @@ class SettingsService {
 
 export const settingsService = new SettingsService();
 
-/** Language codes in the same order as the audio / subtitle language options of the profile */
-export const PREFERRED_LANGUAGES = ['Español', 'Portugués', 'Inglés'];
+/** Row of each setting in the detail's settings list (Audio, Subtítulos, Resolución) */
+export const SETTINGS_ROW: Record<'audio' | 'subs' | 'quality', number> = { audio: 0, subs: 1, quality: 2 };
 
-/** Subtitle options of the detail modal: "Desactivados" followed by the three languages */
+/** Applies option `index` of a setting of the detail's settings list */
+export function applySettingChoice(col: 'audio' | 'subs' | 'quality', index: number): void {
+  if (col === 'audio') settingsService.set({ audio: index });
+  else if (col === 'subs') applySubtitleChoice(index);
+  else settingsService.set({ quality: index });
+}
+
+/** Language codes in the same order as the audio / subtitle language options of the profile */
+export const PREFERRED_LANGUAGES = ['Español (Latino)', 'Español (España)', 'Portugués', 'Inglés'];
+
+/** Subtitle options of the detail modal: "Desactivados" followed by the languages */
 export const SUBTITLE_CHOICES = ['Desactivados', ...PREFERRED_LANGUAGES];
 
 export function subtitleChoiceIndex(st: PlaybackSettings): number {

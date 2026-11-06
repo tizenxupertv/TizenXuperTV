@@ -2,11 +2,15 @@ import { VodItem } from '../types/vod';
 
 export type PinMode = 'unlock' | 'create' | 'change' | 'disable';
 
-export type BrowseRoot = 'featured' | 'movies' | 'series' | 'kids' | 'anime';
+export type BrowseRoot = 'featured' | 'movies' | 'series' | 'kids' | 'anime' | 'explorar' | 'adult';
+
+/** "Tipo" of the filter screen */
+export type FilterRoot = 'movies' | 'series' | 'kids' | 'anime';
 
 export type Screen =
   | { id: 'home' }
-  | { id: 'browse'; root: BrowseRoot; title: string; tag?: string; year?: string; items?: VodItem[] }
+  | { id: 'browse'; root: BrowseRoot; title: string; tag?: string; year?: string; items?: VodItem[]; category?: string; column?: string }
+  | { id: 'filter'; root: FilterRoot }
   | { id: 'profile'; section?: number }
   | { id: 'pin'; mode: PinMode; onSuccess?: () => void; onCancel?: () => void };
 

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { VodItem } from '../../types/vod';
-import { useCardImage } from '../../lib/imageCache';
+import { useCardImage, isImagePrecached, markImageLoaded } from '../../lib/imageCache';
+import { startImageTracking } from '../../lib/perfMonitor';
 
 interface PosterCardProps {
   item: VodItem;
@@ -27,7 +28,31 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
   // Card-size copy of the portal image; the placeholder shows under it until it is ready
   const placeholder = isWide ? 'assets/placeholder_landscape.png' : 'assets/placeholder_vertical.png';
   const cardSrc = useCardImage(posterUrl, isWide ? 484 : 230, isWide ? 340 : 340, showImage);
-  const background = cardSrc ? `url('${cardSrc}'), url('${placeholder}')` : `url('${placeholder}')`;
+
+  const isCached = !!cardSrc && isImagePrecached(cardSrc);
+  const [imgLoaded, setImgLoaded] = useState(isCached);
+
+  useEffect(() => {
+    if (cardSrc && isImagePrecached(cardSrc)) {
+      setImgLoaded(true);
+    }
+  }, [cardSrc]);
+
+  const trackingRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (showImage && cardSrc && !trackingRef.current) {
+      trackingRef.current = startImageTracking();
+    }
+  }, [showImage, cardSrc]);
+
+  const handleImgDone = () => {
+    if (cardSrc) markImageLoaded(cardSrc);
+    setImgLoaded(true);
+    if (trackingRef.current) {
+      trackingRef.current();
+      trackingRef.current = null;
+    }
+  };
 
   const categoryName = item.isSeries ? 'Programa de TV' : 'Película';
   const genresStr = item.genres && item.genres.length ? item.genres.slice(0, 2).join(' · ') : (item.category || 'Cine');
@@ -45,10 +70,24 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
       className={`poster-card apple-poster-card ${isWide ? 'is-wide-card' : ''} ${rank ? 'has-rank' : ''} ${isFocused ? 'is-focused' : ''}`}
       onClick={() => onActivate(item)}
     >
-      <div
-        className="poster-card-img"
-        style={{ backgroundImage: background }}
-      >
+      <div className="poster-card-img">
+        <img
+          className="poster-card-placeholder-img"
+          src={placeholder}
+          alt=""
+          loading="eager"
+        />
+        {showImage && cardSrc && (
+          <img
+            className={`poster-card-img-element ${imgLoaded ? 'is-loaded' : ''}`}
+            src={cardSrc}
+            decoding="async"
+            loading="lazy"
+            onLoad={handleImgDone}
+            onError={handleImgDone}
+            alt=""
+          />
+        )}
         {/* Top 10 Rank Number in clean Apple TV typography */}
         {rank !== undefined && rank > 0 && !isWide && (
           <div className="poster-rank-badge">{rank}</div>

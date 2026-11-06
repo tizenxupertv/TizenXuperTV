@@ -39,20 +39,21 @@ export function getResumeTarget(
   seasonNumber?: number,
   seasonId?: string
 ): ResumeTarget {
-  // History of another season (e.g. watched T10, now showing T9) does not apply to this list
-  const sameSeason = !entry || !entry.seasonId || !seasonId || String(entry.seasonId) === String(seasonId);
-  if (entry && String(entry.id) === String(item.id) && sameSeason) {
-    if (episodes.length > 0) {
+  if (entry && String(entry.id) === String(item.id)) {
+    const seasonMatches = (entry.seasonNumber === undefined || seasonNumber === undefined) ||
+                          (parseInt(String(entry.seasonNumber), 10) === parseInt(String(seasonNumber), 10));
+
+    if (episodes.length > 0 && seasonMatches) {
       let idx = entry.episodeId ? episodes.findIndex(ep => String(ep.id) === String(entry.episodeId)) : -1;
-      // Number matching only for old entries saved without an episode id
-      if (idx === -1 && !entry.episodeId && entry.episodeNumber !== undefined) {
+      // Number matching fallback
+      if (idx === -1 && entry.episodeNumber !== undefined) {
         idx = episodes.findIndex((ep, i) => episodeNumber(ep, i) === parseInt(String(entry.episodeNumber), 10));
       }
       if (idx !== -1) {
         if (!isFinished(entry.position, entry.duration)) {
           return {
             episode: episodes[idx],
-            startAt: entry.position,
+            startAt: Math.max(0, entry.position),
             label: `Continuar ${episodeLabel(episodes[idx], idx, seasonNumber)}${remaining(entry.position, entry.duration)}`
           };
         }
@@ -65,7 +66,7 @@ export function getResumeTarget(
         }
       }
     } else if (!entry.series && !isFinished(entry.position, entry.duration) && entry.position > 0) {
-      return { startAt: entry.position, label: `Continuar${remaining(entry.position, entry.duration)}` };
+      return { startAt: Math.max(0, entry.position), label: `Continuar${remaining(entry.position, entry.duration)}` };
     }
   }
 
@@ -77,8 +78,113 @@ export function getResumeTarget(
 
 /** Start position for a specific episode chosen from the list */
 export function startAtForEpisode(ep: VodEpisode, entry?: HistoryItem): number {
-  if (entry && entry.episodeId && String(entry.episodeId) === String(ep.id) && !isFinished(entry.position, entry.duration)) {
-    return entry.position;
+  if (!entry) return 0;
+  const epId = ep.id ? String(ep.id) : '';
+  const epNum = ep.number ?? ep.seriesNumber;
+
+  // Check explicit record in watchedEpisodes
+  const record = (epId && entry.watchedEpisodes?.[epId]) ||
+                 (epNum !== undefined && entry.watchedEpisodes?.[`num_${epNum}`]);
+  if (record) {
+    if (record.finished || isFinished(record.position, record.duration)) return 0;
+    return Math.max(0, record.position);
+  }
+
+  if (isFinished(entry.position, entry.duration)) return 0;
+  const matchId = !!(entry.episodeId && String(entry.episodeId) === epId);
+  const matchNum = entry.episodeNumber !== undefined && epNum !== undefined &&
+    parseInt(String(entry.episodeNumber), 10) === parseInt(String(epNum), 10);
+  if (matchId || matchNum) {
+    return Math.max(0, entry.position);
   }
   return 0;
+}
+
+export interface EpisodeStatus {
+  isCurrent: boolean;
+  isWatched: boolean;
+  progressPercent: number; // 0 to 100
+  position: number;
+  duration: number;
+}
+
+export function getEpisodeStatus(
+  ep: VodEpisode,
+  index: number,
+  entry?: HistoryItem,
+  seasonNumber?: number
+): EpisodeStatus {
+  if (!entry) {
+    return { isCurrent: false, isWatched: false, progressPercent: 0, position: 0, duration: 0 };
+  }
+
+  const epNum = episodeNumber(ep, index);
+  const epId = ep.id ? String(ep.id) : '';
+  const currentEpId = entry.episodeId ? String(entry.episodeId) : '';
+  const currentEpNum = entry.episodeNumber !== undefined ? parseInt(String(entry.episodeNumber), 10) : undefined;
+
+  const seasonMatches = (entry.seasonNumber === undefined || seasonNumber === undefined) ||
+                        (parseInt(String(entry.seasonNumber), 10) === parseInt(String(seasonNumber), 10));
+
+  // Check explicit record in watchedEpisodes if present
+  const record = (epId && entry.watchedEpisodes?.[epId]) ||
+                 (epNum !== undefined && entry.watchedEpisodes?.[`num_${epNum}`]);
+
+  // Check if this is the currently active episode in history (must match season!)
+  const isMatchCurrent = seasonMatches && (
+    (currentEpId && epId && currentEpId === epId) ||
+    (currentEpNum !== undefined && currentEpNum === epNum)
+  );
+
+  if (isMatchCurrent) {
+    const finished = isFinished(entry.position, entry.duration);
+    const progress = entry.duration > 0 ? Math.min(100, Math.round((entry.position / entry.duration) * 100)) : 0;
+    return {
+      isCurrent: !finished,
+      isWatched: finished,
+      progressPercent: finished ? 100 : progress,
+      position: entry.position,
+      duration: entry.duration
+    };
+  }
+
+  if (record) {
+    const finished = record.finished || isFinished(record.position, record.duration);
+    const progress = record.duration > 0 ? Math.min(100, Math.round((record.position / record.duration) * 100)) : 0;
+    return {
+      isCurrent: false,
+      isWatched: finished,
+      progressPercent: finished ? 100 : progress,
+      position: record.position,
+      duration: record.duration
+    };
+  }
+
+  // Season comparison fallback: if viewing an earlier season than current progress, it's watched.
+  // If viewing a later season, it's unwatched unless explicitly recorded.
+  if (entry.seasonNumber !== undefined && seasonNumber !== undefined) {
+    const entrySeason = parseInt(String(entry.seasonNumber), 10);
+    const viewSeason = parseInt(String(seasonNumber), 10);
+    if (!isNaN(entrySeason) && !isNaN(viewSeason)) {
+      if (viewSeason < entrySeason) {
+        return { isCurrent: false, isWatched: true, progressPercent: 100, position: 0, duration: 0 };
+      }
+      if (viewSeason > entrySeason) {
+        return { isCurrent: false, isWatched: false, progressPercent: 0, position: 0, duration: 0 };
+      }
+    }
+  }
+
+  // Fallback: in a sequential series (same season), any episode with number < current episode number was already watched!
+  if (seasonMatches && currentEpNum !== undefined && epNum < currentEpNum) {
+    return {
+      isCurrent: false,
+      isWatched: true,
+      progressPercent: 100,
+      position: 0,
+      duration: 0
+    };
+  }
+
+  return { isCurrent: false, isWatched: false, progressPercent: 0, position: 0, duration: 0 };
 }

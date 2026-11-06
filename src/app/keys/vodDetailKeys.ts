@@ -1,7 +1,7 @@
 import { TvKey } from '../../hooks/useTvRemote';
 import { favoritesService } from '../../services/favoritesService';
-import { settingsService, applySubtitleChoice } from '../../services/settingsService';
-import { VodDetailFocus, AUDIO_OPTIONS, SUB_OPTIONS } from '../../views/VodDetailView';
+import { settingsService, subtitleChoiceIndex, applySettingChoice, SETTINGS_ROW, QUALITY_OPTIONS } from '../../services/settingsService';
+import { VodDetailFocus, AUDIO_OPTIONS, SUB_OPTIONS, EP_RANGE } from '../../views/VodDetailView';
 import { VodItem, VodEpisode } from '../../types/vod';
 import { DetailCounts } from '../useVodDetail';
 import { Setter, VodPlayerState, DetailEpisodes } from '../types';
@@ -17,7 +17,7 @@ export interface VodDetailKeysCtx {
   handleOpenDetail: (item: VodItem) => void;
   currentRelatedItems: VodItem[];
   detailEpisodes: DetailEpisodes;
-  playFromDetail: (item: VodItem, episode?: VodEpisode, isTrailer?: boolean) => void;
+  playFromDetail: (item: VodItem, episode?: VodEpisode, isTrailer?: boolean, fromStart?: boolean) => void;
 }
 
 export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean {
@@ -38,39 +38,42 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
   const seasonsCount = detailCounts.seasonsCount;
   const episodesCount = detailCounts.episodesCount;
   const relatedCount = currentRelatedItems.length;
+  const hasTrailer = Boolean(detailCounts.hasTrailer || activeDetailItem.trailerUrl || (activeDetailItem as any).trailer);
+  // Big buttons: Reproducir / Continuar, then Reiniciar (with progress) or Tráiler
+  const secondary: 'restart' | 'trailer' | null = detailCounts.canRestart ? 'restart' : hasTrailer ? 'trailer' : null;
+  const mainCount = secondary ? 2 : 1;
+  // Small buttons: Mi lista, Ajustes, Tráiler (when not already a big button)
+  const quick: ('fav' | 'settings' | 'trailer')[] = ['fav', 'settings', ...(hasTrailer && secondary !== 'trailer' ? ['trailer' as const] : [])];
+  const SETTINGS_QUICK = 1;
+  const rangeCount = Math.ceil(episodesCount / EP_RANGE);
 
-  // Modal has top priority for back and dpad
+  // Settings list under the ⚙ button: first level Audio / Subtítulos / Resolución, then their options
   if (area === 'audioModal') {
-    const col = detailFocus.modalCol || 'audio';
+    const col = detailFocus.modalCol || 'menu';
     const idx = detailFocus.modalIndex || 0;
-
-    if (key === 'back') {
-      setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 2 }));
+    const ROWS = ['audio', 'subs', 'quality'] as const;
+    if (col === 'menu') {
+      if (key === 'back' || key === 'left') {
+        setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: SETTINGS_QUICK }));
+      } else if (key === 'up' || key === 'down') {
+        setDetailFocus(prev => ({ ...prev, modalIndex: key === 'up' ? Math.max(0, idx - 1) : Math.min(ROWS.length - 1, idx + 1) }));
+      } else if (key === 'enter' || key === 'right') {
+        const next = ROWS[idx];
+        const st = settingsService.get();
+        const current = next === 'audio' ? st.audio : next === 'subs' ? subtitleChoiceIndex(st) : st.quality || 0;
+        setDetailFocus(prev => ({ ...prev, modalCol: next, modalIndex: current }));
+      }
       return true;
     }
-    if (key === 'left') {
-      setDetailFocus(prev => ({ ...prev, modalCol: 'audio', modalIndex: Math.min(idx, AUDIO_OPTIONS.length - 1) }));
-      return true;
-    }
-    if (key === 'right') {
-      setDetailFocus(prev => ({ ...prev, modalCol: 'subs', modalIndex: Math.min(idx, SUB_OPTIONS.length - 1) }));
-      return true;
-    }
-    if (key === 'up') {
-      setDetailFocus(prev => ({ ...prev, modalIndex: Math.max(0, idx - 1) }));
-      return true;
-    }
-    if (key === 'down') {
-      const maxIdx = col === 'audio' ? AUDIO_OPTIONS.length - 1 : SUB_OPTIONS.length - 1;
-      setDetailFocus(prev => ({ ...prev, modalIndex: Math.min(maxIdx, idx + 1) }));
-      return true;
-    }
-    if (key === 'enter') {
+    const options = col === 'audio' ? AUDIO_OPTIONS : col === 'subs' ? SUB_OPTIONS : QUALITY_OPTIONS;
+    if (key === 'back' || key === 'left') {
+      setDetailFocus(prev => ({ ...prev, modalCol: 'menu', modalIndex: SETTINGS_ROW[col] }));
+    } else if (key === 'up' || key === 'down') {
+      setDetailFocus(prev => ({ ...prev, modalIndex: key === 'up' ? Math.max(0, idx - 1) : Math.min(options.length - 1, idx + 1) }));
+    } else if (key === 'enter') {
       // Same preferences as the profile (Configuración global)
-      if (col === 'audio') settingsService.set({ audio: idx });
-      else applySubtitleChoice(idx);
-      setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 2 }));
-      return true;
+      applySettingChoice(col, idx);
+      setDetailFocus(prev => ({ ...prev, modalCol: 'menu', modalIndex: SETTINGS_ROW[col] }));
     }
     return true;
   }
@@ -81,7 +84,9 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
   };
 
   if (key === 'back') {
-    doBack();
+    // Back closes the open season list first
+    if (area === 'seasonMenu') setDetailFocus(prev => ({ ...prev, area: 'seasons' }));
+    else doBack();
     return true;
   }
 
@@ -103,33 +108,79 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
       return true;
     }
     if (key === 'down') {
+      setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: Math.min(quick.length - 1, prev.quickIndex ?? 0) }));
+      return true;
+    }
+    if (key === 'left' || key === 'right') {
+      setDetailFocus(prev => ({ ...prev, actionIndex: key === 'left' ? 0 : Math.min(mainCount - 1, prev.actionIndex + 1) }));
+      return true;
+    }
+    if (key === 'enter') {
+      if (actionIndex === 0) playFromDetail(activeDetailItem);
+      else if (secondary === 'restart') playFromDetail(activeDetailItem, undefined, false, true);
+      else if (secondary === 'trailer') playFromDetail(activeDetailItem, undefined, true);
+      return true;
+    }
+    return true;
+  }
+
+  // Small buttons under the big ones
+  if (area === 'quick') {
+    const qi = Math.min(quick.length - 1, detailFocus.quickIndex ?? 0);
+    if (key === 'up') {
+      setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: Math.min(prev.actionIndex, mainCount - 1) }));
+      return true;
+    }
+    if (key === 'down') {
       if (isSeries && seasonsCount > 1) {
         setDetailFocus(prev => ({ ...prev, area: 'seasons' }));
       } else if (isSeries && episodesCount > 0) {
-        setDetailFocus(prev => ({ ...prev, area: 'episodes', episodeIndex: 0 }));
+        setDetailFocus(prev => {
+          const targetEp = (prev.episodeIndex !== undefined && prev.episodeIndex > 0)
+            ? prev.episodeIndex
+            : (detailEpisodes.activeEpisodeIndex ?? prev.episodeIndex ?? 0);
+          const safeEp = Math.min(episodesCount - 1, Math.max(0, targetEp));
+          return { ...prev, area: 'episodes', episodeIndex: safeEp };
+        });
       } else if (relatedCount > 0) {
         setDetailFocus(prev => ({ ...prev, area: 'related', relatedIndex: 0 }));
       }
       return true;
     }
-    if (key === 'left') {
-      setDetailFocus(prev => ({ ...prev, actionIndex: Math.max(0, prev.actionIndex - 1) }));
-      return true;
-    }
-    if (key === 'right') {
-      setDetailFocus(prev => ({ ...prev, actionIndex: Math.min(3, prev.actionIndex + 1) }));
+    if (key === 'left' || key === 'right') {
+      setDetailFocus(prev => ({ ...prev, quickIndex: key === 'left' ? Math.max(0, qi - 1) : Math.min(quick.length - 1, qi + 1) }));
       return true;
     }
     if (key === 'enter') {
-      if (actionIndex === 0) {
-        playFromDetail(activeDetailItem);
-      } else if (actionIndex === 1) {
-        favoritesService.toggleFavorite(activeDetailItem.id);
-      } else if (actionIndex === 2) {
-        setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'audio', modalIndex: 0 }));
-      } else if (actionIndex === 3) {
-        playFromDetail(activeDetailItem, undefined, true);
-      }
+      const q = quick[qi];
+      if (q === 'fav') favoritesService.toggleFavorite(activeDetailItem.id);
+      else if (q === 'settings') setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: 0 }));
+      else if (q === 'trailer') playFromDetail(activeDetailItem, undefined, true);
+      return true;
+    }
+    return true;
+  }
+
+  // Open season list: Up/Down highlight, OK loads that season, Back closes
+  if (area === 'seasonMenu') {
+    const m = detailFocus.seasonMenuIndex ?? seasonIndex;
+    if (key === 'up' || key === 'down') {
+      const next = key === 'up' ? Math.max(0, m - 1) : Math.min(seasonsCount - 1, m + 1);
+      setDetailFocus(prev => ({ ...prev, seasonMenuIndex: next }));
+      return true;
+    }
+    if (key === 'enter') {
+      setDetailFocus(prev => ({
+        ...prev,
+        area: 'seasons',
+        seasonIndex: m,
+        episodeIndex: prev.seasonIndex === m ? prev.episodeIndex : 0,
+        rangeIndex: undefined
+      }));
+      return true;
+    }
+    if (key === 'left') {
+      setDetailFocus(prev => ({ ...prev, area: 'seasons' }));
       return true;
     }
     return true;
@@ -137,26 +188,46 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
 
   if (area === 'seasons') {
     if (key === 'up') {
-      setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 0 }));
+      setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: 0 }));
       return true;
     }
+    if (key === 'enter') {
+      setDetailFocus(prev => ({ ...prev, area: 'seasonMenu', seasonMenuIndex: prev.seasonIndex }));
+      return true;
+    }
+    if (key === 'left' || key === 'right') return true;
     if (key === 'down') {
       if (episodesCount > 0) {
-        setDetailFocus(prev => ({ ...prev, area: 'episodes', episodeIndex: 0 }));
+        setDetailFocus(prev => {
+          const targetEp = (prev.episodeIndex !== undefined && prev.episodeIndex > 0)
+            ? prev.episodeIndex
+            : (detailEpisodes.activeEpisodeIndex ?? prev.episodeIndex ?? 0);
+          const safeEp = Math.min(episodesCount - 1, Math.max(0, targetEp));
+          return { ...prev, area: 'episodes', episodeIndex: safeEp };
+        });
       } else if (relatedCount > 0) {
         setDetailFocus(prev => ({ ...prev, area: 'related', relatedIndex: 0 }));
       }
       return true;
     }
-    if (key === 'left') {
-      setDetailFocus(prev => ({ ...prev, seasonIndex: Math.max(0, prev.seasonIndex - 1) }));
+    return true;
+  }
+
+  // Ranges row ("1-20", "21-40"…): moving shows that range, Down enters it
+  if (area === 'epRanges') {
+    const r = detailFocus.rangeIndex ?? Math.floor(episodeIndex / EP_RANGE);
+    if (key === 'left' || key === 'right') {
+      const next = key === 'left' ? Math.max(0, r - 1) : Math.min(rangeCount - 1, r + 1);
+      setDetailFocus(prev => ({ ...prev, rangeIndex: next, episodeIndex: next * EP_RANGE }));
       return true;
     }
-    if (key === 'right') {
-      setDetailFocus(prev => ({ ...prev, seasonIndex: Math.min(seasonsCount - 1, prev.seasonIndex + 1) }));
+    if (key === 'down' || key === 'enter') {
+      setDetailFocus(prev => ({ ...prev, area: 'episodes', episodeIndex: Math.min(episodesCount - 1, r * EP_RANGE) }));
       return true;
     }
-    if (key === 'enter') {
+    if (key === 'up') {
+      if (seasonsCount > 1) setDetailFocus(prev => ({ ...prev, area: 'seasons' }));
+      else setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: 0 }));
       return true;
     }
     return true;
@@ -164,10 +235,12 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
 
   if (area === 'episodes') {
     if (key === 'up') {
-      if (seasonsCount > 1) {
+      if (rangeCount > 1) {
+        setDetailFocus(prev => ({ ...prev, area: 'epRanges', rangeIndex: Math.floor(prev.episodeIndex / EP_RANGE) }));
+      } else if (seasonsCount > 1) {
         setDetailFocus(prev => ({ ...prev, area: 'seasons' }));
       } else {
-        setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 0 }));
+        setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: 0 }));
       }
       return true;
     }
@@ -198,7 +271,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
       if (isSeries && episodesCount > 0) {
         setDetailFocus(prev => ({ ...prev, area: 'episodes' }));
       } else {
-        setDetailFocus(prev => ({ ...prev, area: 'actions', actionIndex: 0 }));
+        setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: 0 }));
       }
       return true;
     }

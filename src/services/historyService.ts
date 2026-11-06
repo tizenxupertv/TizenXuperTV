@@ -1,5 +1,6 @@
-import { HistoryItem } from '../types/history';
+import { HistoryItem, EpisodePlaybackRecord } from '../types/history';
 import { VodItem, VodEpisode } from '../types/vod';
+import { isFinished } from '../lib/vodResume';
 
 const PROFILE_KEY = 'xuper_local_profile_v1';
 
@@ -52,6 +53,32 @@ class HistoryService {
     const now = Date.now();
     const itemId = String(item.id);
 
+    const existingEntry = list.find(h => String(h.id) === itemId);
+    const watchedEpisodes: Record<string, EpisodePlaybackRecord> = {
+      ...(existingEntry?.watchedEpisodes || {})
+    };
+
+    if (episode) {
+      const epNum = episode.number || episode.seriesNumber;
+      const finished = isFinished(validPos, validDur);
+      const record: EpisodePlaybackRecord = {
+        episodeId: episode.id ? String(episode.id) : undefined,
+        episodeNumber: epNum,
+        seasonNumber: season?.number,
+        seasonId: season?.id ? String(season.id) : undefined,
+        position: validPos,
+        duration: validDur,
+        finished,
+        updatedAt: now
+      };
+      if (episode.id) {
+        watchedEpisodes[String(episode.id)] = record;
+      }
+      if (epNum !== undefined) {
+        watchedEpisodes[`num_${epNum}`] = record;
+      }
+    }
+
     const entry: HistoryItem = {
       id: itemId,
       title: item.title || 'Contenido',
@@ -63,7 +90,8 @@ class HistoryService {
       seasonNumber: season && season.number ? season.number : undefined,
       position: validPos,
       duration: validDur,
-      updatedAt: now
+      updatedAt: now,
+      watchedEpisodes: Object.keys(watchedEpisodes).length > 0 ? watchedEpisodes : undefined
     };
 
     // Filter out existing entry for this item

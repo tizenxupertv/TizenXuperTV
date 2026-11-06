@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { HistoryItem } from '../../types/history';
-import { useCardImage } from '../../lib/imageCache';
+import { useCardImage, isImagePrecached, markImageLoaded } from '../../lib/imageCache';
 
 interface ContinueWatchingCardProps {
   item: HistoryItem;
@@ -15,6 +15,21 @@ const ContinueWatchingCardComponent: React.FC<ContinueWatchingCardProps> = ({
 }) => {
   const posterUrl = item.poster || 'assets/placeholder_landscape.png';
   const cardSrc = useCardImage(posterUrl, 392, 221);
+
+  const isCached = !!cardSrc && isImagePrecached(cardSrc);
+  const [imgLoaded, setImgLoaded] = useState(isCached);
+
+  useEffect(() => {
+    if (cardSrc && isImagePrecached(cardSrc)) {
+      setImgLoaded(true);
+    }
+  }, [cardSrc]);
+
+  const handleImgDone = () => {
+    if (cardSrc) markImageLoaded(cardSrc);
+    setImgLoaded(true);
+  };
+
   const pct = item.duration > 0
     ? Math.min(100, Math.max(5, Math.round((item.position / item.duration) * 100)))
     : 45;
@@ -34,10 +49,24 @@ const ContinueWatchingCardComponent: React.FC<ContinueWatchingCardProps> = ({
       className={`cw-card apple-cw-card ${isFocused ? 'is-focused' : ''}`}
       onClick={() => onActivate(item)}
     >
-      <div
-        className="cw-card-img"
-        style={{ backgroundImage: cardSrc ? `url('${cardSrc}'), url('assets/placeholder_landscape.png')` : `url('assets/placeholder_landscape.png')` }}
-      >
+      <div className="cw-card-img">
+        <img
+          className="poster-card-placeholder-img"
+          src="assets/placeholder_landscape.png"
+          alt=""
+          loading="eager"
+        />
+        {cardSrc && (
+          <img
+            className={`poster-card-img-element ${imgLoaded ? 'is-loaded' : ''}`}
+            src={cardSrc}
+            decoding="async"
+            loading="lazy"
+            onLoad={handleImgDone}
+            onError={handleImgDone}
+            alt=""
+          />
+        )}
         <div className="poster-brand-badge">
           <span>tv</span>
         </div>
