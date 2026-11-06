@@ -713,10 +713,11 @@
 
         var isLive = self.kind === 'live';
         try {
-          // Dual dynamic buffer (Jellyfin / PlayerAVPlay pattern):
-          // Fast-start: 1.5s (live) or 2s (VOD) for rapid tune-in.
-          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 1.5 : 2);
-          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 2 : 4);
+          // Buffer before playing and after a stall. AVPlay only applies these in the IDLE state (before
+          // prepare), so they are the values in effect for the whole session. Live uses 3s / 6s: a little
+          // slower to tune in, but network hiccups of a few seconds no longer freeze the picture.
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 3 : 2);
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 6 : 4);
         } catch (bufErr) {}
 
         webapis.avplay.setListener({
@@ -736,7 +737,7 @@
             }
             // Expand buffer dynamically after playback starts for resilience against network jitter
             try {
-              webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 4 : 8);
+              webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 8);
             } catch (bufExpandErr) {}
             // If initial seek hasn't completed yet, execute it now that buffering is complete
             if (self._initialSeekSec > 0) {
