@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { LiveChannel, LiveCategory } from '../types/channel';
 import { playerService, LiveStatus } from '../services/playerService';
 import { iptvService, IPTV_CATEGORY_PREFIX, IPTV_CATEGORY_LABEL } from '../services/iptvService';
@@ -363,6 +363,11 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   }, [adultTick]);
 
   const activeCategory = categories[selectedCatIndex] || categories[0];
+  // The tuned channel keeps the name of the category it was picked from (for the problem report)
+  const tune = useCallback(
+    (ch: LiveChannel) => onTuneChannel(ch.categoryName || !activeCategory ? ch : { ...ch, categoryName: activeCategory.name }),
+    [onTuneChannel, activeCategory]
+  );
 
   // Background Preloader: prefetch and cache channels & logos for ALL categories
   useEffect(() => {
@@ -583,7 +588,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       if (raw) saved = JSON.parse(raw);
     } catch {}
     const foundInCat = saved ? channels.find(c => isSameChannel(c, saved)) : undefined;
-    onTuneChannel(foundInCat || channels[0]);
+    tune(foundInCat || channels[0]);
   }, [channels]);
 
   // ZERO-FLICKER: Stream playback depends ONLY on tunedChannel!
@@ -701,7 +706,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                     focused={isFocusActive && focus.area === 'channels' && focus.channelIndex === idx}
                     tuned={isSameChannel(tunedChannel, ch)}
                     fav={!!favMap[channelKey(ch)]}
-                    onTune={onTuneChannel}
+                    onTune={tune}
                     onFullscreen={onEnterFullscreen}
                   />
                 );
@@ -930,7 +935,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                         key={ch.id || idx}
                         className={`pc-row ${isChTuned ? 'is-current' : ''} ${isCursor ? 'is-focused' : ''}`}
                         onClick={() => {
-                          onTuneChannel(ch);
+                          tune(ch);
                           onToggleChannelsDrawer();
                           onToggleOsd();
                         }}

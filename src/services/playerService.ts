@@ -29,6 +29,9 @@ const MAX_HLS_RETRIES = 2;
 /** HLS.js shows no picture on some portal streams the TV plays natively (MP3 audio, for one): after
  * this long without a picture, the channel is retried once with AVPlay before it is marked down */
 const HLS_PICTURE_MS = 10000;
+/** Retries of the same server when a live playlist refresh comes back broken */
+const MAX_REFRESH_RETRIES = 3;
+const REFRESH_RETRY_MS = 1500;
 
 class PlayerService {
   private activeChannelCode: string = '';
@@ -418,7 +421,12 @@ class PlayerService {
 
         let backupIdx = 0;
         let retries = 0;
+        // A live playlist refresh that comes back broken (cut off, empty) while the channel plays is
+        // usually a hiccup of that server: retry it before moving to the backups
+        let refreshRetries = 0;
+        let currentSource = effectiveUrl;
         const backups = (streamMeta && streamMeta.backupUrls) || [];
+        hls.on(window.Hls.Events.LEVEL_LOADED, () => { refreshRetries = 0; });
 
         hls.loadSource(effectiveUrl);
         hls.attachMedia(videoEl);
@@ -464,6 +472,18 @@ class PlayerService {
           if (data.fatal) logPlayback({ kind: 'error', player: 'HLS.js', detail: this.lastHlsError, host });
           else if (data.details === 'bufferStalledError') logPlayback({ kind: 'stall', player: 'HLS.js', detail: 'bufferStalledError', host });
           if (data.fatal) {
+            const refreshHiccup = /^level(ParsingError|LoadError|LoadTimeOut)$/.test(String(data.details)) &&
+              !!code && this.status.code === code && this.status.state === 'playing';
+            if (refreshHiccup && refreshRetries < MAX_REFRESH_RETRIES) {
+              refreshRetries++;
+              logPlayback({ kind: 'stall', player: 'HLS.js', detail: `lista incompleta, reintento ${refreshRetries}`, host });
+              setTimeout(() => {
+                if (window.__xuperPreviewHls !== hls) return;
+                hls.loadSource(currentSource);
+                hls.startLoad();
+              }, REFRESH_RETRY_MS);
+              return;
+            }
             if (backupIdx < backups.length) {
               const next = backups[backupIdx++];
               const nextUrl = typeof next === 'string' ? next : next?.url;
@@ -475,6 +495,8 @@ class PlayerService {
                   const license = streamMeta?.headers?.['Content-License'] || '';
                   nextEffective = `/stream-proxy?url=${encodeURIComponent(nextUrl)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}`;
                 }
+                currentSource = nextEffective;
+                refreshRetries = 0;
                 hls.loadSource(nextEffective);
                 hls.startLoad();
                 return;
