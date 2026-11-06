@@ -194,14 +194,22 @@ export type AccountService = ReturnType<typeof createAccountService>;
 
 declare const __APP_VERSION__: string;
 
+/** TV model and Tizen version for support, e.g. "UN50U8000FKXZL · Tizen 9.0" (empty in a browser) */
 function tvModel(): string {
+  const w = window as any;
+  let model = '';
   try {
-    const w = window as any;
-    if (w.webapis && w.webapis.productinfo) {
-      return String(w.webapis.productinfo.getRealModel() || w.webapis.productinfo.getModel() || '');
-    }
+    // Needs the productinfo privilege in config.xml
+    if (w.webapis && w.webapis.productinfo) model = String(w.webapis.productinfo.getRealModel() || w.webapis.productinfo.getModel() || '');
   } catch (e) {}
-  return '';
+  try {
+    if (!model && w.tizen && w.tizen.systeminfo) model = String(w.tizen.systeminfo.getCapability('http://tizen.org/system/model_name') || '');
+  } catch (e) {}
+  let tizen = '';
+  try {
+    if (w.tizen && w.tizen.systeminfo) tizen = String(w.tizen.systeminfo.getCapability('http://tizen.org/feature/platform.version') || '');
+  } catch (e) {}
+  return [model, tizen && `Tizen ${tizen}`].filter(Boolean).join(' · ');
 }
 
 export const accountService = createAccountService({

@@ -19,6 +19,7 @@
     <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
     <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
     <tizen:privilege name="http://developer.samsung.com/privilege/network.securesocket"/>
+    <tizen:privilege name="http://developer.samsung.com/privilege/productinfo"/>
     <tizen:profile name="tv-samsung"/>
     <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
     <tizen:content-security-policy>default-src * 'unsafe-inline' 'unsafe-eval' data: blob: http: https:; media-src * http: https: blob: data:; img-src * http: https: data: blob: 'unsafe-inline';</tizen:content-security-policy>
