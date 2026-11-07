@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 
-// While the notice is open it takes every key: ◄ ► choose, OK acts, Back is "Más tarde". Registered when this module
-// loads (before the screens add their own capture listeners), so it always runs first.
+// While the notice is open it takes every key: only OK does something (restart). Registered when this module loads
+// (before the screens add their own capture listeners), so it always runs first and nothing behind it reacts.
 let handleKey: ((e: KeyboardEvent) => void) | null = null;
 if (typeof window !== 'undefined') {
   window.addEventListener(
@@ -17,22 +17,16 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * A downloaded update is ready (services/updateService.ts): restart now, or later. Restarting is reloading the page:
- * public/js/boot.js then starts the downloaded version. Never shown while a video plays (App decides).
+ * A downloaded update is ready (services/updateService.ts): the app has to restart to go on. Restarting is reloading
+ * the page: public/js/boot.js then starts the downloaded version. Never shown while a video plays (App decides).
  */
-export const UpdateReady: React.FC<{ version: string; onRestart: () => void; onLater: () => void }> = ({ version, onRestart, onLater }) => {
-  const [choice, setChoice] = useState<0 | 1>(0);
-  const latest = useRef({ choice, onRestart, onLater });
-  latest.current = { choice, onRestart, onLater };
+export const UpdateReady: React.FC<{ version: string; onRestart: () => void }> = ({ version, onRestart }) => {
+  const restart = useRef(onRestart);
+  restart.current = onRestart;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.repeat) return;
-      const code = e.keyCode;
-      if (code === 37) setChoice(0);
-      else if (code === 39) setChoice(1);
-      else if (code === 13) (latest.current.choice === 0 ? latest.current.onRestart : latest.current.onLater)();
-      else if (code === 10009 || code === 27 || code === 461 || code === 8) latest.current.onLater();
+      if (!e.repeat && e.keyCode === 13) restart.current();
     };
     handleKey = onKey;
     return () => {
@@ -41,14 +35,14 @@ export const UpdateReady: React.FC<{ version: string; onRestart: () => void; onL
   }, []);
 
   return (
-    <div className="upd-ready" role="dialog" aria-live="polite">
-      <div className="upd-ready-text">
-        <div className="upd-ready-title">Versión {version} lista</div>
-        <div className="upd-ready-desc">Reinicia la app para estrenarla. Tu sesión, tu lista y tus ajustes se conservan.</div>
-      </div>
-      <div className="upd-ready-actions">
-        <div className={`pf-btn ${choice === 0 ? 'is-focused' : ''}`} onClick={onRestart}>Reiniciar ahora</div>
-        <div className={`pf-btn ${choice === 1 ? 'is-focused' : ''}`} onClick={onLater}>Más tarde</div>
+    <div className="upd-ready" role="alertdialog" aria-modal="true" aria-labelledby="upd-ready-title">
+      <div className="upd-ready-card">
+        <img className="upd-ready-logo" src="assets/logo_3d.png" alt="" />
+        <div className="upd-ready-title" id="upd-ready-title">Nueva versión {version}</div>
+        <div className="upd-ready-desc">
+          La actualización ya está descargada. Reinicia la app para continuar; tu sesión, tu lista y tus ajustes se conservan.
+        </div>
+        <div className="pf-btn is-focused upd-ready-btn" onClick={onRestart}>Reiniciar ahora</div>
       </div>
     </div>
   );
