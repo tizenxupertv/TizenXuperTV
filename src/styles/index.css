@@ -7421,3 +7421,27 @@ html.xuper-vod-avplay .app-root,
 .pf-about-card { padding: 18px 22px; border-radius: 16px; background: rgba(255, 255, 255, 0.04); }
 .pf-about-card-title { font-size: 19px; font-weight: 800; color: #ffffff; }
 .pf-about-card-text { margin-top: 8px; font-size: 15px; line-height: 1.5; color: #94a3b8; }
+
+/* A downloaded update is ready: a bar at the bottom, the actions at the right */
+.upd-ready {
+  position: fixed;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%);
+  z-index: 3000;
+  width: min(1100px, 90vw);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 24px;
+  border-radius: 18px;
+  background: rgba(28, 28, 30, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  box-sizing: border-box;
+}
+.upd-ready-text { min-width: 0; }
+.upd-ready-title { font-size: 19px; font-weight: 800; color: #ffffff; }
+.upd-ready-desc { margin-top: 4px; font-size: 15px; color: #94a3b8; }
+.upd-ready-actions { display: flex; gap: 12px; flex-shrink: 0; }
