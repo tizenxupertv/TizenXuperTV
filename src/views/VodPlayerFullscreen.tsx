@@ -1040,8 +1040,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         return;
       }
 
+      // With an error the screen says "OK Reintentar · VOLVER Salir": Back must leave (it used to be ignored here)
       if (error) {
-        if (isEnter) setRetryTick(t => t + 1);
+        if (isBack) onClose();
+        else if (isEnter) setRetryTick(t => t + 1);
         return;
       }
 
@@ -1277,7 +1279,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
               Red › Estado de la red › Configuración de IP › Configuración de DNS) o prueba con otra red.
             </div>
           )}
-          <div className="vod-player-error-hint">OK Reintentar · VOLVER Salir</div>
+          <div className="vod-player-error-keys">
+            <span className="vod-player-error-key">OK</span><span>Reintentar</span>
+            <span className="vod-player-error-key">VOLVER</span><span>Salir</span>
+          </div>
         </div>
       )}
 
@@ -1329,7 +1334,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       <div className={`vp-osd ${osdVisible ? 'is-visible' : ''}`}>
         {quality && !isTrailer && <div className="vp-badge">{quality}</div>}
 
-        <div className="vp-center">
+        {/* With an error the center is the error box: OK retries and Back leaves, the round buttons would only cover it */}
+        {!error && <div className="vp-center">
           <div
             className={`vp-round ${focusArea === 'center' && centerIndex === 0 ? 'is-focused' : ''}`}
             onClick={() => seekBy(-10)}
@@ -1350,7 +1356,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
             <span className="vp-skip">↻</span>
             <span className="vp-skip-num">10</span>
           </div>
-        </div>
+        </div>}
 
         <div className="vp-bottom">
           <div className="vp-info-row">

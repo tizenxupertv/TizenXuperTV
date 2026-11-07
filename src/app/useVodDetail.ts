@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 import { VodDetailFocus } from '../views/VodDetailView';
 import { VodItem } from '../types/vod';
 import { DetailEpisodes } from './types';
+import type { TitleChoices } from '../lib/titleOptions';
 
 export interface DetailCounts {
   seasonsCount: number;
@@ -9,6 +10,8 @@ export interface DetailCounts {
   relatedCount: number;
   isSeries: boolean;
   hasTrailer?: boolean;
+  /** What the title offers for Audio / Subtítulos / Resolución (all options while unknown) */
+  choices?: TitleChoices;
 }
 
 interface DetailHistoryEntry {

@@ -15,6 +15,7 @@ import { playbackEvents } from '../lib/playbackLog';
 import { formatSpeed, runSpeedTest, SpeedResult, streamingVerdict } from '../lib/speedTest';
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
+import { QrCode } from '../components/common/QrCode';
 
 /** Perfil › Sobre nosotros: what the self-update is doing on this TV */
 function updateLine(s: UpdateStatus): string {
@@ -63,6 +64,14 @@ const AUDIO_OPTS = ['Español (Latino)', 'Español (España)', 'Portugués', 'In
 const SIZE_OPTS = ['Normal', 'Grande', 'Pequeño'];
 const STYLE_OPTS = ['Aa', 'Aa', 'Aa'];
 const GRID_COLS = 7;
+const IPTV_COLUMNS = 3;
+
+/** Telegram places, as QR codes: the TV cannot open links. Channel and group are invitations with approval */
+const TELEGRAM_LINKS = [
+  { name: 'Soporte', desc: 'Ayuda y reportes', url: 'https://t.me/TizenXuperSupportBot?start=soporte' },
+  { name: 'Canal', desc: 'Novedades y versiones', url: 'https://t.me/+u72Cmxw-HDY0NGMx' },
+  { name: 'Comunidad', desc: 'Habla con otros usuarios', url: 'https://t.me/+jbQgGArewEozMzZh' }
+];
 const MAX_LIST = 30;
 /** "Cerrar sesión" needs a second OK within this time */
 const LOGOUT_CONFIRM_MS = 4000;
@@ -112,6 +121,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [speedLive, setSpeedLive] = useState<number | null>(null);
   const [speedError, setSpeedError] = useState(false);
   const speedAbort = useRef<AbortController | null>(null);
+  // "Buscar actualizaciones" in Sobre nosotros: running, and what the last check found
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateResult, setUpdateResult] = useState<'uptodate' | 'downloaded' | 'reinstall' | 'error' | null>(null);
+  const mountedRef = useRef(true);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [reportState, setReportState] = useState<'idle' | 'sending' | 'ok' | 'too_many' | 'signed_out' | 'error'>('idle');
   const [loggingOut, setLoggingOut] = useState(false);
@@ -138,7 +151,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     ];
     return () => {
       unsubs.forEach(u => u());
-      // Leaving the screen stops a speed test that is still downloading
+      // Leaving the screen stops a speed test that is still downloading, and keeps "Diagnosticar" from starting one
+      mountedRef.current = false;
       if (speedAbort.current) speedAbort.current.abort();
     };
   }, []);
@@ -222,7 +236,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     const fromHistory = listTab === 'history';
     const ok = fromHistory ? historyService.removeEntry(id) : favoritesService.removeFavorite(id);
     setNotice(ok
-      ? { text: `«${title}» quitado ${fromHistory ? 'del historial' : 'de favoritos'}` }
+      ? { text: `«${title}» quitado ${fromHistory ? 'del historial' : 'de mi lista'}` }
       : { text: 'No se pudo quitar. Inténtalo de nuevo.', error: true });
   };
   // Edit mode ends when the list changes tab or section, or runs out of titles
@@ -232,29 +246,47 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const settings = settingsService.get();
   const hasPin = parentalService.hasPin();
 
-  const runDiag = () => {
-    if (diagRunning) return;
+  const runDiag = (): Promise<void> => {
+    if (diagRunning) return Promise.resolve();
     setDiagRunning(true);
-    diagnosticService.run()
+    return diagnosticService.run()
       .then(r => setReport(r))
       .catch(() => setReport({ verdict: 'portal-down', hosts: [], portalMs: null, cdns: 0 }))
       .then(() => setDiagRunning(false));
   };
 
-  const runSpeed = () => {
-    if (speedRunning) return;
+  const runSpeed = (): Promise<void> => {
+    if (speedRunning) return Promise.resolve();
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     speedAbort.current = ctrl;
     setSpeedRunning(true);
     setSpeedError(false);
     setSpeedLive(null);
-    runSpeedTest({
+    return runSpeedTest({
       signal: ctrl ? ctrl.signal : undefined,
       onProgress: p => { if (p.phase === 'download') setSpeedLive(p.mbps); }
     })
       .then(r => setSpeed(r))
       .catch(() => { if (!(ctrl && ctrl.signal.aborted)) setSpeedError(true); })
       .then(() => setSpeedRunning(false));
+  };
+
+  const checkUpdates = () => {
+    if (updateChecking) return;
+    setUpdateChecking(true);
+    setUpdateResult(null);
+    updateService.check()
+      .then(() => {
+        const st = updateService.status();
+        setUpdateResult(st.downloaded ? 'downloaded' : st.needsReinstall ? 'reinstall' : st.lastCheck && st.lastCheck.error ? 'error' : 'uptodate');
+      })
+      .then(() => setUpdateChecking(false));
+  };
+
+  // One button runs every check: first the servers (a few seconds), then the speed, so the two do not compete for the line
+  const runAll = () => {
+    if (diagRunning || speedRunning) return;
+    runDiag().then(() => { if (mountedRef.current) runSpeed(); });
   };
 
   // Items shown in "Mi lista"
@@ -337,10 +369,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         }]);
       }
     } else if (id === 'iptv') {
-      IPTV_LISTS.forEach(l => r.push([{ id: `iptv-${l.id}`, onActivate: () => iptvService.setEnabled(l.id, !iptvService.isEnabled(l.id)) }]));
+      // A grid of IPTV_COLUMNS cards per row: ◄ ► move along a row, ▲ ▼ between rows
+      for (let i = 0; i < IPTV_LISTS.length; i += IPTV_COLUMNS) {
+        r.push(IPTV_LISTS.slice(i, i + IPTV_COLUMNS).map(l => ({ id: `iptv-${l.id}`, onActivate: () => iptvService.setEnabled(l.id, !iptvService.isEnabled(l.id)) })));
+      }
     } else if (id === 'diag') {
-      r.push([{ id: 'run', onActivate: runDiag }, { id: 'report', onActivate: sendReport }]);
-      r.push([{ id: 'speed', onActivate: runSpeed }]);
+      r.push([{ id: 'run', onActivate: runAll }, { id: 'report', onActivate: sendReport }]);
+    } else if (id === 'about') {
+      const st = updateService.status();
+      if (st.canSelfUpdate) {
+        // Restarting is reloading: the loader then starts the downloaded version (public/js/boot.js)
+        r.push([{ id: 'update-check', onActivate: checkUpdates }, ...(st.downloaded ? [{ id: 'update-restart', onActivate: () => window.location.reload() }] : [])]);
+      }
     } else if (id === 'donate') {
       r.push([{ id: 'donate-qr', onActivate: () => {} }]);
     }
@@ -455,7 +495,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <div className="pf-account-info">
               <div className="pf-account-id">{account ? account.name || 'Usuario de Telegram' : '—'}</div>
               <div className="pf-account-type">
-                Sesión iniciada con Telegram{account && account.username ? ` (@${account.username})` : ''} · tu historial y favoritos se quedan en este TV
+                Sesión iniciada con Telegram{account && account.username ? ` (@${account.username})` : ''} · tu historial y tu lista se quedan en este TV
               </div>
             </div>
             <div className={`pf-btn pf-btn-danger pf-logout ${isF('logout') ? 'is-focused' : ''}`} onClick={tap('logout')}>
@@ -465,7 +505,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <div className="pf-hr" />
           <div className="pf-tabs">
             <div className={`pf-tab ${listTab === 'history' ? 'is-selected' : ''} ${isF('tab-history') ? 'is-focused' : ''}`} onClick={tap('tab-history')}>Historial</div>
-            <div className={`pf-tab ${listTab === 'favs' ? 'is-selected' : ''} ${isF('tab-favs') ? 'is-focused' : ''}`} onClick={tap('tab-favs')}>Mis favoritos</div>
+            <div className={`pf-tab ${listTab === 'favs' ? 'is-selected' : ''} ${isF('tab-favs') ? 'is-focused' : ''}`} onClick={tap('tab-favs')}>Mi lista</div>
             {listItems.length > 0 && (
               <div className={`pf-btn pf-list-action ${editMode ? 'is-on' : ''} ${isF('edit-list') ? 'is-focused' : ''}`} onClick={tap('edit-list')}>
                 {editMode ? 'Listo' : 'Quitar títulos'}
@@ -584,88 +624,106 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             Canales públicos y gratuitos recopilados por iptv-org. Cada lista activada aparece como una categoría al final de
             TV en vivo y se descarga la primera vez que la abres. Algunas señales pueden caerse o estar bloqueadas en tu región.
           </p>
-          {IPTV_LISTS.map(l => {
-            const on = iptvService.isEnabled(l.id);
-            const count = iptvService.peek(l.id)?.length;
-            return (
-              <div key={l.id} className={`pf-row pf-row-wide ${isF(`iptv-${l.id}`) ? 'is-focused' : ''}`} onClick={tap(`iptv-${l.id}`)}>
-                <div className="pf-row-label">
-                  <div className="pf-row-title">{l.name}</div>
-                  <div className="pf-row-desc">{on ? `Activada${count ? ` · ${count} canales` : ''}` : 'Desactivada'}</div>
+          <div className="pf-iptv-grid" style={{ gridTemplateColumns: `repeat(${IPTV_COLUMNS}, 1fr)` }}>
+            {IPTV_LISTS.map(l => {
+              const on = iptvService.isEnabled(l.id);
+              return (
+                <div key={l.id} className={`pf-iptv-card ${on ? 'is-on' : ''} ${isF(`iptv-${l.id}`) ? 'is-focused' : ''}`} onClick={tap(`iptv-${l.id}`)}>
+                  <div className="pf-iptv-card-top">
+                    <div className="pf-iptv-card-name">{l.name}</div>
+                    <div className={`pf-switch ${on ? 'on' : 'off'}`}>
+                      <span className="pf-switch-knob" />
+                    </div>
+                  </div>
                 </div>
-                <div className={`pf-switch ${on ? 'on' : 'off'}`}>
-                  <span className="pf-switch-knob" />
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       );
     }
 
     if (id === 'diag') {
       const verdict = report ? VERDICTS[report.verdict] : null;
+      const tested = !!report && !diagRunning;
+      // Portal and video servers are only tested when the secure DNS answered
+      const reached = tested && report!.verdict !== 'no-internet' && report!.verdict !== 'doh-blocked';
+      const hostsOk = report ? report.hosts.filter(h => h.ok).length : 0;
+      const hostsFailed = report ? report.hosts.filter(h => !h.ok).map(h => h.host) : [];
+      const speedClass = speedRunning ? '' : speedError ? 'bad' : speed ? streamingVerdict(speed.mbps).cls : '';
+      const cards: Array<{ label: string; value: string; sub: string; cls: string }> = [
+        {
+          label: 'Internet y DNS seguro',
+          value: tested ? `${hostsOk} de ${report!.hosts.length}` : '—',
+          sub: tested ? (hostsOk === report!.hosts.length ? 'Todos responden' : 'Hay dominios sin respuesta') : 'Sin analizar',
+          cls: tested ? (report!.hosts.length && hostsOk === report!.hosts.length ? 'ok' : hostsOk ? 'warn' : 'bad') : ''
+        },
+        {
+          label: 'Portal',
+          value: reached ? (report!.portalMs !== null ? `${report!.portalMs} ms` : 'Sin respuesta') : '—',
+          sub: reached ? (report!.portalMs !== null ? 'Responde' : 'Caído o bloqueado') : tested ? 'No se pudo probar' : 'Sin analizar',
+          cls: reached ? (report!.portalMs !== null ? 'ok' : 'bad') : ''
+        },
+        {
+          label: 'Servidores de video',
+          value: reached && report!.portalMs !== null ? String(report!.cdns) : '—',
+          sub: reached && report!.portalMs !== null ? (report!.cdns > 0 ? 'Disponibles' : 'Ninguno disponible') : tested ? 'No se pudo probar' : 'Sin analizar',
+          cls: reached && report!.portalMs !== null ? (report!.cdns > 0 ? 'ok' : 'warn') : ''
+        },
+        {
+          label: 'Velocidad de internet',
+          value: speedRunning ? (speedLive !== null ? formatSpeed(speedLive) : '…') : speed ? formatSpeed(speed.mbps) : speedError ? 'Error' : '—',
+          sub: speedRunning
+            ? (speedLive !== null ? 'Descargando…' : 'Midiendo la latencia…')
+            : speedError
+              ? 'No se pudo medir'
+              : speed
+                ? `${speed.latencyMs !== null ? `Latencia ${speed.latencyMs} ms · ` : ''}${streamingVerdict(speed.mbps).text}`
+                : 'Sin medir',
+          cls: speedClass
+        }
+      ];
       return (
         <div className="pf-diag">
           <h2 className="pf-title">Diagnóstico de red</h2>
           <p className="pf-note">
-            Comprueba si el televisor llega a los servidores de XuperTV. Prueba el DNS seguro, el portal y los servidores de video.
+            Comprueba si el televisor llega a los servidores de TizenXuper TV y mide tu internet, todo con un solo botón. Si un canal o una película no se ve,
+            envíanos un reporte justo después: incluye el modelo de la TV, la red, la velocidad y los últimos errores de reproducción.
           </p>
-          <div className="pf-diag-top">
+          <div className="pf-diag-actions">
             <div className={`pf-btn ${isF('run') ? 'is-focused' : ''}`} onClick={tap('run')}>
-              {diagRunning ? 'Analizando…' : report ? 'Analizar de nuevo' : 'Analizar red'}
+              {diagRunning || speedRunning ? 'Diagnosticando…' : report ? 'Diagnosticar de nuevo' : 'Diagnosticar'}
             </div>
             <div className={`pf-btn ${isF('report') ? 'is-focused' : ''}`} onClick={tap('report')}>
               {reportState === 'sending' ? 'Enviando…' : 'Enviar reporte a soporte'}
             </div>
-            <div className={`pf-diag-summary ${verdict ? verdict.cls : ''}`}>
-              {diagRunning
-                ? 'Consultando DNS seguro, portal y servidores…'
-                : verdict
-                  ? verdict.text
-                  : 'Pulsa "Analizar red" para empezar.'}
-            </div>
           </div>
-          <div className={`pf-diag-report ${reportState}`}>
-            {reportState === 'ok' && '✓ Reporte enviado. Te responderemos por Telegram.'}
-            {reportState === 'too_many' && 'Ya enviaste varios reportes esta hora. Espera un poco antes de enviar otro.'}
-            {reportState === 'signed_out' && 'La sesión de Telegram de esta TV se cerró. Reinicia la app para volver a iniciarla.'}
-            {reportState === 'error' && 'No se pudo enviar el reporte. Revisa la conexión e inténtalo de nuevo.'}
-            {(reportState === 'idle' || reportState === 'sending') &&
-              'Si un canal o una película no se ve, envíanos un reporte justo después: incluye el modelo de la TV, la red y los últimos errores de reproducción.'}
+          <div className={`pf-diag-summary pf-diag-verdict ${diagRunning ? '' : verdict ? verdict.cls : ''}`}>
+            {diagRunning
+              ? 'Consultando DNS seguro, portal y servidores…'
+              : verdict
+                ? verdict.text
+                : 'Pulsa «Diagnosticar» para empezar.'}
           </div>
-          <div className="pf-diag-speed">
-            <div className={`pf-btn ${isF('speed') ? 'is-focused' : ''}`} onClick={tap('speed')}>
-              {speedRunning ? 'Midiendo…' : speed ? 'Medir de nuevo' : 'Probar velocidad'}
-            </div>
-            <div className={`pf-diag-summary ${!speedRunning && speedError ? 'bad' : !speedRunning && speed ? streamingVerdict(speed.mbps).cls : ''}`}>
-              {speedRunning
-                ? (speedLive !== null ? `Descargando… ${formatSpeed(speedLive)}` : 'Midiendo la latencia…')
-                : speedError
-                  ? 'No se pudo medir la velocidad. Revisa la conexión e inténtalo de nuevo.'
-                  : speed
-                    ? `${formatSpeed(speed.mbps)}${speed.latencyMs !== null ? ` · latencia ${speed.latencyMs} ms` : ''} · ${streamingVerdict(speed.mbps).text}`
-                    : 'Mide la velocidad de internet del televisor (unos 15 segundos). El resultado se incluye en el reporte a soporte.'}
-            </div>
-          </div>
-          {report && !diagRunning && (
-            <>
-              <div className="pf-diag-meta">
-                Portal: {report.portalMs !== null ? `${report.portalMs} ms` : 'sin respuesta'} · Servidores de video: {report.cdns}
+          <div className="pf-diag-cards">
+            {cards.map(c => (
+              <div key={c.label} className={`pf-diag-card ${c.cls}`}>
+                <div className="pf-diag-card-label"><span className="pf-diag-dot" />{c.label}</div>
+                <div className="pf-diag-card-value">{c.value}</div>
+                <div className="pf-diag-card-sub">{c.sub}</div>
               </div>
-              <div className="pf-diag-table">
-                <div className="pf-diag-row pf-diag-head">
-                  <span>Dominio</span><span>Estado</span><span>Dirección (DNS seguro)</span>
-                </div>
-                {report.hosts.map(h => (
-                  <div key={h.host} className="pf-diag-row">
-                    <span>{h.host}</span>
-                    <span className={h.ok ? 'ok' : 'bad'}>{h.ok ? 'Correcto' : 'Sin respuesta'}</span>
-                    <span>{h.ips.join(', ') || '—'}</span>
-                  </div>
-                ))}
-              </div>
-            </>
+            ))}
+          </div>
+          {tested && hostsFailed.length > 0 && (
+            <div className="pf-diag-failed">Sin respuesta: {hostsFailed.join(', ')}</div>
+          )}
+          {reportState !== 'idle' && reportState !== 'sending' && (
+            <div className={`pf-diag-report ${reportState}`}>
+              {reportState === 'ok' && '✓ Reporte enviado. Te responderemos por Telegram.'}
+              {reportState === 'too_many' && 'Ya enviaste varios reportes esta hora. Espera un poco antes de enviar otro.'}
+              {reportState === 'signed_out' && 'La sesión de Telegram de esta TV se cerró. Reinicia la app para volver a iniciarla.'}
+              {reportState === 'error' && 'No se pudo enviar el reporte. Revisa la conexión e inténtalo de nuevo.'}
+            </div>
           )}
         </div>
       );
@@ -717,17 +775,64 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         <h2 className="pf-title">Sobre nosotros</h2>
         <div className="pf-hr" />
         <p className="pf-about-body">
-          Xuper TV se dedica a ofrecer a los usuarios una amplia variedad de recursos de alta calidad. Aquí encontrarás
-          miles de películas, series, animes y canales en vivo, todo reunido en un solo lugar. Brindamos una experiencia
-          estable, diversa y siempre actualizada, además de contenidos gratuitos para disfrutar.
+          TizenXuper TV es una interfaz hecha para televisores Samsung: pensada para el control remoto, rápida, ordenada y
+          cómoda de usar. No producimos ni alojamos contenido: el catálogo y los canales vienen de servicios de terceros, y
+          nos ocupamos de que se vean y se manejen bien.
         </p>
-        <div className="pf-about-port">TizenXuperTV · v{accountService.deviceInfo().version}</div>
-        <div className="pf-about-update">{updateLine(updateService.status())}</div>
-        <h3 className="pf-subtitle">Compartir la app</h3>
-        <p className="pf-about-body">
-          Para instalar XuperTV en otro televisor Samsung necesitas el paquete .wgt de la app. El historial de este perfil
-          permanece privado en este TV.
-        </p>
+        <div className="pf-about-cards">
+          <div className="pf-about-card">
+            <div className="pf-about-card-title">Lo que hacemos</div>
+            <div className="pf-about-card-text">Navegación pensada para el control, filtros y búsqueda, fichas claras, un reproductor cómodo, tu lista y tu historial en la TV, y actualizaciones automáticas.</div>
+          </div>
+          <div className="pf-about-card">
+            <div className="pf-about-card-title">Lo que no hacemos</div>
+            <div className="pf-about-card-text">No somos dueños del contenido ni de los servicios que lo ofrecen. La disponibilidad de películas, series y canales depende de ellos.</div>
+          </div>
+          <div className="pf-about-card">
+            <div className="pf-about-card-title">Un proyecto independiente</div>
+            <div className="pf-about-card-text">Gratuito, hecho por la comunidad y mantenido con tu ayuda. Si algo falla o tienes ideas, cuéntanos por Telegram.</div>
+          </div>
+        </div>
+        <h3 className="pf-subtitle">Telegram</h3>
+        <p className="pf-about-body">Escanea un código con la cámara de tu teléfono.</p>
+        <div className="pf-tg-grid">
+          {TELEGRAM_LINKS.map(l => (
+            <div key={l.name} className="pf-tg-card">
+              <div className="pf-tg-qr"><QrCode text={l.url} size={132} /></div>
+              <div className="pf-tg-info">
+                <div className="pf-tg-name">{l.name}</div>
+                <div className="pf-tg-desc">{l.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Version and updates as a bar at the bottom: the text at the left, the actions at the right */}
+        <div className="pf-update-bar">
+          <div className="pf-update-bar-text">
+            <div className="pf-update-bar-title">TizenXuper TV · v{accountService.deviceInfo().version}</div>
+            <div className="pf-update-bar-desc">
+              {updateChecking
+                ? 'Buscando actualizaciones…'
+                : updateResult === 'uptodate' ? 'Estás al día.'
+                : updateResult === 'downloaded' ? `Versión ${updateService.status().downloaded} descargada. Reinicia para estrenarla.`
+                : updateResult === 'reinstall' ? 'Hay una versión nueva que se instala con Apps2Samsung.'
+                : updateResult === 'error' ? 'No se pudo comprobar. Revisa la conexión e inténtalo de nuevo.'
+                : updateLine(updateService.status())}
+            </div>
+          </div>
+          {updateService.status().canSelfUpdate && (
+            <div className="pf-update-bar-actions">
+              <div className={`pf-btn ${isF('update-check') ? 'is-focused' : ''}`} onClick={tap('update-check')}>
+                {updateChecking ? 'Buscando…' : 'Buscar actualizaciones'}
+              </div>
+              {updateService.status().downloaded && (
+                <div className={`pf-btn ${isF('update-restart') ? 'is-focused' : ''}`} onClick={tap('update-restart')}>
+                  Reiniciar para actualizar
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     );
   };

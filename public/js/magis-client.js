@@ -844,6 +844,27 @@
     });
   }
 
+  /*
+   * What a title offers, without resolving a stream: the audio languages and qualities of its tracks and the
+   * languages of its subtitles. Shares loadPlay's cache with resolve(), so the player finds it already loaded.
+   */
+  function mediaOptions(contentId, seriesContentId, callback) {
+    loadPlay(contentId, seriesContentId, function (err, res) {
+      if (err) return callback(err);
+      var audios = [], qualities = [], subs = [], i;
+      for (i = 0; i < res.tracks.length; i++) {
+        var a = trim(res.tracks[i].audioInfo), q = trim(res.tracks[i].quality);
+        if (a && audios.indexOf(a) === -1) audios.push(a);
+        if (q && qualities.indexOf(q) === -1) qualities.push(q);
+      }
+      var list = subtitleList(res.episode);
+      for (i = 0; i < list.length; i++) {
+        if (list[i].lang && subs.indexOf(list[i].lang) === -1) subs.push(list[i].lang);
+      }
+      callback(null, { audios: audios, qualities: qualities, subtitles: subs });
+    });
+  }
+
   function resolve(contentId, seriesContentId, opts, callback) {
     if (typeof opts === 'function') {
       callback = opts;
@@ -1782,6 +1803,7 @@
     ensureSession: ensureSession,
     resolve: resolve,
     mediaInfo: mediaInfo,
+    mediaOptions: mediaOptions,
     detail: detail,
     home: home,
     browse: browse,
