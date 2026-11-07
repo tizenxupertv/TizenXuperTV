@@ -39,6 +39,8 @@ import { handleHeaderKeys } from './app/keys/headerKeys';
 import { handleLiveTvKeys } from './app/keys/liveTvKeys';
 import { handleVodTabsKeys } from './app/keys/vodTabsKeys';
 import { getTrackOffset, setTrackOffset } from './utils/scrollHelper';
+import { updateService } from './services/updateService';
+import { UpdateReady } from './components/common/UpdateReady';
 
 export const App: React.FC = () => {
   // Read initial tab from URL if present (useful for deep-links & testing)
@@ -124,6 +126,25 @@ export const App: React.FC = () => {
       }
     }, 5 * 60 * 1000);
   }, [activeVodPlayer, isFullscreenLive]);
+
+  // ---------- A downloaded update (services/updateService.ts): a TV app is rarely started from scratch, so it is not
+  // left for the next launch. Restarting = reloading the page (public/js/boot.js starts the new version).
+  const [, setUpdateTick] = useState(0);
+  useEffect(() => updateService.subscribe(() => setUpdateTick(t => t + 1)), []);
+  const isPlaying = !!activeVodPlayer || isFullscreenLive;
+  const playingRef = useRef(isPlaying);
+  playingRef.current = isPlaying;
+  // Back from another app or with the screen on again: apply it right away, unless a video is playing
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden && !playingRef.current && updateService.status().downloaded) window.location.reload();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+  // Or ask for it: a blocking "Reiniciar ahora", never over a video (it waits for the video to end)
+  const readyVersion = updateService.status().downloaded;
+  const showUpdateReady = !!readyVersion && !isPlaying;
 
   useEffect(() => {
     resetScreensaverTimer();
@@ -720,6 +741,10 @@ export const App: React.FC = () => {
             setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: SETTINGS_ROW[col] }));
           }}
         />
+      )}
+
+      {showUpdateReady && (
+        <UpdateReady version={readyVersion} onRestart={() => window.location.reload()} />
       )}
 
       {/* Fullscreen Cinema Player (VOD & Trailers) */}
