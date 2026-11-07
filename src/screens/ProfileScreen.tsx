@@ -52,6 +52,8 @@ const GRID_COLS = 7;
 const MAX_LIST = 30;
 /** "Cerrar sesión" needs a second OK within this time */
 const LOGOUT_CONFIRM_MS = 4000;
+/** How long the message after removing titles stays */
+const NOTICE_MS = 3000;
 
 const VERDICTS: Record<string, { cls: string; text: string }> = {
   ok: { cls: 'ok', text: 'Todo correcto: el portal y los servidores de video responden.' },
@@ -93,6 +95,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [reportState, setReportState] = useState<'idle' | 'sending' | 'ok' | 'too_many' | 'signed_out' | 'error'>('idle');
   const [loggingOut, setLoggingOut] = useState(false);
+  // "Borrar historial": confirmation (0 = Cancelar, selected first; 1 = Sí, borrar) and the result message
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearChoice, setClearChoice] = useState<0 | 1>(0);
+  // Short message after removing titles ("Historial borrado", "… quitado de favoritos")
+  const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
+  // "Quitar títulos": while on, OK on a title removes it from the list shown
+  const [editMode, setEditMode] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const rerender = () => setTick(t => t + 1);
@@ -163,6 +172,29 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     accountService.logout().then(() => window.location.reload());
   };
 
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [notice]);
+  const clearHistory = () => {
+    const ok = historyService.clearHistory();
+    setConfirmClear(false);
+    setEditMode(false);
+    setNotice(ok ? { text: 'Historial borrado' } : { text: 'No se pudo borrar el historial. Inténtalo de nuevo.', error: true });
+    setFocus({ r: 1, c: 0 });
+  };
+  const removeFromList = (id: string, title: string) => {
+    const fromHistory = listTab === 'history';
+    const ok = fromHistory ? historyService.removeEntry(id) : favoritesService.removeFavorite(id);
+    setNotice(ok
+      ? { text: `«${title}» quitado ${fromHistory ? 'del historial' : 'de favoritos'}` }
+      : { text: 'No se pudo quitar. Inténtalo de nuevo.', error: true });
+  };
+  // Edit mode ends when the list changes tab or section, or runs out of titles
+  useEffect(() => { setEditMode(false); }, [listTab, section]);
+  const historyCount = historyService.getHistory().length;
+
   const settings = settingsService.get();
   const hasPin = parentalService.hasPin();
 
@@ -185,7 +217,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         subtitle: h.series
           ? `Ya miró hasta ${h.episodeNumber ? 'epis. ' + h.episodeNumber : 'un episodio'}`
           : `Ya miró hasta ${formatTime(h.position)}`,
-        open: () => onOpenHistory(h)
+        open: () => onOpenHistory(h),
+        remove: () => removeFromList(String(h.id), h.title)
       }));
     }
     return favoritesService.getFavoriteIds().slice(0, MAX_LIST).map(id => {
@@ -195,12 +228,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         title: vod ? vod.title : 'Contenido',
         poster: vod ? (vod.poster || vod.landscape || '') : '',
         subtitle: vod && vod.isSeries ? 'Serie' : 'Película',
-        open: () => { if (vod) onOpenVod(vod); }
+        open: () => { if (vod) onOpenVod(vod); },
+        remove: () => removeFromList(id, vod ? vod.title : 'Contenido')
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listTab, catalogItems, historyService.getHistory().length, favoritesService.getFavoriteIds().join(',')]);
 
+
+  useEffect(() => {
+    if (editMode && listItems.length === 0) setEditMode(false);
+  }, [editMode, listItems.length]);
 
   // Build the focusable grid of the active panel: rows of cells.
   const rows: Cell[][] = (() => {
@@ -208,12 +246,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     const r: Cell[][] = [];
     if (id === 'account') {
       r.push([{ id: 'logout', onActivate: logout }]);
-      r.push([
+      const tabs: Cell[] = [
         { id: 'tab-history', onActivate: () => { setListTab('history'); setFocus({ r: 1, c: 0 }); } },
         { id: 'tab-favs', onActivate: () => { setListTab('favs'); setFocus({ r: 1, c: 1 }); } }
-      ]);
+      ];
+      if (listItems.length > 0) {
+        tabs.push({ id: 'edit-list', onActivate: () => setEditMode(e => !e) });
+      }
+      if (listTab === 'history' && historyCount > 0) {
+        tabs.push({ id: 'clear-history', onActivate: () => { setClearChoice(0); setConfirmClear(true); } });
+      }
+      r.push(tabs);
       for (let i = 0; i < listItems.length; i += GRID_COLS) {
-        r.push(listItems.slice(i, i + GRID_COLS).map(it => ({ id: 'card-' + it.key, onActivate: it.open })));
+        r.push(listItems.slice(i, i + GRID_COLS).map(it => ({ id: 'card-' + it.key, onActivate: editMode ? it.remove : it.open })));
       }
     } else if (id === 'playback') {
       const radio = (group: string, opts: string[], key: 'display' | 'audio' | 'subLang' | 'size' | 'style') =>
@@ -274,6 +319,16 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   }, [focusedId]);
 
   useScreenKeys(key => {
+    // Clear-history confirmation: left/right choose, OK confirms the choice, Back cancels
+    if (confirmClear) {
+      if (key === 'left' || key === 'right') setClearChoice(c => (c === 0 ? 1 : 0));
+      else if (key === 'back') setConfirmClear(false);
+      else if (key === 'enter') {
+        if (clearChoice === 1) clearHistory();
+        else setConfirmClear(false);
+      }
+      return;
+    }
     if (area === 'menu') {
       if (key === 'up') setSection(s => Math.max(0, s - 1));
       else if (key === 'down') setSection(s => Math.min(SECTIONS.length - 1, s + 1));
@@ -287,7 +342,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
     // panel
     if (key === 'back') {
-      setArea('menu');
+      if (editMode) setEditMode(false);
+      else setArea('menu');
       return;
     }
     if (key === 'up') {
@@ -359,14 +415,25 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <div className="pf-tabs">
             <div className={`pf-tab ${listTab === 'history' ? 'is-selected' : ''} ${isF('tab-history') ? 'is-focused' : ''}`} onClick={tap('tab-history')}>Historial</div>
             <div className={`pf-tab ${listTab === 'favs' ? 'is-selected' : ''} ${isF('tab-favs') ? 'is-focused' : ''}`} onClick={tap('tab-favs')}>Mis favoritos</div>
+            {listItems.length > 0 && (
+              <div className={`pf-btn pf-list-action ${editMode ? 'is-on' : ''} ${isF('edit-list') ? 'is-focused' : ''}`} onClick={tap('edit-list')}>
+                {editMode ? 'Listo' : 'Quitar títulos'}
+              </div>
+            )}
+            {listTab === 'history' && historyCount > 0 && (
+              <div className={`pf-btn pf-btn-danger pf-list-action ${isF('clear-history') ? 'is-focused' : ''}`} onClick={tap('clear-history')}>Borrar historial</div>
+            )}
             <div className="pf-total">Total <span>{listItems.length}</span></div>
           </div>
+          {editMode && listItems.length > 0 && (
+            <div className="pf-edit-hint">Elige un título y pulsa OK para quitarlo. Pulsa Atrás o «Listo» para terminar.</div>
+          )}
           {listItems.length === 0 ? (
             <div className="pf-empty">No hay títulos para mostrar todavía.</div>
           ) : (
             <div className="pf-grid">
               {listItems.map(it => (
-                <div key={it.key} className={`pf-card-item ${isF('card-' + it.key) ? 'is-focused' : ''}`} onClick={tap('card-' + it.key)}>
+                <div key={it.key} className={`pf-card-item ${editMode ? 'is-removing' : ''} ${isF('card-' + it.key) ? 'is-focused' : ''}`} onClick={tap('card-' + it.key)}>
                   <div className="pf-poster">
                     <img src={it.poster || 'assets/placeholder_vertical.png'} alt="" loading="lazy" />
                   </div>
@@ -376,6 +443,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               ))}
             </div>
           )}
+          {confirmClear && (
+            <div className="pf-confirm" role="dialog" aria-modal="true">
+              <div className="pf-confirm-card">
+                <h2 className="pf-confirm-title">¿Borrar el historial?</h2>
+                <p className="pf-confirm-text">
+                  Se borran los títulos vistos y el progreso de películas y episodios en este TV. Tus favoritos y ajustes no cambian.
+                </p>
+                <div className="pf-btn-row">
+                  <div className={`pf-btn ${clearChoice === 0 ? 'is-focused' : ''}`} onClick={() => setConfirmClear(false)}>Cancelar</div>
+                  <div className={`pf-btn pf-btn-danger ${clearChoice === 1 ? 'is-focused' : ''}`} onClick={clearHistory}>Sí, borrar</div>
+                </div>
+              </div>
+            </div>
+          )}
+          {notice && <div className={`pf-toast ${notice.error ? 'is-error' : ''}`}>{notice.text}</div>}
         </div>
       );
     }
