@@ -88,6 +88,7 @@ export function useLiveTv() {
   const [fullscreenKb, setFullscreenKb] = useState<KbState>(KB_INITIAL);
   const drawerResultsRef = useRef<LiveChannel[]>([]);
   const [fullscreenCatCursor, setFullscreenCatCursor] = useState<number>(0);
+  const [fullscreenFocusBtn, setFullscreenFocusBtn] = useState<'none' | 'channels' | 'fav'>('none');
   const [showFullscreenOsd, setShowFullscreenOsd] = useState<boolean>(true);
   const osdTimerRef = useRef<any>(null);
 
@@ -96,6 +97,7 @@ export function useLiveTv() {
     if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
     osdTimerRef.current = setTimeout(() => {
       setShowFullscreenOsd(false);
+      setFullscreenFocusBtn('none');
     }, 4500);
   }, []);
 
@@ -103,9 +105,11 @@ export function useLiveTv() {
   useEffect(() => {
     if (isFullscreenLive) {
       triggerOsd();
+      setFullscreenFocusBtn('none');
       setFullscreenGuideIndex(liveTvFocus.channelIndex);
     } else {
       setShowFullscreenGuide(false);
+      setFullscreenFocusBtn('none');
       if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
     }
   }, [isFullscreenLive, triggerOsd, liveTvFocus.channelIndex]);
@@ -247,6 +251,8 @@ export function useLiveTv() {
     drawerResultsRef,
     fullscreenCatCursor,
     setFullscreenCatCursor,
+    fullscreenFocusBtn,
+    setFullscreenFocusBtn,
     showFullscreenOsd,
     setShowFullscreenOsd,
     triggerOsd,

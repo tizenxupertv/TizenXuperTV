@@ -504,6 +504,9 @@
     isPaused: true,
     _backupIdx: 0,
     _previewBackupIdx: 0,
+    _isSeeking: false,
+    _pendingSeekSec: null,
+    _pendingSeekCallbacks: null,
 
     init: function () {
       if (!isTizen || !window.webapis || !webapis.avplay) {
@@ -911,33 +914,86 @@
     },
 
     seekTo: function (sec, successCb, errorCb) {
+      var self = this;
       var ms = Math.floor(sec * 1000);
-      if (ms < 0) ms = 0;
+      if (ms < 100) ms = 100;
       var state = '';
       try { state = webapis.avplay.getState(); } catch (e) {}
 
       // If the player is not yet fully active, queue as initial seek
-      if (!this.isActive || state === 'NONE' || state === 'IDLE') {
+      if (!this.isActive || state === 'NONE' || state === 'IDLE' || state === 'READY') {
         console.log('[XuperAVPlay] Player not yet active, queuing initial seek to ' + sec + 's');
         this._initialSeekSec = sec;
         return;
       }
 
-      try {
-        webapis.avplay.seekTo(ms, function () {
-          console.log('[XuperAVPlay] seekTo ' + ms + 'ms succeeded');
-          if (typeof successCb === 'function') successCb();
-        }, function (err) {
-          console.warn('[XuperAVPlay] seekTo ' + ms + 'ms failed:', err);
-          if (typeof errorCb === 'function') errorCb(err);
-        });
-      } catch (e) {
-        console.warn('[XuperAVPlay] seekTo exception:', e);
-        if (typeof errorCb === 'function') errorCb(e);
+      // If already seeking, queue the latest target so we don't bombard AVPlay with concurrent seeks
+      if (this._isSeeking) {
+        console.log('[XuperAVPlay] Seek already in progress, queuing target ' + sec + 's');
+        this._pendingSeekSec = sec;
+        this._pendingSeekCallbacks = { success: successCb, error: errorCb };
+        return;
       }
+
+      this._isSeeking = true;
+
+      var executeSeek = function (targetMs, retriesLeft) {
+        try {
+          webapis.avplay.seekTo(targetMs, function () {
+            console.log('[XuperAVPlay] seekTo ' + targetMs + 'ms succeeded');
+            self._isSeeking = false;
+            if (typeof successCb === 'function') successCb();
+            if (self._pendingSeekSec !== null) {
+              var nextSec = self._pendingSeekSec;
+              var nextCbs = self._pendingSeekCallbacks || {};
+              self._pendingSeekSec = null;
+              self._pendingSeekCallbacks = null;
+              self.seekTo(nextSec, nextCbs.success, nextCbs.error);
+            }
+          }, function (err) {
+            console.warn('[XuperAVPlay] seekTo ' + targetMs + 'ms attempt failed:', err);
+            // If AVPlay failed due to transient state transition, retry once after 120ms
+            if (retriesLeft > 0) {
+              setTimeout(function () {
+                if (self.isActive) {
+                  executeSeek(targetMs, retriesLeft - 1);
+                } else {
+                  self._isSeeking = false;
+                }
+              }, 120);
+              return;
+            }
+            self._isSeeking = false;
+            self._pendingSeekSec = null;
+            self._pendingSeekCallbacks = null;
+            if (typeof errorCb === 'function') errorCb(err);
+          });
+        } catch (e) {
+          console.warn('[XuperAVPlay] seekTo exception:', e);
+          if (retriesLeft > 0) {
+            setTimeout(function () {
+              if (self.isActive) {
+                executeSeek(targetMs, retriesLeft - 1);
+              } else {
+                self._isSeeking = false;
+              }
+            }, 120);
+            return;
+          }
+          self._isSeeking = false;
+          self._pendingSeekSec = null;
+          self._pendingSeekCallbacks = null;
+          if (typeof errorCb === 'function') errorCb(e);
+        }
+      };
+
+      executeSeek(ms, 1);
     },
 
     stop: function () {
+      this._isSeeking = false;
+      this._pendingSeekSec = null;
+      this._pendingSeekCallbacks = null;
       if (this.isActive) {
         this.isActive = false;
         this._safeStopAndClose();

@@ -2,6 +2,7 @@ const KEY = 'xuper_global_playback_v1';
 
 export interface PlaybackSettings {
   display: number;   // 0 = fit (letterbox), 1 = fullscreen, 2 = auto
+  autoNext?: boolean;// true = auto play next episode on finish
   audio: number;     // 0 = Español, 1 = Portugués, 2 = Inglés
   subtitle: boolean;
   subLang: number;

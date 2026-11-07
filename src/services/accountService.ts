@@ -7,6 +7,7 @@
  * No relative imports, so test/accountService.test.ts can load this file in Node.
  */
 export const ACCOUNT_API = 'https://tizenxuper-bot.tizenxupertv.workers.dev';
+export const ACCOUNT_API_FALLBACK = 'https://tizenxuper-bot.juliochemoreno.workers.dev';
 
 const SESSION_KEY = 'xuper_tg_session_v1';
 const DEVICE_KEY = 'xuper_device_id_v1';
@@ -71,6 +72,8 @@ export interface AccountDeps {
   /** App version and TV model sent to the server */
   device: () => { version: string; model: string };
   randomBytes: (n: number) => Uint8Array;
+  /** Custom endpoint list; defaults to [ACCOUNT_API, ACCOUNT_API_FALLBACK] in browsers */
+  endpoints?: string[];
 }
 
 /** ABCD2345 → ABCD-2345 */
@@ -83,6 +86,8 @@ export function createAccountService(deps: AccountDeps) {
   const notify = () => listeners.forEach(cb => {
     try { cb(); } catch (e) {}
   });
+
+  const endpoints = deps.endpoints || (typeof window !== 'undefined' ? [ACCOUNT_API, ACCOUNT_API_FALLBACK] : [ACCOUNT_API]);
 
   function read(key: string): string | null {
     try { return deps.storage().getItem(key); } catch (e) { return null; }
@@ -104,20 +109,34 @@ export function createAccountService(deps: AccountDeps) {
   }
 
   async function post(path: string, body: unknown, token?: string): Promise<Response> {
-    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = setTimeout(() => ctrl && ctrl.abort(), REQUEST_TIMEOUT_MS);
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers.Authorization = `Bearer ${token}`;
-      return await deps.fetchFn(`${ACCOUNT_API}${path}`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: ctrl ? ctrl.signal : undefined
-      });
-    } finally {
-      clearTimeout(timer);
+    let lastError: Error | null = null;
+    for (let i = 0; i < endpoints.length; i++) {
+      const endpoint = endpoints[i];
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = setTimeout(() => ctrl && ctrl.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await deps.fetchFn(`${endpoint}${path}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: ctrl ? ctrl.signal : undefined
+        });
+        // If primary returns transient 5xx, try fallback endpoint if one exists
+        if (i === 0 && endpoints.length > 1 && (res.status === 502 || res.status === 503 || res.status === 504)) {
+          console.warn(`[account] ${endpoint}${path} returned ${res.status}, trying fallback...`);
+          continue;
+        }
+        return res;
+      } catch (err: any) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.warn(`[account] ${endpoint}${path} network error:`, lastError.message);
+      } finally {
+        clearTimeout(timer);
+      }
     }
+    throw lastError || new Error('network_error');
   }
 
   function session(): AccountSession | null {
@@ -299,5 +318,15 @@ export const accountService = createAccountService({
   fetchFn: (url, init) => fetch(url, init),
   now: () => Date.now(),
   device: () => ({ version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev', model: tvModel() }),
-  randomBytes: n => crypto.getRandomValues(new Uint8Array(n))
+  randomBytes: n => {
+    try {
+      const c = typeof window !== 'undefined' ? (window.crypto || (window as any).msCrypto) : null;
+      if (c && typeof c.getRandomValues === 'function') {
+        return c.getRandomValues(new Uint8Array(n));
+      }
+    } catch (e) {}
+    const bytes = new Uint8Array(n);
+    for (let i = 0; i < n; i++) bytes[i] = Math.floor(Math.random() * 256);
+    return bytes;
+  }
 });
