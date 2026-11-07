@@ -6540,6 +6540,41 @@ html.xuper-vod-avplay .app-root,
   flex-shrink: 0;
 }
 
+/* Perfil › TV abierta: the lists as a grid of compact cards instead of one wide row each */
+.pf-iptv-grid {
+  display: grid;
+  gap: 16px;
+  max-width: 1380px;
+  margin-top: 26px;
+}
+.pf-iptv-card {
+  padding: 22px 24px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 3px solid transparent;
+  box-sizing: border-box;
+  min-width: 0;
+}
+.pf-iptv-card.is-on { background: rgba(255, 255, 255, 0.07); }
+.pf-iptv-card.is-focused { border-color: #ffffff; }
+.pf-iptv-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.pf-iptv-card-name {
+  font-size: 19px;
+  font-weight: 800;
+  color: #ffffff;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pf-iptv-card .pf-switch { flex-shrink: 0; }
+
+
 /* ==========================================================================
    Detail actions, one row: the big Reproducir button, then round buttons whose label shows
    under the focused one (same rounded style as the rest of the app: dark glass at rest,
@@ -7258,3 +7293,57 @@ html.xuper-vod-avplay .app-root,
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 .pf-toast.is-error { background: #7f1d1d; color: #fee2e2; }
+
+/* ==========================================================================
+   Perfil › Diagnóstico: one row of actions, the verdict, and a card per check
+   ========================================================================== */
+.pf-diag-actions { display: flex; gap: 16px; margin-top: 22px; flex-wrap: wrap; }
+.pf-diag-verdict { margin-top: 22px; font-size: 17px; font-weight: 700; max-width: 1100px; }
+.pf-diag-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  max-width: 1380px;
+  margin-top: 18px;
+}
+.pf-diag-card {
+  /* Same card as the rest of Perfil (TV abierta, Bloqueo): soft glass, 16 px corners, no colored edges */
+  padding: 22px 24px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 3px solid transparent;
+  box-sizing: border-box;
+  min-width: 0;
+}
+.pf-diag-card-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+/* The state is a small dot beside the label; the numbers stay white like every title in the app */
+.pf-diag-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.22); flex-shrink: 0; }
+.pf-diag-card.ok .pf-diag-dot { background: #34d399; }
+.pf-diag-card.warn .pf-diag-dot { background: var(--color-gold); }
+.pf-diag-card.bad .pf-diag-dot { background: #fb7185; }
+.pf-diag-card-value { margin-top: 10px; font-size: 30px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff; font-variant-numeric: tabular-nums; }
+.pf-diag-card-sub { margin-top: 6px; font-size: 15px; font-weight: 500; line-height: 1.4; color: #94a3b8; }
+.pf-diag-failed { margin-top: 14px; font-size: 14px; color: #fb7185; max-width: 1380px; word-break: break-all; }
+
+/* Perfil › Sobre nosotros: update actions and the Telegram QR codes */
+.pf-about-actions { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+.pf-tg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1380px; margin-top: 16px; }
+.pf-tg-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 22px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  min-width: 0;
+}
+.pf-tg-qr { padding: 10px; border-radius: 12px; background: #ffffff; line-height: 0; flex-shrink: 0; }
+.pf-tg-name { font-size: 19px; font-weight: 800; color: #ffffff; }
+.pf-tg-desc { margin-top: 6px; font-size: 15px; font-weight: 500; line-height: 1.4; color: #94a3b8; }
