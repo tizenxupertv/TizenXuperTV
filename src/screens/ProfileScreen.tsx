@@ -12,6 +12,7 @@ import { diagnosticService, DiagReport } from '../services/diagnosticService';
 import { iptvService, IPTV_LISTS } from '../services/iptvService';
 import { accountService } from '../services/accountService';
 import { playbackEvents } from '../lib/playbackLog';
+import { formatSpeed, runSpeedTest, SpeedResult, streamingVerdict } from '../lib/speedTest';
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
 
@@ -92,6 +93,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [, setTick] = useState(0);
   const [report, setReport] = useState<DiagReport | null>(null);
   const [diagRunning, setDiagRunning] = useState(false);
+  // Internet speed test: result, live speed while it runs, and a failure
+  const [speed, setSpeed] = useState<SpeedResult | null>(null);
+  const [speedRunning, setSpeedRunning] = useState(false);
+  const [speedLive, setSpeedLive] = useState<number | null>(null);
+  const [speedError, setSpeedError] = useState(false);
+  const speedAbort = useRef<AbortController | null>(null);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [reportState, setReportState] = useState<'idle' | 'sending' | 'ok' | 'too_many' | 'signed_out' | 'error'>('idle');
   const [loggingOut, setLoggingOut] = useState(false);
@@ -115,7 +122,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       iptvService.subscribe(rerender),
       accountService.subscribe(rerender)
     ];
-    return () => unsubs.forEach(u => u());
+    return () => {
+      unsubs.forEach(u => u());
+      // Leaving the screen stops a speed test that is still downloading
+      if (speedAbort.current) speedAbort.current.abort();
+    };
   }, []);
 
   // Problem report for support: TV, network, last network check and recent playback events
@@ -152,7 +163,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       network,
       screen: `${window.screen.width}x${window.screen.height}`,
       diag: report ? { verdict: report.verdict, portalMs: report.portalMs, cdns: report.cdns } : null,
-      events: [...playbackEvents(), ...(caps ? [{ at: now.getTime(), local, kind: 'info', channel: 'Formatos del reproductor', detail: caps }] : [])]
+      events: [
+        ...playbackEvents(),
+        ...(caps ? [{ at: now.getTime(), local, kind: 'info', channel: 'Formatos del reproductor', detail: caps }] : []),
+        ...(speed ? [{
+          at: now.getTime(), local, kind: 'info', channel: 'Velocidad de internet',
+          detail: `${formatSpeed(speed.mbps)}${speed.latencyMs !== null ? ` · latencia ${speed.latencyMs} ms` : ''}`
+        }] : [])
+      ]
     }).then(setReportState);
   };
 
@@ -205,6 +223,22 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       .then(r => setReport(r))
       .catch(() => setReport({ verdict: 'portal-down', hosts: [], portalMs: null, cdns: 0 }))
       .then(() => setDiagRunning(false));
+  };
+
+  const runSpeed = () => {
+    if (speedRunning) return;
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    speedAbort.current = ctrl;
+    setSpeedRunning(true);
+    setSpeedError(false);
+    setSpeedLive(null);
+    runSpeedTest({
+      signal: ctrl ? ctrl.signal : undefined,
+      onProgress: p => { if (p.phase === 'download') setSpeedLive(p.mbps); }
+    })
+      .then(r => setSpeed(r))
+      .catch(() => { if (!(ctrl && ctrl.signal.aborted)) setSpeedError(true); })
+      .then(() => setSpeedRunning(false));
   };
 
   // Items shown in "Mi lista"
@@ -290,6 +324,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       IPTV_LISTS.forEach(l => r.push([{ id: `iptv-${l.id}`, onActivate: () => iptvService.setEnabled(l.id, !iptvService.isEnabled(l.id)) }]));
     } else if (id === 'diag') {
       r.push([{ id: 'run', onActivate: runDiag }, { id: 'report', onActivate: sendReport }]);
+      r.push([{ id: 'speed', onActivate: runSpeed }]);
     } else if (id === 'donate') {
       r.push([{ id: 'donate-qr', onActivate: () => {} }]);
     }
@@ -582,6 +617,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             {reportState === 'error' && 'No se pudo enviar el reporte. Revisa la conexión e inténtalo de nuevo.'}
             {(reportState === 'idle' || reportState === 'sending') &&
               'Si un canal o una película no se ve, envíanos un reporte justo después: incluye el modelo de la TV, la red y los últimos errores de reproducción.'}
+          </div>
+          <div className="pf-diag-speed">
+            <div className={`pf-btn ${isF('speed') ? 'is-focused' : ''}`} onClick={tap('speed')}>
+              {speedRunning ? 'Midiendo…' : speed ? 'Medir de nuevo' : 'Probar velocidad'}
+            </div>
+            <div className={`pf-diag-summary ${!speedRunning && speedError ? 'bad' : !speedRunning && speed ? streamingVerdict(speed.mbps).cls : ''}`}>
+              {speedRunning
+                ? (speedLive !== null ? `Descargando… ${formatSpeed(speedLive)}` : 'Midiendo la latencia…')
+                : speedError
+                  ? 'No se pudo medir la velocidad. Revisa la conexión e inténtalo de nuevo.'
+                  : speed
+                    ? `${formatSpeed(speed.mbps)}${speed.latencyMs !== null ? ` · latencia ${speed.latencyMs} ms` : ''} · ${streamingVerdict(speed.mbps).text}`
+                    : 'Mide la velocidad de internet del televisor (unos 15 segundos). El resultado se incluye en el reporte a soporte.'}
+            </div>
           </div>
           {report && !diagRunning && (
             <>
