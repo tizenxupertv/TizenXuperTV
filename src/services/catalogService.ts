@@ -115,6 +115,9 @@ function formatEpisodeDuration(raw: any): string {
 //  - once the app is idle, and when it comes back to the front, a copy older than
 //    LIVE_REFRESH_AFTER_MS is downloaded again for the next start.
 const LIVE_KEY = 'xuper_live_catalog_v1';
+/** Bumped when the saved rows change shape or content (2: ranked TOP rows carry their full list): an older copy
+    is still shown when nothing else is at hand, but never counts as fresh */
+const LIVE_FORMAT = 2;
 const LIVE_ROOTS = ['featured', 'movies', 'series', 'kids', 'anime', 'free', 'explorar'];
 const LIVE_WAIT_MS = 6000;
 const LIVE_FRESH_MS = 2 * 60 * 60 * 1000;
@@ -124,8 +127,8 @@ let lastKeyAt = 0;
 if (typeof window !== 'undefined') window.addEventListener('keydown', () => { lastKeyAt = Date.now(); }, true);
 
 /** Saved copy (IndexedDB); a copy left by an earlier version in localStorage is moved over once */
-async function readLiveCatalog(): Promise<{ at: number; items: any[] } | null> {
-  const saved = await kvGet<{ at: number; items: any[] }>(LIVE_KEY);
+async function readLiveCatalog(): Promise<{ at: number; v?: number; items: any[] } | null> {
+  const saved = await kvGet<{ at: number; v?: number; items: any[] }>(LIVE_KEY);
   if (saved && Array.isArray(saved.items) && saved.items.length) return saved;
   try {
     const raw = localStorage.getItem(LIVE_KEY);
@@ -169,7 +172,7 @@ function fetchLiveCatalog(low = false): Promise<any[]> {
     const items = ([] as any[]).concat(...lists);
     console.log(`[catalog] live catalog: ${items.length} items in ${Date.now() - t0} ms`);
     if (items.length < 100) throw new Error(`live catalog too small (${items.length})`);
-    kvSet(LIVE_KEY, { at: Date.now(), items });
+    kvSet(LIVE_KEY, { at: Date.now(), v: LIVE_FORMAT, items });
     console.log(`[catalog] live catalog saved: ${items.length} items`);
     return items;
   });
@@ -181,7 +184,7 @@ class CatalogService {
   /** Refreshes the saved live catalog for the next start (no change on screen) */
   public async refreshLiveInBackground(): Promise<void> {
     const saved = await readLiveCatalog();
-    if (saved && Date.now() - saved.at < LIVE_REFRESH_AFTER_MS) return;
+    if (saved && saved.v === LIVE_FORMAT && Date.now() - saved.at < LIVE_REFRESH_AFTER_MS) return;
     // The answers are decrypted on the main thread: start only while the remote rests
     if (Date.now() - lastKeyAt < 4000) {
       setTimeout(() => this.refreshLiveInBackground(), 4000);
@@ -215,7 +218,7 @@ class CatalogService {
     const saved = await readLiveCatalog();
     // A copy saved before the Explorar root was downloaded lacks its rows: not fresh
     const savedComplete = !!saved && saved.items.some((it: any) => String(it.category || '').split(',')[0] === 'explorar');
-    if (saved && savedComplete && Date.now() - saved.at < LIVE_FRESH_MS) {
+    if (saved && savedComplete && saved.v === LIVE_FORMAT && Date.now() - saved.at < LIVE_FRESH_MS) {
       return this.categorize(saved.items.map((it: any, idx: number) => normalizeItem(it, idx)));
     }
     const fresh = await Promise.race([
