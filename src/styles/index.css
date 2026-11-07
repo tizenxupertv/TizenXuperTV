@@ -7450,8 +7450,13 @@ html.xuper-vod-avplay .app-root,
 .upd-ready-desc { margin-top: 14px; font-size: 22px; line-height: 1.5; color: #94a3b8; }
 .upd-ready-btn { margin-top: 34px; min-width: 300px; justify-content: center; font-size: 22px; }
 /* First launch after the update (UpdatedNotice): the same dialog, with a badge and the Novedades QR */
+.upd-ready-card.is-wide { width: 1040px; }
+.upd-done-cards { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; width: 100%; }
+.upd-done-cards .upd-done-news { margin-top: 0; }
+.upd-done-qr-img { width: 132px; height: 132px; display: block; }
+.upd-done-hint { margin-top: 16px; font-size: 16px; color: #64748b; }
 .upd-done-badge {
-  margin-top: 18px; padding: 5px 14px; border-radius: 999px;
+  padding: 5px 14px; border-radius: 999px;
   background: rgba(34, 197, 94, 0.14); color: #4ade80; font-size: 16px; font-weight: 800;
 }
 .upd-done-badge + .upd-ready-title { margin-top: 12px; }

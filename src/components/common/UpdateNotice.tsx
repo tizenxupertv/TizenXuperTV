@@ -38,18 +38,29 @@ export const UpdatedNotice: React.FC<{ version: string; onClose: () => void }> =
   useNoticeKeys(onClose);
   return (
     <div className="upd-ready" role="dialog" aria-modal="true" aria-labelledby="upd-done-title">
-      <div className="upd-ready-card">
-        <img className="upd-ready-logo" src="assets/logo_3d.png" alt="" />
+      <div className="upd-ready-card is-wide">
         <div className="upd-done-badge">Actualizada</div>
         <div className="upd-ready-title" id="upd-done-title">Ya tienes la versión {version}</div>
         <div className="upd-ready-desc">Tu sesión, tu lista y tus ajustes siguen igual.</div>
-        <div className="upd-done-news">
-          <div className="upd-done-qr"><QrCode text={NEWS_URL} size={132} /></div>
-          <div className="upd-done-news-text">
-            <div className="upd-done-news-title">Novedades</div>
-            <div>Escanea el código con el móvil para ver qué hay de nuevo.</div>
+        <div className="upd-done-cards">
+          <div className="upd-done-news">
+            <div className="upd-done-qr"><QrCode text={NEWS_URL} size={132} /></div>
+            <div className="upd-done-news-text">
+              <div className="upd-done-news-title">Novedades</div>
+              <div>Mira qué hay de nuevo en esta versión.</div>
+            </div>
+          </div>
+          <div className="upd-done-news">
+            <div className="upd-done-qr">
+              <img className="upd-done-qr-img" src="assets/paypal-donation-qr.png" alt="Código QR de donación PayPal" />
+            </div>
+            <div className="upd-done-news-text">
+              <div className="upd-done-news-title">Apoya el proyecto</div>
+              <div>Una donación por PayPal nos ayuda a seguir mejorando.</div>
+            </div>
           </div>
         </div>
+        <div className="upd-done-hint">Escanea los códigos con la cámara del móvil.</div>
         <div className="pf-btn is-focused upd-ready-btn" onClick={onClose}>Continuar</div>
       </div>
     </div>
