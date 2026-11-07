@@ -167,7 +167,8 @@ class UpdateService {
       const subtle = window.crypto.subtle;
       let manifestBytes: Uint8Array;
       try {
-        manifestBytes = await getBytes(`${UPDATE_API}/tv/update`);
+        // The running version rides along so the server can count versions; the answer is the same for everyone
+        manifestBytes = await getBytes(`${UPDATE_API}/tv/update?v=${encodeURIComponent(boot.info.running)}`);
       } catch (e) {
         if (e instanceof HttpStatusError && e.status === 404) return this.finish('no update published', false);
         throw e;
