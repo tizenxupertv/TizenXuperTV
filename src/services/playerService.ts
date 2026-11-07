@@ -1,6 +1,7 @@
 import { LiveChannel } from '../types/channel';
 import { normalizeChannel } from '../lib/channelKey';
 import { hostOf, isIspBlockPage, logPlayback, setPlaybackContext } from '../lib/playbackLog';
+import { createSequenceFixer } from '../lib/mediaSequence';
 
 declare global {
   interface Window {
@@ -31,6 +32,26 @@ const MAX_HLS_RETRIES = 2;
 /** Retries of the same server when a live playlist refresh comes back broken */
 const MAX_REFRESH_RETRIES = 3;
 const REFRESH_RETRY_MS = 1500;
+/** Refresh retries count within this window, so a server that keeps failing ends up on the backups */
+const REFRESH_WINDOW_MS = 60000;
+
+/** HLS.js playlist loader that renumbers live playlists whose server shifts the media sequence (src/lib/mediaSequence.ts) */
+function sequenceFixingLoader(Hls: any): any {
+  const fix = createSequenceFixer();
+  const Base = Hls.DefaultConfig.loader;
+  return class extends Base {
+    load(context: any, config: any, callbacks: any) {
+      const onSuccess = callbacks.onSuccess;
+      super.load(context, config, {
+        ...callbacks,
+        onSuccess: (response: any, stats: any, ctx: any, networkDetails: any) => {
+          if (response && typeof response.data === 'string') response.data = fix(response.data);
+          onSuccess(response, stats, ctx, networkDetails);
+        }
+      });
+    }
+  };
+}
 
 class PlayerService {
   private activeChannelCode: string = '';
@@ -381,19 +402,21 @@ class PlayerService {
 
     if (window.__xuperCreateHls || (window.Hls && window.Hls.isSupported())) {
       try {
-        const hls = window.__xuperCreateHls ? window.__xuperCreateHls() : new window.Hls({ enableWorker: false, lowLatencyMode: false });
+        const pLoader = sequenceFixingLoader(window.Hls);
+        const hls = window.__xuperCreateHls
+          ? window.__xuperCreateHls({ pLoader })
+          : new window.Hls({ enableWorker: false, lowLatencyMode: false, pLoader });
         window.__xuperPreviewHls = hls;
 
         let backupIdx = 0;
         let retries = 0;
         // A live playlist refresh that comes back broken (cut off, empty) while the channel plays is
-        // usually a hiccup of that server: retry it before moving to the backups
-        let refreshRetries = 0;
+        // usually a hiccup of that server: retry it a few times per minute before moving to the backups
+        let refreshRetries: number[] = [];
         // Answered by an internet provider's block page instead of the playlist
         let sawBlockPage = false;
         let currentSource = effectiveUrl;
         const backups = (streamMeta && streamMeta.backupUrls) || [];
-        hls.on(window.Hls.Events.LEVEL_LOADED, () => { refreshRetries = 0; });
 
         hls.loadSource(effectiveUrl);
         hls.attachMedia(videoEl);
@@ -424,7 +447,9 @@ class PlayerService {
               body = text.replace(/https?:\/\/\S+/g, '[url]').replace(/\s+/g, ' ').trim().slice(0, 70);
             } catch (e) {}
           }
-          this.lastHlsError = `${data.type}/${data.details}${status}${body ? ` «${body}»` : ''}`;
+          // HLS.js explains parsing errors in `reason` (e.g. "media sequence mismatch 11500:"): first line, no links
+          const reason = String(data.reason || '').split('\n')[0].replace(/https?:\/\/\S+/g, '').trim().slice(0, 50);
+          this.lastHlsError = `${data.type}/${data.details}${status}${reason ? ` (${reason})` : ''}${body ? ` «${body}»` : ''}`;
           try {
             const nd = data.networkDetails;
             if (nd && isIspBlockPage(typeof nd.responseText === 'string' ? nd.responseText : '', nd.responseURL)) {
@@ -438,9 +463,11 @@ class PlayerService {
           if (data.fatal) {
             const refreshHiccup = /^level(ParsingError|LoadError|LoadTimeOut)$/.test(String(data.details)) &&
               !!code && this.status.code === code && this.status.state === 'playing';
-            if (refreshHiccup && refreshRetries < MAX_REFRESH_RETRIES) {
-              refreshRetries++;
-              logPlayback({ kind: 'stall', player: 'HLS.js', detail: `lista incompleta, reintento ${refreshRetries}`, host });
+            const now = Date.now();
+            refreshRetries = refreshRetries.filter(at => now - at < REFRESH_WINDOW_MS);
+            if (refreshHiccup && refreshRetries.length < MAX_REFRESH_RETRIES) {
+              refreshRetries.push(now);
+              logPlayback({ kind: 'stall', player: 'HLS.js', detail: `lista incompleta, reintento ${refreshRetries.length}`, host });
               setTimeout(() => {
                 if (window.__xuperPreviewHls !== hls) return;
                 hls.loadSource(currentSource);
@@ -460,7 +487,7 @@ class PlayerService {
                   nextEffective = `/stream-proxy?url=${encodeURIComponent(nextUrl)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}`;
                 }
                 currentSource = nextEffective;
-                refreshRetries = 0;
+                refreshRetries = [];
                 hls.loadSource(nextEffective);
                 hls.startLoad();
                 return;
