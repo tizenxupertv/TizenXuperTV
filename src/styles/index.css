@@ -6239,3 +6239,34 @@ html.xuper-vod-avplay .app-root,
 .pf-diag-report { margin: 14px 0 6px; font-size: 14px; line-height: 1.5; color: var(--text-muted); max-width: 880px; }
 .pf-diag-report.ok { color: #34d399; }
 .pf-diag-report.too_many, .pf-diag-report.error, .pf-diag-report.signed_out { color: #fb7185; }
+
+/* ==========================================================================
+   "New version" notice (once per version, above everything)
+   ========================================================================== */
+.upd-notice {
+  position: fixed; inset: 0; z-index: 100002; display: flex; align-items: center; justify-content: center;
+  background: rgba(4, 6, 10, 0.82);
+}
+.upd-notice-card {
+  display: flex; align-items: center; gap: 48px; max-width: 1080px; padding: 44px 52px;
+  border-radius: 28px; background: #111622; border: 1px solid rgba(0, 229, 255, 0.25);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+.upd-notice-qr {
+  flex-shrink: 0; padding: 18px; border-radius: 22px; background: #fff; text-align: center;
+}
+.upd-notice-qr-caption { margin-top: 10px; font-size: 15px; font-weight: 800; color: #0b1020; }
+.upd-notice-info { max-width: 620px; }
+.upd-notice-badge {
+  display: inline-block; padding: 4px 12px; border-radius: 999px; margin-bottom: 14px;
+  background: rgba(0, 229, 255, 0.12); color: #00e5ff; font-size: 15px; font-weight: 800;
+}
+.upd-notice-title { font-size: 34px; font-weight: 900; letter-spacing: -0.5px; margin: 0 0 10px; color: #fff; }
+.upd-notice-lead { font-size: 17px; line-height: 1.5; color: #94a3b8; margin: 0 0 22px; }
+.upd-notice-steps { display: flex; flex-direction: column; gap: 14px; margin-bottom: 26px; }
+.upd-notice-step { display: flex; align-items: center; gap: 14px; font-size: 17px; color: #e2e8f0; }
+.upd-notice-step b { color: #fff; }
+.upd-notice-ok { display: flex; align-items: center; gap: 12px; font-size: 17px; font-weight: 700; color: #e2e8f0; }
+.upd-notice-key {
+  padding: 6px 16px; border-radius: 10px; background: #00e5ff; color: #04141a; font-weight: 900;
+}
