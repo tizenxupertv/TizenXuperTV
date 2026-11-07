@@ -85,8 +85,8 @@ export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; onClose
             Tienes la {current}. Actualízala para tener las últimas mejoras y correcciones.
           </p>
           <div className="upd-notice-steps">
-            <div className="upd-notice-step"><span className="tg-login-num">1</span><span>En Apps2Samsung, abre la pestaña <b>On the TV</b></span></div>
-            <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Pulsa <b>Update</b> en TizenXuper TV</span></div>
+            <div className="upd-notice-step"><span className="tg-login-num">1</span><span>Descarga <b>TizenXuperTV.wgt</b> del bot de Telegram (<b>Última versión</b>)</span></div>
+            <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Instálalo con Apps2Samsung encima de la que tienes</span></div>
             <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Tu lista, tus canales favoritos y tu sesión se conservan</span></div>
           </div>
           <div className="upd-notice-ok">
