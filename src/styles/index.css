@@ -6075,99 +6075,119 @@ html.xuper-vod-avplay .app-root,
   overflow: hidden;
 }
 
-.filter-page-clip {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.filter-page-track {
-  position: relative;
-  padding: 4px min(60px, 4vw) 60px;
-  will-change: transform;
-}
-
-/* Filters in one card: label column + a row of chips that slides horizontally */
-.filter-panel {
-  padding: 10px 26px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.filter-row {
+.filter-types {
   display: flex;
-  align-items: center;
-  height: 60px;
+  gap: 12px;
+  padding: 6px min(60px, 4vw) 18px;
 }
 
-.filter-row + .filter-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.filter-row-label {
-  width: 130px;
-  flex-shrink: 0;
-  font-size: 17px;
-  font-weight: 800;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: #94a3b8;
-}
-
-.filter-chips-clip {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.filter-chips {
-  display: flex;
-  white-space: nowrap;
-  will-change: transform;
-}
-
-.filter-chip {
-  flex-shrink: 0;
-  margin-right: 10px;
-  padding: 5px 20px;
-  border-radius: 24px;
+.filter-type {
+  padding: 8px 26px;
+  border-radius: 9999px;
   border: 3px solid transparent;
-  font-size: 22px;
-  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 20px;
+  font-weight: 700;
   color: #cbd5e1;
   transition: none !important;
 }
 
-.filter-chip.is-selected {
-  background: rgba(59, 130, 246, 0.16);
-  border-color: rgba(96, 165, 250, 0.5);
-  color: #93c5fd;
-}
-
-.filter-chip.is-type.is-selected {
-  background: #2563eb;
-  border-color: #2563eb;
+.filter-type.is-selected {
+  background: rgba(255, 255, 255, 0.18);
   color: #ffffff;
 }
 
-.filter-chip.is-focused,
-.filter-chip.is-selected.is-focused {
+.filter-type.is-focused,
+.filter-type.is-selected.is-focused {
   background: #ffffff;
   border-color: #ffffff;
   color: #000000;
 }
 
-.filter-chip.is-loading {
-  color: #64748b;
+/* Body: the vertical filter menu on the left, the titles on the rest of the screen */
+.filter-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 32px;
+  padding: 0 min(60px, 4vw);
+}
+
+.filter-side {
+  width: 380px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: 10px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
+}
+
+.filter-side-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.filter-side-label { flex: 1; }
+.filter-side-value { font-size: 18px; font-weight: 600; color: #94a3b8; }
+.filter-side-value.is-set { color: #93c5fd; }
+.filter-side-chevron { font-size: 24px; color: #64748b; }
+.filter-side-row.is-clear { color: #fb7185; }
+
+.filter-side-row.is-focused { background: #ffffff; color: #000000; }
+.filter-side-row.is-focused .filter-side-value,
+.filter-side-row.is-focused .filter-side-chevron { color: #334155; }
+.filter-side-row.is-clear.is-focused { color: #be123c; }
+
+.filter-side-head {
+  padding: 8px 18px 12px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.filter-options-clip { overflow: hidden; }
+.filter-options-track { will-change: transform; }
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-radius: 12px;
+  box-sizing: border-box;
+  font-size: 20px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.filter-option.is-chosen { color: #ffffff; font-weight: 800; }
+.filter-option.is-loading { color: #64748b; }
+.filter-option.is-focused { background: #ffffff; color: #000000; }
+
+.filter-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .filter-results-head {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin: 22px 0 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 34px;
+  margin: 4px 0 14px;
   font-size: 18px;
   font-weight: 700;
   color: #cbd5e1;
@@ -6178,12 +6198,25 @@ html.xuper-vod-avplay .app-root,
   font-weight: 800;
 }
 
-.filter-results-active {
-  padding: 2px 12px;
-  border-radius: 12px;
-  background: rgba(59, 130, 246, 0.16);
-  color: #93c5fd;
+.filter-active-chip {
+  padding: 2px 14px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
   font-size: 15px;
+}
+
+/* The grid scrolls inside its own area: the types and the menu stay where they are */
+.filter-grid-clip {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.filter-grid.browse-cards-grid {
+  grid-template-columns: repeat(6, 1fr);
+  will-change: transform;
 }
 
 /* Screen header (catalog, filters, search, detail, profile): the home bar with a title instead of tabs */
