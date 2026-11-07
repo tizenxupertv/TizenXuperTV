@@ -142,17 +142,9 @@ export const App: React.FC = () => {
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
-  // Or offer it: "Reiniciar ahora" / "Más tarde" (once per version), never over a video
-  const READY_SEEN_KEY = 'xuper_update_ready_later';
+  // Or ask for it: a blocking "Reiniciar ahora", never over a video (it waits for the video to end)
   const readyVersion = updateService.status().downloaded;
-  const [laterVersion, setLaterVersion] = useState<string | null>(() => {
-    try { return localStorage.getItem(READY_SEEN_KEY); } catch (e) { return null; }
-  });
-  const showUpdateReady = !!readyVersion && readyVersion !== laterVersion && !isPlaying;
-  const updateLater = useCallback(() => {
-    try { localStorage.setItem(READY_SEEN_KEY, readyVersion); } catch (e) {}
-    setLaterVersion(readyVersion);
-  }, [readyVersion]);
+  const showUpdateReady = !!readyVersion && !isPlaying;
 
   useEffect(() => {
     resetScreensaverTimer();
@@ -752,7 +744,7 @@ export const App: React.FC = () => {
       )}
 
       {showUpdateReady && (
-        <UpdateReady version={readyVersion} onRestart={() => window.location.reload()} onLater={updateLater} />
+        <UpdateReady version={readyVersion} onRestart={() => window.location.reload()} />
       )}
 
       {/* Fullscreen Cinema Player (VOD & Trailers) */}
