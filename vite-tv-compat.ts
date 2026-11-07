@@ -67,21 +67,27 @@ export function addCssFallbacks(css: string): string {
 }
 
 /**
- * Moves the external scripts out of <head> into a small loader at the end of <body> that starts
- * after the first paint, so the splash screen shows at once instead of a black screen while
- * ~1.3 MB of scripts (portal data, hls, crypto) are parsed. Order is kept (one after another).
- * Each script advances the splash bar up to 30% (the app fills the rest, see src/lib/splash.ts).
- * webapis.js stays in <head>: it is tiny and the Tizen runtime resolves its $WEBAPIS path.
+ * Moves the external scripts out of <head>: public/js/boot.js, at the end of <body>, loads them one after another
+ * (or the newer code of a downloaded update, see that file), so the splash screen shows at once instead of a black
+ * screen while ~1.3 MB of scripts (portal data, hls, crypto) are parsed. Each script advances the splash bar up to
+ * 30% (the app fills the rest, see src/lib/splash.ts). The package's script and style lists and its version are
+ * handed to boot.js as globals. webapis.js stays in <head>: it is tiny and the Tizen runtime resolves its $WEBAPIS path.
  */
-function deferHeavyScripts(html: string): string {
+export function deferHeavyScripts(html: string, appVersion: string): string {
+  const local = (src: string) => src.replace(/^\.\//, '');
   const srcs: string[] = [];
   html = html.replace(/<script\b[^>]*\ssrc="([^"]+)"[^>]*><\/script>\s*/g, (tag, src: string) => {
     if (src.indexOf('$WEBAPIS') === 0) return tag;
-    srcs.push(src);
+    srcs.push(local(src));
     return '';
   });
-  const loader = `<script>(function(){var s=${JSON.stringify(srcs)};function n(i){if(i>=s.length)return;var e=document.createElement('script');e.src=s[i];e.async=false;e.onload=e.onerror=function(){var f=document.querySelector('#xuper-splash .xs-fill');if(f)f.style.width=Math.round(4+26*(i+1)/s.length)+'%';n(i+1)};document.body.appendChild(e)}requestAnimationFrame(function(){setTimeout(function(){n(0)},0)})})();</script>`;
-  return html.replace('</body>', loader + '\n</body>');
+  const styles: string[] = [];
+  html.replace(/<link\b[^>]*rel="stylesheet"[^>]*\shref="([^"]+)"[^>]*>/g, (tag, href: string) => {
+    styles.push(local(href));
+    return tag;
+  });
+  const lists = `window.__XUPER_SCRIPTS=${JSON.stringify(srcs)};window.__XUPER_STYLES=${JSON.stringify(styles)};window.__XUPER_PACKAGED=${JSON.stringify(appVersion)};`;
+  return html.replace('</body>', `<script>${lists}</script>\n<script src="js/boot.js"></script>\n</body>`);
 }
 
 export function tvCompatPlugin(appVersion = 'dev'): Plugin {
@@ -97,7 +103,7 @@ export function tvCompatPlugin(appVersion = 'dev'): Plugin {
       handler(html, ctx) {
         html = html.replace(/%APP_VERSION%/g, appVersion);
         if (!ctx.bundle) return html; // dev server keeps ES modules
-        html = deferHeavyScripts(html);
+        html = deferHeavyScripts(html, appVersion);
         return html
           .replace(/<script type="module" crossorigin src=/g, '<script defer src=')
           .replace(/<link rel="modulepreload"[^>]*>\s*/g, '')
