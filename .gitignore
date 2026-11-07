@@ -20,3 +20,6 @@ signature1.xml
 # Local env
 .env
 .env.*
+
+# Local planning notes (not published)
+.agents/
