@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ACCOUNT_API, createAccountService, formatCode } from '../src/services/accountService.ts';
+import { ACCOUNT_API, createAccountService, formatCode, isNewerVersion } from '../src/services/accountService.ts';
 
 interface Sent { url: string; init: RequestInit }
 
@@ -100,6 +100,41 @@ test('verify: only a 401 signs the TV out; offline keeps the session', async () 
 
   assert.equal(await service.verify(), 'revoked');
   assert.equal(service.session(), null);
+});
+
+test('isNewerVersion compares dotted versions; anything else is never newer', () => {
+  assert.equal(isNewerVersion('1.9.3', '1.9.2'), true);
+  assert.equal(isNewerVersion('1.10.0', '1.9.9'), true);
+  assert.equal(isNewerVersion('2.0', '1.9.9'), true);
+  assert.equal(isNewerVersion('1.9.2', '1.9.2'), false);
+  assert.equal(isNewerVersion('1.9.1', '1.9.2'), false);
+  assert.equal(isNewerVersion('1.9.3', 'dev'), false);
+  assert.equal(isNewerVersion('v1.9.3', '1.9.2'), false);
+});
+
+test('a newer version from the session check is offered once', async () => {
+  const guide = 'https://telegra.ph/Actualizar-TizenXuper-TV-11-06';
+  const { service } = await signedIn([
+    { status: 200, body: { user: { name: 'Ana' }, latest: { version: '1.8.1', guide } } },
+    { status: 200, body: { user: { name: 'Ana' }, latest: { version: '1.9.3', guide } } },
+    { status: 200, body: { user: { name: 'Ana' }, latest: { version: '1.9.3', guide: 'javascript:alert(1)' } } },
+    { status: 200, body: { user: { name: 'Ana' }, latest: { version: '1.9.3', guide } } }
+  ]);
+  // Older than the app (1.8.2): nothing to say
+  await service.verify();
+  assert.equal(service.pendingUpdate(), null);
+
+  await service.verify();
+  assert.deepEqual(service.pendingUpdate(), { version: '1.9.3', guide });
+
+  // Only https guide links are accepted
+  await service.verify();
+  assert.equal(service.pendingUpdate(), null);
+
+  // Once shown, the same version is not offered again
+  await service.verify();
+  service.markUpdateSeen('1.9.3');
+  assert.equal(service.pendingUpdate(), null);
 });
 
 test('logout forgets the session even when the server is unreachable', async () => {

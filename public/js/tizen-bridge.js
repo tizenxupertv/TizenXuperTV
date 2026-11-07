@@ -1166,9 +1166,10 @@
     });
   }
 
-  window.__xuperCreateHls = function () {
+  // `extra` adds or replaces options (the player passes its playlist loader)
+  window.__xuperCreateHls = function (extra) {
     if (!window.Hls || !Hls.isSupported()) return null;
-    return new Hls({
+    var config = {
       enableWorker: false,
       lowLatencyMode: false,
       backBufferLength: 15,
@@ -1216,7 +1217,9 @@
           };
         }
       }
-    });
+    };
+    if (extra) for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) config[k] = extra[k];
+    return new Hls(config);
   };
 
   // Setup video element interception on DOM load

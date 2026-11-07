@@ -10,6 +10,8 @@ export const ACCOUNT_API = 'https://tizenxuper-bot.juliochemoreno.workers.dev';
 
 const SESSION_KEY = 'xuper_tg_session_v1';
 const DEVICE_KEY = 'xuper_device_id_v1';
+/** Last version the "new version" notice was shown for (once per version) */
+const UPDATE_SEEN_KEY = 'xuper_update_seen_v1';
 const REQUEST_TIMEOUT_MS = 10000;
 
 export interface AccountUser {
@@ -37,6 +39,25 @@ export type PollResult = { status: 'pending' } | { status: 'expired' } | { statu
 /** ok: session valid · revoked: the TV was unlinked (sign in again) · offline: could not check */
 export type VerifyResult = 'ok' | 'revoked' | 'offline';
 
+/** Newest release the server knows of, and the update guide (telegra.ph) */
+export interface UpdateInfo {
+  version: string;
+  guide: string;
+}
+
+/** True when `latest` is a newer dotted version than `current` ("1.10.0" > "1.9.3"); "dev" never is */
+export function isNewerVersion(latest: string, current: string): boolean {
+  const parse = (v: string) => (/^\d+(\.\d+)*$/.test(v) ? v.split('.').map(Number) : null);
+  const a = parse(latest);
+  const b = parse(current);
+  if (!a || !b) return false;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const diff = (a[i] || 0) - (b[i] || 0);
+    if (diff) return diff > 0;
+  }
+  return false;
+}
+
 interface KeyValue {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -57,6 +78,8 @@ export const formatCode = (code: string) => `${code.slice(0, 4)}-${code.slice(4)
 
 export function createAccountService(deps: AccountDeps) {
   let listeners: Array<() => void> = [];
+  // From the last session check: the newest release, if the server sent it
+  let latest: UpdateInfo | null = null;
   const notify = () => listeners.forEach(cb => {
     try { cb(); } catch (e) {}
   });
@@ -166,6 +189,10 @@ export function createAccountService(deps: AccountDeps) {
         }
         if (!res.ok) return 'offline';
         const data = await res.json();
+        const l = data.latest;
+        latest = l && typeof l.version === 'string' && typeof l.guide === 'string' && /^https:\/\//.test(l.guide)
+          ? { version: l.version, guide: l.guide }
+          : null;
         if (data.user && (data.user.name !== s.name || (data.user.username || null) !== s.username)) {
           save({ token: s.token, name: String(data.user.name || ''), username: data.user.username || null });
         }
@@ -173,6 +200,17 @@ export function createAccountService(deps: AccountDeps) {
       } catch (e) {
         return 'offline';
       }
+    },
+
+    /** A newer version this TV has not been told about yet (shown once per version), after verify() */
+    pendingUpdate(): UpdateInfo | null {
+      if (!latest || !isNewerVersion(latest.version, deps.device().version)) return null;
+      return read(UPDATE_SEEN_KEY) === latest.version ? null : latest;
+    },
+
+    /** The notice for this version was shown */
+    markUpdateSeen(version: string): void {
+      write(UPDATE_SEEN_KEY, version);
     },
 
     /** App version and TV model, for the problem report */

@@ -55,7 +55,7 @@
    - Enter `1 2 3 4 5` on your remote.
    - Switch Developer Mode to **ON** and set your computer's local IP address as the **Host PC IP**.
    - Restart the TV (hold the Power button on the remote for 3 seconds).
-4. In Apps2Samsung, find **TizenXuper TV** in the Community Catalog or drag and drop the `TizenXuperTV_1.9.2.wgt` package from the [Releases](releases) tab.
+4. In Apps2Samsung, find **TizenXuper TV** in the Community Catalog or drag and drop the `TizenXuperTV_1.9.3.wgt` package from the [Releases](releases) tab.
 5. Click **Install**. The app will be automatically signed and installed on your TV.
 
 ---
@@ -101,7 +101,7 @@ npm run build
 bash tools/build-and-sign.sh
 ```
 
-The compiled package will be located at `build/TizenXuperTV_1.9.2.wgt`.
+The compiled package will be located at `build/TizenXuperTV_1.9.3.wgt`.
 
 ---
 
