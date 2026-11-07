@@ -111,7 +111,11 @@ function streamProxyPlugin() {
 const appVersion = (fs.readFileSync(path.resolve(__dirname, 'public/config.xml'), 'utf8').match(/<widget[^>]*\sversion="([^"]+)"/) || [])[1] || 'dev';
 
 export default defineConfig({
-  define: { __APP_VERSION__: JSON.stringify(appVersion) },
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    // Self-update server for test builds only (tools/update-serve.mjs); releases use the bot Worker
+    __UPDATE_API__: JSON.stringify(process.env.XUPER_UPDATE_API || '')
+  },
   plugins: [react(), streamProxyPlugin(), tvCompatPlugin(appVersion)],
   base: './',
   server: {

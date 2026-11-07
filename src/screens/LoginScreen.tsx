@@ -35,6 +35,11 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
   const [attempt, setAttempt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
 
+  // The sign-in screen is a first screen too: a downloaded update that got this far is good (public/js/boot.js)
+  useEffect(() => {
+    if (window.XuperBoot) window.XuperBoot.ok();
+  }, []);
+
   // Ask for a code, then check every few seconds whether the user confirmed it in the bot
   useEffect(() => {
     let cancelled = false;

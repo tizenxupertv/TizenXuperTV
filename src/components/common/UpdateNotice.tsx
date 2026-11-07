@@ -20,14 +20,48 @@ if (typeof window !== 'undefined') {
   );
 }
 
-/** "New version" notice, shown once per version after the session check: how to update, and a QR to the guide */
-export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; onClose: () => void }> = ({ info, current, onClose }) => {
+/** The open notice takes every key while it is shown */
+function useNoticeKeys(onClose: () => void): void {
   useEffect(() => {
     closeOpenNotice = onClose;
     return () => {
       if (closeOpenNotice === onClose) closeOpenNotice = null;
     };
   }, [onClose]);
+}
+
+/** Novedades page on Telegraph (created by the bot repo's `npm run guide`) */
+const NEWS_URL = 'https://telegra.ph/Novedades-de-TizenXuper-TV-11-07';
+
+/** First launch after the app updated itself: once per version */
+export const UpdatedNotice: React.FC<{ version: string; onClose: () => void }> = ({ version, onClose }) => {
+  useNoticeKeys(onClose);
+  return (
+    <div className="upd-notice" role="dialog" aria-modal="true">
+      <div className="upd-notice-card">
+        <div className="upd-notice-qr">
+          <QrCode text={NEWS_URL} size={200} />
+          <div className="upd-notice-qr-caption">Novedades</div>
+        </div>
+        <div className="upd-notice-info">
+          <div className="upd-notice-badge">✅ Actualizada</div>
+          <h1 className="upd-notice-title">TizenXuper TV se actualizó a la {version}</h1>
+          <p className="upd-notice-lead">
+            La app se actualizó sola, sin Apps2Samsung. Tus favoritos, tu perfil y tu sesión siguen igual.
+            Escanea el código para ver qué hay de nuevo.
+          </p>
+          <div className="upd-notice-ok">
+            <span className="upd-notice-key">OK</span><span>Continuar</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/** "New version" notice, shown once per version after the session check: how to update, and a QR to the guide */
+export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; onClose: () => void }> = ({ info, current, onClose }) => {
+  useNoticeKeys(onClose);
 
   return (
     <div className="upd-notice" role="dialog" aria-modal="true">

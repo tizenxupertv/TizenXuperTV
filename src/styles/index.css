@@ -3797,6 +3797,7 @@ html, body {
 /* About */
 .pf-about-body { font-size: 14px; line-height: 1.6; color: var(--text-muted); max-width: 880px; margin: 0; }
 .pf-about-port { margin-top: 18px; font-size: 18px; font-weight: 800; }
+.pf-about-update { margin-top: 6px; font-size: 14px; color: var(--text-muted); }
 .pf-about-mail { margin-top: 4px; font-size: 14px; color: var(--color-accent-sub); }
 
 /* PIN dialog */

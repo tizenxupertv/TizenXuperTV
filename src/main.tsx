@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 // First, so its key listener runs before any screen's
-import { UpdateNotice } from './components/common/UpdateNotice';
+import { UpdatedNotice, UpdateNotice } from './components/common/UpdateNotice';
 import { App } from './App';
 import { LoginScreen } from './screens/LoginScreen';
 import { accountService, type UpdateInfo } from './services/accountService';
+import { updateService } from './services/updateService';
 import './styles/index.css';
 import { installTvDebug } from './debug/tvDebug';
 
@@ -18,6 +19,15 @@ const Root: React.FC = () => {
   const [signedIn, setSignedIn] = useState(() => accountService.isSignedIn());
   // A newer version announced by the server, shown once per version
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  // The version this launch runs, when the app updated itself to it (shown once)
+  const [updatedTo, setUpdatedTo] = useState<string | null>(null);
+  const [, setTick] = useState(0);
+
+  // Self-update checks run in the background, signed in or not (public/js/boot.js, services/updateService.ts)
+  useEffect(() => {
+    updateService.start();
+    return updateService.subscribe(() => setTick(t => t + 1));
+  }, []);
 
   // A session revoked on the server (TV unlinked) restarts the app at the sign-in screen;
   // without a connection the saved session keeps working
@@ -25,8 +35,12 @@ const Root: React.FC = () => {
     if (!signedIn) return;
     const t = setTimeout(() => {
       accountService.verify().then(result => {
-        if (result === 'revoked') window.location.reload();
-        else if (result === 'ok') setUpdate(accountService.pendingUpdate());
+        if (result === 'revoked') {
+          window.location.reload();
+          return;
+        }
+        setUpdatedTo(updateService.updatedNotice());
+        if (result === 'ok') setUpdate(accountService.pendingUpdate());
       });
     }, VERIFY_DELAY_MS);
     return () => clearTimeout(t);
@@ -38,12 +52,22 @@ const Root: React.FC = () => {
     if (update) accountService.markUpdateSeen(update.version);
     setUpdate(null);
   }, [update]);
+  const closeUpdated = useCallback(() => {
+    if (updatedTo) updateService.markUpdatedSeen(updatedTo);
+    setUpdatedTo(null);
+  }, [updatedTo]);
+
+  // The Apps2Samsung notice only where the app cannot update itself (older engine, or a release that needs a new package)
+  const status = updateService.status();
+  const manualUpdate = update && (!status.canSelfUpdate || status.needsReinstall) ? update : null;
 
   if (!signedIn) return <LoginScreen onSignedIn={() => setSignedIn(true)} />;
   return (
     <>
       <App />
-      {update && <UpdateNotice info={update} current={accountService.deviceInfo().version} onClose={closeUpdate} />}
+      {updatedTo
+        ? <UpdatedNotice version={updatedTo} onClose={closeUpdated} />
+        : manualUpdate && <UpdateNotice info={manualUpdate} current={accountService.deviceInfo().version} onClose={closeUpdate} />}
     </>
   );
 };
