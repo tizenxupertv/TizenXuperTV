@@ -69,8 +69,9 @@ test('judge gives one reason per case, or downloads', () => {
   assert.match(judge(m, { ...ctx, downloaded: '1.10.1' }), /already downloaded/);
 });
 
-test('checks wait 6 h after success, 15 → 30 → 60 min after failures, capped, never more than one gap', () => {
+test('checks wait 1 h after success, 15 → 30 → 60 min after failures, capped, never more than one gap', () => {
   const t = 1_000_000_000;
+  assert.equal(CHECK_EVERY_MS, 3600 * 1000);
   assert.equal(waitAfter(null, t), 0);
   assert.equal(waitAfter(record(null, 'ok', false, t), t), CHECK_EVERY_MS);
   let r = record(null, 'net', true, t);
@@ -78,7 +79,7 @@ test('checks wait 6 h after success, 15 → 30 → 60 min after failures, capped
   r = record(r, 'net', true, t);
   assert.equal(waitAfter(r, t), 2 * RETRY_MS);
   r = record(r, 'net', true, t);
-  assert.equal(waitAfter(r, t), 4 * RETRY_MS);
+  assert.equal(waitAfter(r, t), CHECK_EVERY_MS, '4 × 15 min reaches the 1 h cap');
   for (let i = 0; i < 10; i++) r = record(r, 'net', true, t);
   assert.equal(waitAfter(r, t), CHECK_EVERY_MS);
   assert.equal(record(r, 'ok', false, t).fails, 0);
