@@ -1527,6 +1527,12 @@
     });
   }
 
+  /* Size of a ranked row from its name ("Películas TOP15 clasificadas" → 15), 0 for any other row */
+  function rankedSize(name) {
+    var m = /\btop\s?(\d{1,2})(?!\d)/i.exec(String(name || ''));
+    return m ? parseInt(m[1], 10) : 0;
+  }
+
   var treeCache = {};
   // opts.low: background refresh, waits behind every other request
   function home(root, pageNum, callback, opts) {
@@ -1553,30 +1559,60 @@
       }, { low: !!opts.low }, function (cErr, cRes) {
         if (cErr) return callback(cErr);
         var recList = cRes && cRes.recommendList || [];
-        var items = [];
         var cat = ROOT_CATEGORY[root] || '';
-        for (var i = 0; i < recList.length; i++) {
-          var col = recList[i];
-          var aList = col && col.assetList || [];
-          for (var j = 0; j < aList.length; j++) {
-            var it = itemFromAsset(aList[j], cat, null);
+        function rowTitles(assets, rowName) {
+          var out = [];
+          for (var j = 0; j < assets.length; j++) {
+            var it = itemFromAsset(assets[j], cat, null);
             if (it) {
-              it.row = text(col.name);
+              it.row = rowName;
               if (root === 'free' && /free\.kids/i.test(it.row) && it.category.indexOf('infantil') === -1) {
                 it.category += ',infantil';
               }
-              items.push(it);
+              out.push(it);
             }
           }
+          return out;
+        }
+        var rows = [];
+        for (var i = 0; i < recList.length; i++) {
+          var col = recList[i];
+          var name = text(col && col.name);
+          var row = { col: col, name: name, titles: rowTitles(col && col.assetList || [], name), tiles: [] };
           // Aggregation row (e.g. Kids: Minions, Toy Story…): tiles that open a column of the root
           var agg = col && col.aggregationList || [];
           for (var g = 0; g < agg.length; g++) {
             var tile = collectionFromColumn(agg[g], cat);
-            if (tile) items.push(tile);
+            if (tile) row.tiles.push(tile);
           }
+          rows.push(row);
         }
-        treeCache[cacheKey] = { at: Date.now(), items: items };
-        callback(null, { root: root, pageNum: pageNum, items: items, cached: false });
+
+        function done() {
+          var items = [];
+          for (var r = 0; r < rows.length; r++) items = items.concat(rows[r].titles, rows[r].tiles);
+          treeCache[cacheKey] = { at: Date.now(), items: items };
+          callback(null, { root: root, pageNum: pageNum, items: items, cached: false });
+        }
+
+        // The home sends at most 10 titles per row, also for its ranked rows ("Películas TOP15 clasificadas"):
+        // those get their whole list from the row's column (the column id must be a number, or the portal
+        // answers "request parameters error"). If that fails, the row keeps the 10 it has.
+        var pending = 0;
+        for (var k = 0; k < rows.length; k++) {
+          (function (row) {
+            var want = rankedSize(row.name);
+            var id = parseInt(row.col && (row.col.columnId || row.col.id), 10);
+            if (!want || !id || row.titles.length >= want) return;
+            pending++;
+            call('v3/getShelveData', { columnId: id, columnType: '2', pageNum: 1, pageSize: Math.max(20, want) }, { low: !!opts.low }, function (sErr, sRes) {
+              var full = sErr ? [] : rowTitles(sRes && sRes.assetList || [], row.name);
+              if (full.length > row.titles.length) row.titles = full.slice(0, want);
+              if (--pending === 0) done();
+            });
+          })(rows[k]);
+        }
+        if (pending === 0) done();
       });
     });
   }
