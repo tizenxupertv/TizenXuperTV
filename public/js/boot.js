@@ -24,7 +24,7 @@
   /* What this loader expects from a bundle; bump it when that changes or any shell file changes */
   var SHELL = 1;
   /* ECDSA P-256 public key, SPKI DER in base64. Written by tools/update-key.mjs; the private key is never in the repo */
-  var PUBKEY = "";
+  var PUBKEY = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEYXqGdkwl3txnDhXk3ZOC2H6yG+uxGc3kb6vOL3sHcFSg/6twFw3I5sw0+nKzdwXJRGc/FJuPfflQbkJ3xr7WWQ==";
 
   var DB_NAME = 'xuper-update';
   var STORE = 'files';
