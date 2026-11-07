@@ -103,6 +103,28 @@ bash tools/build-and-sign.sh
 
 The compiled package will be located at `build/TizenXuperTV_<version>_signed.wgt`.
 
+### Self-update (from 1.10.0)
+
+TVs running 1.10.0 or newer update the app's own code by themselves: `public/js/boot.js` runs the newest update
+bundle the app downloaded and verified (signed manifest, ECDSA P-256), or the installed package. Big libraries,
+images, `config.xml` and `boot.js` itself stay in the package (the "shell"); changing any of them needs a new
+`SHELL` in `boot.js` and a reinstall with Apps2Samsung.
+
+```bash
+# Once: the signing key (kept outside the repository, back it up)
+node tools/update-key.mjs
+
+# Once per shell, from the release build: record its files
+npm run build && node tools/update-release.mjs --init-shell
+
+# Every release: after npm run build, write the signed update files
+node tools/update-release.mjs
+```
+
+Attach `build/update/update-manifest.json` and `build/update/update-bundle-<version>.json` to the GitHub release next
+to the `.wgt`: the bot Worker serves them to the TVs (`/tv/update`). To try an update on a TV, build with
+`XUPER_UPDATE_API=http://<Mac IP>:8098` and serve `build/update/` with `node tools/update-serve.mjs`.
+
 ---
 
 ## 📄 License

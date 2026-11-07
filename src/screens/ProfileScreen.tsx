@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import pkg from '../../package.json';
 import { PinMode } from '../lib/screenStack';
 import { VodItem } from '../types/vod';
 import { HistoryItem } from '../types/history';
@@ -11,10 +10,24 @@ import { parentalService } from '../services/parentalService';
 import { diagnosticService, DiagReport } from '../services/diagnosticService';
 import { iptvService, IPTV_LISTS } from '../services/iptvService';
 import { accountService } from '../services/accountService';
+import { updateService, type UpdateStatus } from '../services/updateService';
 import { playbackEvents } from '../lib/playbackLog';
 import { formatSpeed, runSpeedTest, SpeedResult, streamingVerdict } from '../lib/speedTest';
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
+
+/** Perfil › Sobre nosotros: what the self-update is doing on this TV */
+function updateLine(s: UpdateStatus): string {
+  if (!s.canSelfUpdate) return 'Esta TV no puede actualizarse sola: las versiones nuevas se instalan con Apps2Samsung.';
+  if (s.needsReinstall) return 'Hay una versión nueva que se instala con Apps2Samsung.';
+  if (s.downloaded) return `Versión ${s.downloaded} descargada: se usará la próxima vez que abras la app.`;
+  const installed = s.running && s.running !== s.packaged ? ` · instalada ${s.packaged}` : '';
+  const last = s.lastCheck && !s.lastCheck.error ? new Date(s.lastCheck.at) : null;
+  const pad = (n: number) => (n < 10 ? '0' : '') + n;
+  return last
+    ? `Al día · comprobado a las ${pad(last.getHours())}:${pad(last.getMinutes())}${installed}`
+    : `Se actualiza sola${installed}`;
+}
 
 interface ProfileScreenProps {
   isTop: boolean;
@@ -120,7 +133,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       settingsService.subscribe(rerender),
       parentalService.subscribe(rerender),
       iptvService.subscribe(rerender),
-      accountService.subscribe(rerender)
+      accountService.subscribe(rerender),
+      updateService.subscribe(rerender)
     ];
     return () => {
       unsubs.forEach(u => u());
@@ -705,7 +719,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           miles de películas, series, animes y canales en vivo, todo reunido en un solo lugar. Brindamos una experiencia
           estable, diversa y siempre actualizada, además de contenidos gratuitos para disfrutar.
         </p>
-        <div className="pf-about-port">TizenXuperTV · v{(pkg as any).version}</div>
+        <div className="pf-about-port">TizenXuperTV · v{accountService.deviceInfo().version}</div>
+        <div className="pf-about-update">{updateLine(updateService.status())}</div>
         <h3 className="pf-subtitle">Compartir la app</h3>
         <p className="pf-about-body">
           Para instalar XuperTV en otro televisor Samsung necesitas el paquete .wgt de la app. El historial de este perfil

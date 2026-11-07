@@ -108,10 +108,16 @@ function streamProxyPlugin() {
 
 // https://vitejs.dev/config/
 // App version from the Tizen widget manifest (shown in the TV diagnostic logs)
-const appVersion = (fs.readFileSync(path.resolve(__dirname, 'public/config.xml'), 'utf8').match(/<widget[^>]*\sversion="([^"]+)"/) || [])[1] || 'dev';
+// XUPER_APP_VERSION overrides it for self-update test builds only (never for releases)
+const appVersion = process.env.XUPER_APP_VERSION ||
+  (fs.readFileSync(path.resolve(__dirname, 'public/config.xml'), 'utf8').match(/<widget[^>]*\sversion="([^"]+)"/) || [])[1] || 'dev';
 
 export default defineConfig({
-  define: { __APP_VERSION__: JSON.stringify(appVersion) },
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    // Self-update server for test builds only (tools/update-serve.mjs); releases use the bot Worker
+    __UPDATE_API__: JSON.stringify(process.env.XUPER_UPDATE_API || '')
+  },
   plugins: [react(), streamProxyPlugin(), tvCompatPlugin(appVersion)],
   base: './',
   server: {
