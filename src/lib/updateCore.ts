@@ -31,7 +31,7 @@ export interface CheckRecord {
 }
 
 /** A successful check waits this long; a failed one retries sooner, doubling, up to the same cap */
-export const CHECK_EVERY_MS = 6 * 3600 * 1000;
+export const CHECK_EVERY_MS = 3600 * 1000;
 export const RETRY_MS = 15 * 60 * 1000;
 
 /** Dotted numbers compared part by part, like XuperBoot.cmp; a non-numeric part counts as 0 */
