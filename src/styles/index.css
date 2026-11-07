@@ -1774,8 +1774,8 @@ html, body {
   padding: 20px clamp(20px, 2.5vw, 34px) 16px;
   box-sizing: border-box;
   border-radius: 24px;
-  background: rgba(10, 14, 24, 0.94);
-  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  background: rgba(22, 22, 24, 0.98);
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
   box-shadow: 0 20px 55px rgba(0, 0, 0, 0.88);
   display: none;
   z-index: 100001 !important;
@@ -1893,10 +1893,16 @@ html, body {
 }
 
 .pi-action-btn.is-focused {
-  background: #00e5ff !important;
-  border-color: #00e5ff !important;
+  background: #ffffff !important;
+  border-color: #ffffff !important;
   color: #000000 !important;
-  box-shadow: 0 0 20px rgba(0, 229, 255, 0.55);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6) !important;
+}
+
+.pi-action-btn.fav-btn.is-fav.is-focused {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #000000 !important;
 }
 
 .pi-date {
@@ -3012,28 +3018,100 @@ html, body {
   font-weight: 600;
 }
 
-.player-center-toast {
+/* ==========================================================================
+   Player HUD & Toasts (Clean & Fast, No Costly GPU Blurs or Glows)
+   ========================================================================== */
+
+.vp-seek-hud {
   position: absolute;
-  top: 50%;
+  bottom: 160px;
   left: 50%;
-  transform: translate(-50%, -50%);
-  padding: 14px 28px;
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #ffffff;
-  font-size: 20px;
-  font-weight: 800;
-  z-index: 20;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 28px;
+  border-radius: 9999px;
+  background: rgba(28, 28, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+  z-index: 25;
   pointer-events: none;
-  animation: fadeInOut 1.2s ease forwards;
+  transition: opacity 0.15s ease-out;
 }
 
-@keyframes fadeInOut {
-  0% { opacity: 0; transform: translate(-50%, -46%); }
-  15% { opacity: 1; transform: translate(-50%, -50%); }
-  85% { opacity: 1; transform: translate(-50%, -50%); }
-  100% { opacity: 0; transform: translate(-50%, -54%); }
+.vp-seek-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+
+.vp-seek-content {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.vp-seek-delta {
+  font-size: 28px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-seek-target {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.75);
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-hud-toast {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 28px;
+  border-radius: 9999px;
+  background: rgba(28, 28, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.65);
+  color: #ffffff;
+  font-size: 19px;
+  font-weight: 700;
+  z-index: 25;
+  pointer-events: none;
+  animation: vpHudFade 1.2s ease forwards;
+}
+
+@keyframes vpHudFade {
+  0% { opacity: 0; transform: translate(-50%, -10px); }
+  15% { opacity: 1; transform: translate(-50%, 0); }
+  85% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -10px); }
+}
+
+.player-center-toast {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 28px;
+  border-radius: 9999px;
+  background: #111622;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-size: 19px;
+  font-weight: 700;
+  z-index: 25;
+  pointer-events: none;
+  animation: vpHudFade 1.2s ease forwards;
 }
 
 /* ==========================================================================
@@ -4241,8 +4319,7 @@ html, body {
   to { transform: rotate(360deg); }
 }
 
-.vod-player-error,
-.vod-next-episode {
+.vod-player-error {
   position: absolute;
   z-index: 7;
   padding: 24px 32px;
@@ -4250,9 +4327,6 @@ html, body {
   background: rgba(17, 22, 34, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #ffffff;
-}
-
-.vod-player-error {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
@@ -4265,30 +4339,148 @@ html, body {
   font-weight: 800;
 }
 
-.vod-player-error-hint,
-.vod-next-hint {
+.vod-player-error-hint {
   margin-top: 10px;
   font-size: 14px;
   color: #94a3b8;
 }
 
+/* Next Episode Card (Clean & Fast, Apple TV Grays) */
 .vod-next-episode {
-  right: 48px;
-  bottom: 160px;
-  min-width: 420px;
+  position: absolute;
+  right: 54px;
+  bottom: 140px;
+  width: 480px;
+  border-radius: 18px;
+  background: rgba(28, 28, 30, 0.96);
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  z-index: 20;
+  animation: vpNextSlide 0.25s ease-out;
 }
 
-.vod-next-label {
+@keyframes vpNextSlide {
+  0% { opacity: 0; transform: translateX(40px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+.vod-next-progress-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.vod-next-progress-fill {
+  height: 100%;
+  background: #ffffff;
+  transition: width 1s linear;
+}
+
+.vod-next-inner {
+  display: flex;
+  gap: 18px;
+  padding: 18px 22px;
+  align-items: center;
+}
+
+.vod-next-thumb {
+  position: relative;
+  width: 140px;
+  height: 80px;
+  border-radius: 12px;
+  background-color: #2c2c2e;
+  background-size: cover;
+  background-position: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.vod-next-play-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 14px;
+}
+
+.vod-next-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.vod-next-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vod-next-tag {
+  font-size: 12px;
   font-weight: 800;
-  color: #00e5ff;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.vod-next-timer {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .vod-next-title {
-  margin-top: 6px;
-  font-size: 22px;
+  margin-top: 4px;
+  font-size: 18px;
   font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vod-next-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.vod-next-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 18px;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #04141a;
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+}
+
+.vod-next-btn-key {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.15);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.vod-next-cancel-hint {
+  font-size: 13px;
+  font-weight: 600;
+  color: #94a3b8;
 }
 
 /* VOD on the TV: AVPlay renders below the page, so the page must be see-through while it plays */
@@ -4347,30 +4539,41 @@ html.xuper-vod-avplay .app-root,
 }
 
 .vp-round {
-  transition: transform 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+  transition: transform 0.12s ease, background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
   position: relative;
-  width: 72px;
-  height: 72px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
-  background: rgba(30, 30, 30, 0.75);
+  background: rgba(28, 28, 30, 0.92);
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #ffffff;
   font-size: 30px;
+  cursor: pointer;
 }
 
 .vp-round.vp-play {
   width: 104px;
   height: 104px;
-  font-size: 36px;
+  font-size: 38px;
   font-weight: 800;
+  border: 2.5px solid rgba(255, 255, 255, 0.3);
 }
 
 .vp-round.is-focused {
-  background: #ffffff;
-  color: #000000;
-  transform: scale(1.1);
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+  transform: scale(1.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
+}
+
+.vp-round.is-focused .vp-skip,
+.vp-round.is-focused .vp-skip-num {
+  color: #000000 !important;
 }
 
 .vp-skip {
@@ -4418,31 +4621,56 @@ html.xuper-vod-avplay .app-root,
 .vp-ctrls {
   position: relative;
   display: flex;
-  gap: 12px;
-  padding: 8px;
+  gap: 10px;
+  padding: 6px;
   border-radius: 9999px;
-  background: rgba(30, 30, 30, 0.75);
+  background: rgba(28, 28, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .vp-ctrl {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  border: 3px solid transparent;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 9999px;
+  color: rgba(255, 255, 255, 0.85);
+  border: 2px solid transparent;
   box-sizing: border-box;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .vp-ctrl.is-on {
-  color: #00e5ff;
+  color: #ffffff;
+}
+
+.vp-ctrl.is-disabled {
+  opacity: 0.4;
 }
 
 .vp-ctrl.is-focused {
   background: #ffffff;
   color: #000000;
+  border-color: #ffffff;
+}
+
+.vp-ctrl.is-disabled.is-focused {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.vp-ctrl.is-on.is-focused {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+}
+
+.vp-ctrl-label {
+  white-space: nowrap;
 }
 
 .vp-menu {
@@ -4597,95 +4825,187 @@ html.xuper-vod-avplay .app-root,
   font-weight: 800;
 }
 
-/* Episode shelf in the VOD player */
+/* ==========================================================================
+   Apple TV Fullscreen Episodes Drawer (VOD Player)
+   Floating drawer anchored directly ABOVE the bottom controls row
+   ========================================================================== */
+
 .vp-episodes {
-  margin: 0 0 22px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 14px);
+  z-index: 20;
+  padding: 16px 24px 18px;
+  border-radius: 20px;
+  background: rgba(22, 22, 24, 0.98);
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85);
+  box-sizing: border-box;
   overflow: hidden;
+  animation: vpEpisodesFade 0.2s ease-out;
 }
 
-.vp-episodes .vp-menu-title {
-  padding: 0 0 12px;
-  font-size: 18px;
+@keyframes vpEpisodesFade {
+  0% { opacity: 0; transform: translateY(14px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.vp-episodes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+.vp-episodes-head-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.vp-episodes-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.2px;
+}
+
+.vp-episodes-season-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.vp-episodes-season-arrow {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.vp-episodes-caption {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 17px;
+  color: #ffffff;
+}
+
+.vp-episodes-caption-num {
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.vp-episodes-caption-title {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.vp-episodes-caption-meta {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.vp-episodes .vod-ep-ranges-clip {
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.vp-episodes .vod-ep-ranges {
+  display: flex;
+  align-items: center;
+  padding: 2px 0 6px;
+  gap: 8px;
+}
+
+.vp-episodes .vod-ep-range {
+  margin: 0;
+  padding: 4px 14px;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  box-sizing: border-box;
+  font-size: 16px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.65);
+  background: transparent;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.vp-episodes .vod-ep-range.is-active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.vp-episodes .vod-ep-range.is-focused {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #000000 !important;
 }
 
 .vp-episodes-track {
+  width: 100%;
+  overflow: hidden;
+  padding: 4px 0 6px;
+  box-sizing: border-box;
+}
+
+.vp-episodes-track .vod-episodes-slider.is-tiles {
   display: flex;
-  gap: 20px;
-  padding: 10px 6px 6px;
-  transition: transform 0.25s ease-out;
+  gap: 12px;
+  padding: 0;
+  transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1);
+  box-sizing: border-box;
 }
 
-.vp-ep-card {
-  flex: 0 0 320px;
-  width: 320px;
-  margin-right: 0;
-  opacity: 0.75;
-  transition: transform 0.18s ease-out, opacity 0.18s ease-out;
+.vp-episodes .vod-ep-tile {
+  flex: 0 0 132px;
+  width: 132px;
+  height: 80px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  box-sizing: border-box;
+  transform: none !important;
 }
 
-.vp-ep-card.is-focused {
-  opacity: 1;
-  transform: scale(1.05);
+.vp-episodes .vod-ep-tile.is-watched {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.55);
 }
 
-.vp-ep-thumb {
-  position: relative;
-  height: 180px;
-  border-radius: 14px;
-  background-color: #1c1c1e;
-  background-size: cover;
-  background-position: center;
-  border: 3px solid transparent;
+.vp-episodes .vod-ep-tile.is-current {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.6);
 }
 
-.vp-ep-card.is-focused .vp-ep-thumb {
-  border-color: #ffffff;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
+.vp-episodes .vod-ep-tile.is-focused {
+  background: #ffffff !important;
+  border: 2px solid #ffffff !important;
+  color: #000000 !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
+  transform: none !important;
+  z-index: 5;
 }
 
-.vp-ep-now {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  padding: 4px 10px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 800;
-  background: rgba(0, 0, 0, 0.7);
-  color: #ffffff;
+.vp-episodes .vod-ep-tile.is-focused .vod-ep-tile-num,
+.vp-episodes .vod-ep-tile.is-focused .vod-ep-tile-play {
+  color: #000000 !important;
 }
 
-.vp-ep-progress {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 10px;
-  height: 4px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.3);
-  overflow: hidden;
+.vp-episodes .vod-ep-tile.is-focused .vod-ep-tile-check {
+  color: #15803d !important;
 }
 
-.vp-ep-progress div {
-  height: 100%;
-  background: #ffffff;
-}
-
-.vp-ep-num {
-  margin-top: 10px;
-  font-size: 14px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.vp-ep-title {
-  margin-top: 2px;
-  font-size: 18px;
-  font-weight: 700;
-  color: #ffffff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.vp-episodes .vod-ep-tile.is-focused .vod-ep-tile-progress > div {
+  background: #000000 !important;
 }
 
 /* Playback settings menu: three groups, kept compact to fit above the controls */
@@ -5395,12 +5715,12 @@ html.xuper-vod-avplay .app-root,
   transform: scale(1.04);
 }
 
-/* Welcome Modal Step 2 - Donation / Support */
+/* Welcome Modal Step 2 - Donation / Support & Timeline Stepper */
 .welcome-donate-content {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 44px;
+  gap: 40px;
   width: 100%;
   margin-bottom: 28px;
   animation: fadeIn 0.25s ease-out;
@@ -5410,18 +5730,28 @@ html.xuper-vod-avplay .app-root,
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   padding: 16px;
   border-radius: 24px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.6);
   flex-shrink: 0;
 }
 
+.welcome-donate-qr-frame {
+  background: #ffffff;
+  padding: 10px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .welcome-donate-qr-img {
-  width: 210px;
-  height: 210px;
+  width: 195px;
+  height: 195px;
   object-fit: contain;
-  border-radius: 8px;
+  display: block;
 }
 
 .welcome-donate-badge {
@@ -5429,9 +5759,9 @@ html.xuper-vod-avplay .app-root,
   background: #0070ba;
   color: #ffffff;
   font-size: 13px;
-  font-weight: 700;
-  padding: 4px 16px;
-  border-radius: 12px;
+  font-weight: 800;
+  padding: 4px 18px;
+  border-radius: 999px;
   letter-spacing: 0.5px;
 }
 
@@ -5440,43 +5770,98 @@ html.xuper-vod-avplay .app-root,
   text-align: left;
 }
 
-.welcome-donate-steps {
+/* Welcome Timeline Stepper (matches Login Screen Stepper) */
+.welcome-timeline {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
-.welcome-donate-step {
+.welcome-timeline-item {
   display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 16px;
-  color: #e2e8f0;
+  gap: 16px;
+  position: relative;
 }
 
-.welcome-step-num {
+.welcome-timeline-marker {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
   width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(56, 189, 248, 0.15);
-  color: #38bdf8;
-  font-weight: 800;
-  font-size: 15px;
   flex-shrink: 0;
 }
 
-.welcome-donate-note {
+.welcome-timeline-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #38bdf8 0%, #a855f7 100%);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4);
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.welcome-timeline-line {
+  width: 2px;
+  flex: 1;
+  min-height: 20px;
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.5) 0%, rgba(168, 85, 247, 0.2) 100%);
+  margin: 3px 0;
+}
+
+.welcome-timeline-content {
+  padding-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: left;
+}
+
+.welcome-timeline-item.is-last .welcome-timeline-content {
+  padding-bottom: 2px;
+}
+
+.welcome-timeline-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 2px;
+  letter-spacing: -0.2px;
+}
+
+.welcome-timeline-sub {
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+
+.welcome-donate-note {
+  font-size: 13.5px;
+  line-height: 1.45;
   color: #94a3b8;
   background: rgba(255, 255, 255, 0.04);
   padding: 12px 18px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.welcome-donate-note-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.welcome-donate-note-text b {
+  color: #38bdf8;
 }
 
 .welcome-donate-note strong {
@@ -5886,30 +6271,48 @@ html.xuper-vod-avplay .app-root,
   flex: 0 0 136px;
   height: 84px;
   border-radius: 12px;
-  background: #2a303b;
-  border: 3px solid transparent;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   box-sizing: border-box;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  color: #e2e8f0;
+  color: #ffffff;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.vod-ep-tile.is-current {
+  border-color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .vod-ep-tile.is-skeleton {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.vod-ep-tile-sub {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 2px;
+}
+
 .vod-ep-tile-num {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 800;
+  line-height: 1;
 }
 
 .vod-ep-tile-play {
   position: absolute;
-  left: 12px;
+  left: 10px;
   top: 8px;
-  font-size: 15px;
+  font-size: 13px;
   color: #ffffff;
 }
 
@@ -5923,8 +6326,9 @@ html.xuper-vod-avplay .app-root,
 }
 
 .vod-ep-tile.is-watched {
-  background: #1d222b;
-  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .vod-ep-tile-progress {
@@ -5942,13 +6346,17 @@ html.xuper-vod-avplay .app-root,
 }
 
 .vod-ep-tile.is-focused {
-  background: #ffffff;
-  border-color: #ffffff;
-  color: #000000;
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #000000 !important;
+  transform: scale(1.08);
+  z-index: 5;
 }
 
+.vod-ep-tile.is-focused .vod-ep-tile-sub,
+.vod-ep-tile.is-focused .vod-ep-tile-num,
 .vod-ep-tile.is-focused .vod-ep-tile-play {
-  color: #000000;
+  color: #000000 !important;
 }
 
 .vod-ep-caption {
@@ -6214,29 +6622,541 @@ html.xuper-vod-avplay .app-root,
 }
 .tg-login-brand { padding: 28px 48px 0; }
 .tg-login-body { flex: 1; display: flex; align-items: center; justify-content: center; gap: 64px; padding: 0 64px 48px; }
-.tg-login-card {
-  width: 300px; flex-shrink: 0; padding: 20px; border-radius: 24px; background: #fff;
-  display: flex; flex-direction: column; align-items: center; box-sizing: border-box;
+
+/* Left Column: QR Card or Skeleton with Progress Border & Timer */
+.tg-login-left-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 304px;
+  flex-shrink: 0;
 }
-.tg-login-card.is-empty { height: 340px; justify-content: center; background: rgba(255, 255, 255, 0.06); }
+.tg-login-progress-border {
+  padding: 3px;
+  border-radius: 27px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  transition: background 0.4s ease;
+}
+.tg-login-card {
+  width: 294px;
+  border-radius: 24px;
+  background: #fff;
+  padding: 20px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+}
+.tg-login-card.is-empty {
+  height: 340px;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
 .tg-login-card-msg { font-size: 16px; color: var(--text-muted); }
 .tg-login-card.is-empty .tg-login-card-msg { font-size: 15px; }
 .tg-login-qr { display: block; }
-.tg-login-code { margin-top: 12px; font-size: 28px; font-weight: 900; letter-spacing: 4px; color: #0b1020; }
-.tg-login-info { max-width: 600px; }
-.tg-login-title { font-size: 32px; font-weight: 900; letter-spacing: -0.5px; margin: 0 0 10px; }
-.tg-login-lead { font-size: 16px; line-height: 1.5; color: var(--text-muted); margin: 0 0 24px; }
-.tg-login-steps { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
-.tg-login-step { display: flex; align-items: center; gap: 14px; font-size: 16px; color: #e2e8f0; }
-.tg-login-num {
-  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-  font-size: 15px; font-weight: 800; color: #fff; background: var(--gradient-brand);
+.tg-login-code {
+  margin-top: 12px;
+  font-size: 27px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: #0b1020;
+  font-family: monospace;
 }
-.tg-login-alt { font-size: 14px; color: var(--text-muted); margin: 0 0 22px; }
-.tg-login-alt b { color: #e2e8f0; }
-.tg-login-status { min-height: 22px; font-size: 15px; font-weight: 700; color: var(--color-accent-sub); margin-bottom: 16px; }
-.tg-login-status.is-expired, .tg-login-status.is-error { color: #fb7185; }
-.tg-login-status.is-done { color: #4ade80; font-size: 18px; }
+
+/* Skeleton & Placeholder Card (shared between Loading, Error and Expired) */
+.tg-login-placeholder-card {
+  width: 300px;
+  height: 350px;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
+}
+.tg-login-placeholder-card.is-error {
+  border-color: rgba(251, 113, 133, 0.28);
+  background: radial-gradient(circle at center, rgba(251, 113, 133, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+}
+.tg-login-placeholder-card.is-expired {
+  border-color: rgba(251, 146, 60, 0.3);
+  background: radial-gradient(circle at center, rgba(251, 146, 60, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+}
+.tg-login-placeholder-qr {
+  width: 220px;
+  height: 220px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px dashed rgba(56, 189, 248, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(56, 189, 248, 0.6);
+  position: relative;
+  overflow: hidden;
+}
+.tg-login-placeholder-qr.is-error {
+  border-color: rgba(251, 113, 133, 0.35);
+  color: rgba(251, 113, 133, 0.75);
+  background: rgba(251, 113, 133, 0.035);
+}
+.tg-login-placeholder-qr.is-expired {
+  border-color: rgba(251, 146, 60, 0.38);
+  color: rgba(251, 146, 60, 0.85);
+  background: rgba(251, 146, 60, 0.04);
+}
+.tg-login-placeholder-label {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+.tg-login-placeholder-label.is-error {
+  color: #fb7185;
+}
+.tg-login-placeholder-label.is-expired {
+  color: #fb923c;
+}
+.tg-login-error-icon {
+  color: rgba(251, 113, 133, 0.85);
+}
+.tg-login-expired-icon {
+  color: rgba(251, 146, 60, 0.9);
+}
+.tg-login-skeleton-card {
+  width: 300px;
+  height: 350px;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
+}
+.tg-login-skeleton-qr {
+  width: 220px;
+  height: 220px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px dashed rgba(56, 189, 248, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(56, 189, 248, 0.6);
+  position: relative;
+  overflow: hidden;
+}
+.tg-login-skeleton-icon {
+  animation: tg-pulse 2.2s infinite ease-in-out;
+}
+.tg-login-skeleton-code {
+  width: 180px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  position: relative;
+  overflow: hidden;
+}
+.tg-login-skeleton-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.08) 50%, transparent 100%);
+  animation: tg-shimmer 1.8s infinite;
+}
+
+/* Timer Badge below QR card */
+.tg-login-timer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 14px;
+  font-weight: 700;
+  color: #38bdf8;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+.tg-login-timer b {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.tg-login-timer.is-expired {
+  color: #fb923c;
+  border-color: rgba(251, 146, 60, 0.35);
+  background: rgba(251, 146, 60, 0.08);
+}
+.tg-login-timer.is-loading {
+  color: #94a3b8;
+}
+.tg-login-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(56, 189, 248, 0.2);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: tg-spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+/* Right Column: Information, Timeline, 2-line alternative box, actions */
+.tg-login-info { max-width: 620px; }
+.tg-login-title { font-size: 32px; font-weight: 900; letter-spacing: -0.5px; margin: 0 0 8px; }
+.tg-login-lead { font-size: 15.5px; line-height: 1.5; color: var(--text-muted); margin: 0 0 22px; }
+
+/* Timeline Stepper */
+.tg-login-timeline {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 20px;
+}
+.tg-login-timeline-item {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  position: relative;
+}
+.tg-login-timeline-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 34px;
+  flex-shrink: 0;
+}
+.tg-login-timeline-dot {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 900;
+  color: #fff;
+  background: var(--gradient-brand, linear-gradient(135deg, #38bdf8 0%, #a855f7 100%));
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.35);
+  z-index: 2;
+}
+.tg-login-timeline-line {
+  width: 2px;
+  flex: 1;
+  min-height: 18px;
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.5) 0%, rgba(168, 85, 247, 0.35) 100%);
+  margin: 3px 0;
+}
+.tg-login-timeline-content {
+  padding-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.tg-login-timeline-item.is-last .tg-login-timeline-content {
+  padding-bottom: 4px;
+}
+.tg-login-timeline-title {
+  font-size: 16.5px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 2px;
+  letter-spacing: -0.2px;
+}
+.tg-login-timeline-sub {
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+.tg-login-timeline-sub b {
+  color: #38bdf8;
+}
+
+/* Unified Notification Box (Clean 2-line layout without icon) */
+.tg-login-notice-box {
+  border-radius: 16px;
+  padding: 13px 20px;
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
+  text-align: left;
+  transition: all 0.25s ease;
+}
+.tg-login-notice-box.is-info {
+  background: rgba(56, 189, 248, 0.05);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+}
+.tg-login-notice-box.is-error {
+  background: rgba(251, 113, 133, 0.08);
+  border: 1px solid rgba(251, 113, 133, 0.32);
+}
+.tg-login-notice-box.is-expired {
+  background: rgba(251, 146, 60, 0.08);
+  border: 1px solid rgba(251, 146, 60, 0.32);
+}
+.tg-login-notice-box.is-loading {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+.tg-login-notice-box.is-done {
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.32);
+}
+
+.tg-login-notice-icon {
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+.tg-login-notice-box.is-info .tg-login-notice-icon {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+.tg-login-notice-box.is-error .tg-login-notice-icon {
+  background: rgba(251, 113, 133, 0.16);
+  color: #fb7185;
+}
+.tg-login-notice-box.is-expired .tg-login-notice-icon {
+  background: rgba(251, 146, 60, 0.16);
+  color: #fb923c;
+}
+.tg-login-notice-box.is-loading .tg-login-notice-icon {
+  background: rgba(255, 255, 255, 0.06);
+}
+.tg-login-notice-box.is-done .tg-login-notice-icon {
+  background: rgba(74, 222, 128, 0.16);
+  color: #4ade80;
+  font-weight: 900;
+}
+
+.tg-login-notice-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+.tg-login-notice-title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+}
+.tg-login-notice-box.is-info .tg-login-notice-title { color: #f1f5f9; }
+.tg-login-notice-box.is-error .tg-login-notice-title { color: #fb7185; }
+.tg-login-notice-box.is-expired .tg-login-notice-title { color: #fb923c; }
+.tg-login-notice-box.is-loading .tg-login-notice-title { color: #e2e8f0; }
+.tg-login-notice-box.is-done .tg-login-notice-title { color: #4ade80; }
+
+.tg-login-notice-desc {
+  font-size: 14px;
+  line-height: 1.45;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tg-login-notice-desc b {
+  color: #38bdf8;
+}
+.tg-login-alt-code-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.16);
+  color: #38bdf8;
+  font-family: monospace;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+}
+
+/* Status & Pulse Dot */
+.tg-login-status {
+  min-height: 22px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #38bdf8;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+}
+.tg-login-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #38bdf8;
+  display: inline-block;
+  box-shadow: 0 0 10px #38bdf8;
+  animation: tg-pulse-glow 1.6s infinite ease-in-out;
+  margin-right: 10px;
+}
+@keyframes tg-pulse-glow {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.25); }
+}
+.tg-login-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 6px;
+}
+.tg-login-btn {
+  min-width: 170px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-radius: 999px;
+  transition: all 0.2s ease;
+}
+.tg-login-btn.is-focused {
+  background: #fff;
+  color: #000;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+}
+.tg-login-btn-help {
+  border: 2px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+.tg-login-btn-help.is-focused {
+  background: #38bdf8;
+  color: #0b1020;
+  border-color: #38bdf8;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
+}
+
+/* Keyframe Animations */
+@keyframes tg-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@keyframes tg-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.97); }
+  50% { opacity: 1; transform: scale(1.03); }
+}
+@keyframes tg-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Modal de ayuda y soluciones para el login */
+.tg-login-help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100010;
+  background: rgba(4, 7, 13, 0.88);
+  backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tg-login-help-card {
+  max-width: 900px;
+  width: 88%;
+  background: #0f1422;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 28px;
+  padding: 38px 46px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.75);
+  box-sizing: border-box;
+}
+.tg-login-help-badge {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.14);
+  color: #38bdf8;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+.tg-login-help-title {
+  font-size: 28px;
+  font-weight: 900;
+  color: #fff;
+  margin: 0 0 8px;
+  letter-spacing: -0.5px;
+}
+.tg-login-help-desc {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 0 0 24px;
+}
+.tg-login-help-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 28px;
+}
+.tg-login-help-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 16px 20px;
+}
+.tg-login-help-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--gradient-brand);
+  margin-top: 2px;
+}
+.tg-login-help-name {
+  font-size: 17px;
+  font-weight: 800;
+  color: #f1f5f9;
+  margin-bottom: 4px;
+}
+.tg-login-help-sub {
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: #94a3b8;
+}
+.tg-login-help-sub b {
+  color: #38bdf8;
+}
+.tg-login-help-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+.tg-login-help-close {
+  min-width: 220px;
+}
 .pf-logout { margin-left: auto; white-space: nowrap; }
 .pf-diag-report { margin: 14px 0 6px; font-size: 14px; line-height: 1.5; color: var(--text-muted); max-width: 880px; }
 .pf-diag-report.ok { color: #34d399; }

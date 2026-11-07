@@ -11,7 +11,7 @@ export const SEEK_STEPS: Array<{ afterMs: number; seconds: number }> = [
   { afterMs: 5000, seconds: 120 },
   { afterMs: 8000, seconds: 300 }
 ];
-export const REPEAT_GAP_MS = 200;
+export const REPEAT_GAP_MS = 120;
 
 /** Jump size after the key has been held `heldMs` */
 export function stepFor(heldMs: number): number {

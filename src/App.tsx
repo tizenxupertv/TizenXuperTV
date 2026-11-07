@@ -93,6 +93,8 @@ export const App: React.FC = () => {
     fullscreenKb,
     drawerResultsRef,
     fullscreenCatCursor,
+    fullscreenFocusBtn,
+    setFullscreenFocusBtn,
     showFullscreenOsd,
     setShowFullscreenOsd,
     triggerOsd,
@@ -650,7 +652,7 @@ export const App: React.FC = () => {
           drawerQuery={fullscreenQuery}
           drawerKb={fullscreenKb}
           drawerCatIndex={fullscreenCatCursor}
-          fullscreenFocusBtn="none"
+          fullscreenFocusBtn={fullscreenFocusBtn}
           numericBuffer={numericBuffer}
           {...liveViewHandlers}
         />

@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { VodItem, VodEpisode } from '../types/vod';
 import { historyService } from '../services/historyService';
 import { playerService } from '../services/playerService';
+import { catalogService } from '../services/catalogService';
+import { getEpisodeStatus } from '../lib/vodResume';
+import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
@@ -121,13 +124,15 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const [cues, setCues] = useState<SubtitleCue[]>([]);
   const [audioOptions, setAudioOptions] = useState<AudioOption[]>([]);
   const [audioIndex, setAudioIndex] = useState<number>(0);
-  // Remote focus: the three center buttons (-10 / play / +10) or the bottom-right buttons
-  const [focusArea, setFocusArea] = useState<'center' | 'timeline' | 'controls'>('center');
-  const [centerIndex, setCenterIndex] = useState<number>(1);
+  // Remote focus: center transport (default), controls row, timeline scrubber, or episode drawer
+  const [focusArea, setFocusArea] = useState<'center' | 'controls' | 'timeline' | 'episodes'>('center');
+  const [centerIndex, setCenterIndex] = useState<number>(1); // 0 = -10s, 1 = play/pause, 2 = +10s
   const [ctrlIndex, setCtrlIndex] = useState<number>(0); // 0 = subtitles, 1 = audio, then episodes (series) and settings
   const [menu, setMenu] = useState<null | 'subs' | 'audio' | 'episodes' | 'settings'>(null);
   const [menuCursor, setMenuCursor] = useState<number>(0);
   const [toastId, setToastId] = useState<number>(0);
+  const [seekHud, setSeekHud] = useState<{ delta: number; target: number; duration: number } | null>(null);
+  const seekHudTimerRef = useRef<any>(null);
   const portalTrackRef = useRef<number>(0);
   const subsInitRef = useRef<boolean>(false);
   const audioPrefAppliedRef = useRef<boolean>(false);
@@ -138,10 +143,66 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const [, setSettingsTick] = useState(0); // re-render after a setting changes
   const settings = settingsService.get();
 
-  const epIndex = episode ? episodes.findIndex(ep => String(ep.id) === String(episode.id)) : -1;
-  const nextEpisode = epIndex !== -1 && epIndex + 1 < episodes.length ? episodes[epIndex + 1] : undefined;
+  // Series episodes fallback: ensure the player has the episode list even if started from a quick action
+  const [loadedEpisodes, setLoadedEpisodes] = useState<VodEpisode[]>(episodes);
+  useEffect(() => {
+    if (episodes && episodes.length > 0) {
+      setLoadedEpisodes(episodes);
+    } else if (item.isSeries || seriesId) {
+      catalogService.getVodDetail({ ...item, id: seriesId || item.id })
+        .then(res => {
+          if (res && Array.isArray(res.episodes) && res.episodes.length > 0) {
+            setLoadedEpisodes(res.episodes);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [episodes, item.id, item.isSeries, seriesId]);
+  const effectiveEpisodes = loadedEpisodes && loadedEpisodes.length > 0 ? loadedEpisodes : episodes;
+
+  const EP_RANGE = 20;
+  const epIndex = episode ? effectiveEpisodes.findIndex(ep => String(ep.id) === String(episode.id)) : -1;
+  const currentEpIndex = epIndex >= 0 ? epIndex : 0;
+  const totalRanges = Math.ceil(effectiveEpisodes.length / EP_RANGE);
+  const currentRangeIdx = Math.floor(currentEpIndex / EP_RANGE);
+
+  const [activeRange, setActiveRange] = useState<number>(() => currentRangeIdx);
+  const [rangeCursor, setRangeCursor] = useState<number>(() => currentRangeIdx);
+  const [episodeSubFocus, setEpisodeSubFocus] = useState<'tiles' | 'ranges'>('tiles');
+  const vpRangesRef = useRef<HTMLDivElement>(null);
+
+  // Sync initial range when currentEpIndex or effectiveEpisodes changes
+  useEffect(() => {
+    const r = Math.floor(currentEpIndex / EP_RANGE);
+    setActiveRange(r);
+    setRangeCursor(r);
+  }, [currentEpIndex]);
+
+  // History & episode statuses (watched, progress, current)
+  const historyEntry = historyService.getEntry(item.id);
+  const episodeStatuses = useMemo(() => {
+    return effectiveEpisodes.map((ep, idx) =>
+      getEpisodeStatus(ep, idx, historyEntry, seasonNumber)
+    );
+  }, [effectiveEpisodes, historyEntry, seasonNumber]);
+
+  const rangeStart = activeRange * EP_RANGE;
+  const rangeEnd = Math.min(effectiveEpisodes.length, rangeStart + EP_RANGE);
+
+  // Ranges row auto-scroll
+  useEffect(() => {
+    if (menu === 'episodes' && vpRangesRef.current) {
+      const track = vpRangesRef.current;
+      const target = track.children[activeRange] as HTMLElement | undefined;
+      if (track && target && typeof scrollHorizontalSlider === 'function') {
+        scrollHorizontalSlider(track, target, activeRange, 0, 160);
+      }
+    }
+  }, [menu, activeRange]);
+
+  const nextEpisode = epIndex !== -1 && epIndex + 1 < effectiveEpisodes.length ? effectiveEpisodes[epIndex + 1] : undefined;
   // Episode shelf (like Apple TV): the other episodes of the season, without leaving the player
-  const hasEpisodeShelf = !isTrailer && !!onPlayEpisode && episodes.length > 1;
+  const hasEpisodeShelf = !isTrailer && !!onPlayEpisode && effectiveEpisodes.length > 1;
   const settingsCtrl = hasEpisodeShelf ? 3 : 2;
   const ctrlCount = settingsCtrl + 1;
   const epNumber = episode ? (episode.number || epIndex + 1 || 1) : 0;
@@ -162,13 +223,17 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   // Back hides the overlay even while paused; any other key brings it back
   const [osdDismissed, setOsdDismissed] = useState(false);
 
-  // Trigger OSD visibility timeout (4.5 seconds)
+  // Auto-hide OSD after 4.5 seconds of inactivity
   const triggerOsd = useCallback(() => {
     setOsdDismissed(false);
     setShowOsd(true);
     if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
     osdTimerRef.current = setTimeout(() => {
+      // Don't auto-hide while scrubbing burst is in progress
+      if (isSeekingBurstRef.current) return;
       setShowOsd(false);
+      setMenu(null);
+      setOsdDismissed(true);
     }, 4500);
   }, []);
 
@@ -560,9 +625,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   };
 
   // Seeking: each press moves the timeline at once and adds to the previous target; the real
-  // seek (slow on AVPlay) is sent once, 350 ms after the last press. Until the player reaches the
-  // target, its time updates are ignored so the bar does not jump back.
+  // seek is sent once, 220 ms after the last press.
   const accumulatedSkipRef = useRef(0);
+  const wasPlayingBeforeSeekRef = useRef(false);
+  const isSeekingBurstRef = useRef(false);
   // Holding ◄ ► (or ⏪ ⏩) makes the jumps grow: 10 s, 30 s, 1, 2, 5 min (lib/seekAccel.ts)
   const seekHoldRef = useRef(createSeekHold());
   const holdSeek = (dir: 1 | -1, isRepeat: boolean) => {
@@ -578,22 +644,55 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     timeRef.current.t = target;
     setCurrentTime(target);
 
+    // If starting a seek burst while playing: pause video immediately so audio doesn't lag/stutter
+    if (!isSeekingBurstRef.current) {
+      isSeekingBurstRef.current = true;
+      wasPlayingBeforeSeekRef.current = isPlaying;
+      if (isPlaying) {
+        if (useAvPlayRef.current && window.XuperAVPlay) {
+          window.XuperAVPlay.pause();
+        } else if (videoRef.current) {
+          videoRef.current.pause();
+        }
+      }
+    }
+
     // Feedback with the total of this burst of presses (+10 s, +1:30, −5:00)
     accumulatedSkipRef.current += delta;
-    flash(`${accumulatedSkipRef.current > 0 ? '⏩' : '⏪'} ${formatSkip(accumulatedSkipRef.current)}`);
+    const skipTotal = accumulatedSkipRef.current;
+    setSeekHud({ delta: skipTotal, target, duration: d });
+    if (seekHudTimerRef.current) clearTimeout(seekHudTimerRef.current);
+    seekHudTimerRef.current = setTimeout(() => setSeekHud(null), 1200);
 
     if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
     seekTimerRef.current = setTimeout(() => {
       seekTimerRef.current = null;
       accumulatedSkipRef.current = 0;
+      isSeekingBurstRef.current = false;
+      const shouldResume = wasPlayingBeforeSeekRef.current;
+
+      const onSeekDone = () => {
+        if (shouldResume) {
+          if (useAvPlayRef.current && window.XuperAVPlay) {
+            window.XuperAVPlay.play();
+          } else if (videoRef.current) {
+            videoRef.current.play();
+          }
+        }
+      };
+
       if (useAvPlayRef.current && window.XuperAVPlay) {
-        window.XuperAVPlay.seekTo(target, undefined, (err: any) => {
-          // The player refused the jump: say so (the bar goes back to where the video is) and leave a trace for support
-          flash('No se pudo mover el video a ese punto');
+        window.XuperAVPlay.seekTo(target, onSeekDone, (err: any) => {
           logPlayback({ kind: 'error', player: 'AVPlay', detail: `seek ${Math.round(target)} s: ${(err && (err.name || err.message)) || err}` });
+          if (shouldResume) {
+            window.XuperAVPlay.play();
+          } else {
+            flash('No se pudo mover el video a ese punto');
+          }
         });
       } else if (videoRef.current) {
         videoRef.current.currentTime = target;
+        onSeekDone();
       }
       if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + 2500;
     }, 350);
@@ -613,7 +712,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   };
 
   acceptTimeRef.current = acceptTime;
-  useEffect(() => () => { if (seekTimerRef.current) clearTimeout(seekTimerRef.current); }, []);
+  useEffect(() => () => {
+    if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
+    if (seekHudTimerRef.current) clearTimeout(seekHudTimerRef.current);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
+  }, []);
 
   const chooseAudio = (idx: number) => {
     const opt = audioOptions[idx];
@@ -643,7 +747,11 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   // Menu rows: subtitles start with "Desactivados" (-1)
   const subRows = [{ label: 'Desactivados', value: -1 }, ...subtitles.map((sb, i) => ({ label: languageName(sb.lang), value: i }))];
   const audioRows = audioOptions.map((a, i) => ({ label: a.label, value: i }));
-  // Playback settings (also in Perfil > Configuración): screen format and subtitle look
+  // Subtitles & Series Content detection
+  const hasSubtitles = subtitles.length > 0;
+  const isSeriesContent = !!(hasEpisodeShelf || item.isSeries);
+
+  // Playback settings (also in Perfil > Configuración): screen format, subtitle look, series behavior
   const applyDisplay = (idx: number) => {
     settingsService.set({ display: idx });
     if (avMode) {
@@ -651,9 +759,43 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     }
   };
   const settingRows: SettingRow[] = [
-    ...DISPLAY_LABELS.map((label, i) => ({ group: 'Formato de pantalla', label, selected: settings.display === i, apply: () => applyDisplay(i) })),
-    ...SUB_SIZE_LABELS.map((label, i) => ({ group: 'Tamaño de subtítulos', label, selected: settings.size === i, apply: () => settingsService.set({ size: i }) })),
-    ...SUB_STYLE_LABELS.map((label, i) => ({ group: 'Estilo de subtítulos', label, selected: settings.style === i, apply: () => settingsService.set({ style: i }) }))
+    // 1. Formato de pantalla (Siempre aplica a cualquier video)
+    ...DISPLAY_LABELS.map((label, i) => ({
+      group: 'Formato de pantalla',
+      label,
+      selected: settings.display === i,
+      apply: () => applyDisplay(i)
+    })),
+
+    // 2. Opciones de Series (sólo si es una serie con episodios)
+    ...(isSeriesContent ? [
+      {
+        group: 'Episodios de la serie',
+        label: settings.autoNext !== false ? 'Siguiente capítulo: Automático' : 'Siguiente capítulo: Manual',
+        selected: settings.autoNext !== false,
+        apply: () => {
+          const next = settings.autoNext === false;
+          settingsService.set({ autoNext: next });
+          flash(next ? 'Siguiente capítulo: Automático' : 'Siguiente capítulo: Manual');
+        }
+      }
+    ] : []),
+
+    // 3. Estilo y tamaño de subtítulos (SOLO si el contenido actual tiene subtítulos disponibles)
+    ...(hasSubtitles ? [
+      ...SUB_SIZE_LABELS.map((label, i) => ({
+        group: 'Tamaño de subtítulos',
+        label,
+        selected: settings.size === i,
+        apply: () => settingsService.set({ size: i })
+      })),
+      ...SUB_STYLE_LABELS.map((label, i) => ({
+        group: 'Estilo de subtítulos',
+        label,
+        selected: settings.style === i,
+        apply: () => settingsService.set({ style: i })
+      }))
+    ] : [])
   ];
   const menuRows = menu === 'subs' ? subRows : menu === 'settings' ? settingRows : audioRows;
 
@@ -680,16 +822,22 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       // Dedicated Samsung Media Remote Keys
       if (isPlay) {
         if (!isPlaying) togglePause();
+        setFocusArea('center');
+        setCenterIndex(1);
         triggerOsd();
         return;
       }
       if (isPause) {
         if (isPlaying) togglePause();
+        setFocusArea('center');
+        setCenterIndex(1);
         triggerOsd();
         return;
       }
       if (isPlayPause) {
         togglePause();
+        setFocusArea('center');
+        setCenterIndex(1);
         triggerOsd();
         return;
       }
@@ -710,47 +858,169 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         return;
       }
 
-      // Back hides the overlay first (closing an open menu), and leaves the player once it is hidden
+      // Back key
       if (isBack && !error) {
         if (menu) {
+          const wasEp = menu === 'episodes';
           setMenu(null);
+          if (wasEp) {
+            setFocusArea('controls');
+            setCtrlIndex(2);
+          }
           triggerOsd();
         } else if (osdVisibleRef.current) {
           if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
           setShowOsd(false);
           setOsdDismissed(true);
           setFocusArea('center');
+          setCenterIndex(1);
         } else {
           onClose();
         }
         return;
       }
 
-      // First key while the overlay is hidden only brings it back (OK still pauses at once)
-      const wasHidden = !osdVisibleRef.current;
+      // If OSD is currently hidden, any navigation key brings it back first
+      if (!osdVisibleRef.current) {
+        triggerOsd();
+        if (isPlayPause || isPlay || isPause) {
+          togglePause();
+          setFocusArea('center');
+          setCenterIndex(1);
+          return;
+        }
+        if (isEnter) {
+          togglePause();
+          setFocusArea('center');
+          setCenterIndex(1);
+          return;
+        }
+        if (isLeft || isRight) {
+          setFocusArea('timeline');
+          holdSeek(isRight ? 1 : -1, e.repeat);
+          return;
+        }
+        setFocusArea('center');
+        setCenterIndex(1);
+        return;
+      }
+
+      // Any navigation while OSD is visible resets the auto-hide timer!
       triggerOsd();
 
-      // Episode shelf: ◄ ► choose, OK plays, ▲ closes
-      if (menu === 'episodes') {
-        if (isLeft) setMenuCursor(c => Math.max(0, c - 1));
-        else if (isRight) setMenuCursor(c => Math.min(episodes.length - 1, c + 1));
-        else if (isUp) setMenu(null);
-        else if (isEnter) {
-          const ep = episodes[menuCursor];
+      // Episode drawer: ◄ ► choose, OK plays, Back / ▲ / ▼ closes or shifts focus
+      if (focusArea === 'episodes' && menu === 'episodes') {
+        if (isBack) {
           setMenu(null);
+          setFocusArea('controls');
+          setCtrlIndex(2);
+          return;
+        }
+
+        // Sub-focus 1: RANGES ROW (1-20, 21-40, 41-60...)
+        if (episodeSubFocus === 'ranges') {
+          if (isLeft) {
+            setRangeCursor(r => {
+              const next = Math.max(0, r - 1);
+              setActiveRange(next);
+              setMenuCursor(next * EP_RANGE);
+              return next;
+            });
+            return;
+          }
+          if (isRight) {
+            setRangeCursor(r => {
+              const next = Math.min(totalRanges - 1, r + 1);
+              setActiveRange(next);
+              setMenuCursor(next * EP_RANGE);
+              return next;
+            });
+            return;
+          }
+          if (isDown || isEnter) {
+            setEpisodeSubFocus('tiles');
+            setMenuCursor(activeRange * EP_RANGE);
+            return;
+          }
+          if (isUp) {
+            setFocusArea('center');
+            setCenterIndex(1);
+            return;
+          }
+          return;
+        }
+
+        // Sub-focus 2: TILES ROW (the 20 tiles)
+        if (isLeft) {
+          if (menuCursor > rangeStart) {
+            setMenuCursor(c => c - 1);
+          } else if (activeRange > 0) {
+            const nextRange = activeRange - 1;
+            setActiveRange(nextRange);
+            setRangeCursor(nextRange);
+            setMenuCursor(Math.min(effectiveEpisodes.length - 1, (nextRange + 1) * EP_RANGE - 1));
+          }
+          return;
+        }
+
+        if (isRight) {
+          if (menuCursor < rangeEnd - 1) {
+            setMenuCursor(c => c + 1);
+          } else if (activeRange < totalRanges - 1) {
+            const nextRange = activeRange + 1;
+            setActiveRange(nextRange);
+            setRangeCursor(nextRange);
+            setMenuCursor(nextRange * EP_RANGE);
+          }
+          return;
+        }
+
+        if (isUp) {
+          if (totalRanges > 1) {
+            setEpisodeSubFocus('ranges');
+            setRangeCursor(activeRange);
+          } else {
+            setFocusArea('center');
+            setCenterIndex(1);
+          }
+          return;
+        }
+
+        if (isDown) {
+          // Move DOWN back to the controls row on "Episodios"
+          setFocusArea('controls');
+          setCtrlIndex(2);
+          return;
+        }
+
+        if (isEnter) {
+          const ep = effectiveEpisodes[menuCursor];
+          setMenu(null);
+          setFocusArea('center');
+          setCenterIndex(1);
           if (ep && onPlayEpisode && menuCursor !== epIndex) onPlayEpisode(ep);
+          return;
         }
         return;
       }
 
-      // Audio / subtitles menu
-      if (menu) {
-        if (isBack || isLeft) setMenu(null);
-        else if (isUp) setMenuCursor(c => Math.max(0, c - 1));
-        else if (isDown) setMenuCursor(c => Math.min(menuRows.length - 1, c + 1));
-        else if (isEnter) {
+      // Audio / subtitles / settings menu
+      if (menu && menu !== 'episodes') {
+        if (isBack || isLeft) {
+          setMenu(null);
+          setFocusArea('controls');
+          return;
+        }
+        if (isUp) {
+          setMenuCursor(c => Math.max(0, c - 1));
+          return;
+        }
+        if (isDown) {
+          setMenuCursor(c => Math.min(menuRows.length - 1, c + 1));
+          return;
+        }
+        if (isEnter) {
           if (menu === 'settings') {
-            // Settings stay open so the check mark moves to the new choice
             const row = settingRows[menuCursor];
             if (row) {
               row.apply();
@@ -764,45 +1034,9 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
             else chooseAudio(row.value);
           }
           setMenu(null);
+          setFocusArea('controls');
+          return;
         }
-        return;
-      }
-
-      // Focus order follows the screen, top to bottom: center buttons, controls row, timeline
-      // Timeline (bottom): ◄ ► scrub (hold for bigger jumps), OK pauses, ▲ goes to the controls row
-      if (focusArea === 'timeline') {
-        if (isBack) onClose();
-        else if (isLeft || isRight) holdSeek(isRight ? 1 : -1, e.repeat);
-        else if (isEnter) togglePause();
-        else if (isUp) setFocusArea(isTrailer ? 'center' : 'controls');
-        return;
-      }
-
-      // Controls row above the timeline (Subtítulos / Audio / Episodios)
-      if (focusArea === 'controls') {
-        if (isBack) setFocusArea('center');
-        else if (isUp) setFocusArea('center');
-        else if (isDown) setFocusArea('timeline');
-        else if (isLeft) setCtrlIndex(i => Math.max(0, i - 1));
-        else if (isRight) setCtrlIndex(i => Math.min(ctrlCount - 1, i + 1));
-        else if (isEnter && ctrlIndex === settingsCtrl) {
-          setMenu('settings');
-          setMenuCursor(Math.max(0, settingRows.findIndex(r => r.selected)));
-        } else if (isEnter && ctrlIndex === 2) {
-          setMenu('episodes');
-          setMenuCursor(Math.max(0, epIndex));
-        } else if (isEnter) {
-          const which = ctrlIndex === 0 ? 'subs' : 'audio';
-          const rows = which === 'subs' ? subRows : audioRows;
-          const current = which === 'subs' ? subIndex : audioIndex;
-          setMenu(which);
-          setMenuCursor(Math.max(0, rows.findIndex(r => r.value === current)));
-        }
-        return;
-      }
-
-      if (isBack) {
-        onClose();
         return;
       }
 
@@ -811,35 +1045,147 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         return;
       }
 
-      // While watching (controls hidden), ◄ ► seek right away, as on any TV player; the timeline keeps the focus
-      if (wasHidden && (isLeft || isRight)) {
-        setFocusArea('timeline');
-        holdSeek(isRight ? 1 : -1, e.repeat);
-        return;
-      }
-      if (wasHidden && !isEnter) return;
-
-      // Center buttons: ◄ ► move between them, OK presses the focused one
-      if (isLeft) {
-        setCenterIndex(i => Math.max(0, i - 1));
-        return;
-      }
-      if (isRight) {
-        setCenterIndex(i => Math.min(2, i + 1));
-        return;
-      }
-      if (isEnter) {
-        if (centerIndex === 0) seekBy(-10);
-        else if (centerIndex === 2) seekBy(10);
-        else togglePause();
-        return;
-      }
-      if (isDown) {
-        if (isTrailer) setFocusArea('timeline');
-        else {
-          setFocusArea('controls');
-          setCtrlIndex(0);
+      // Focus Area 1: Center Transport Controls ([-10], [Play/Pause], [+10])
+      if (focusArea === 'center') {
+        if (isLeft) {
+          setCenterIndex(i => Math.max(0, i - 1));
+          return;
         }
+        if (isRight) {
+          setCenterIndex(i => Math.min(2, i + 1));
+          return;
+        }
+        if (isEnter) {
+          if (centerIndex === 0) seekBy(-10);
+          else if (centerIndex === 1) togglePause();
+          else if (centerIndex === 2) seekBy(10);
+          return;
+        }
+        if (isDown) {
+          if (menu === 'episodes') {
+            setFocusArea('episodes');
+            if (totalRanges > 1) {
+              setEpisodeSubFocus('ranges');
+              setRangeCursor(activeRange);
+            } else {
+              setEpisodeSubFocus('tiles');
+            }
+            return;
+          }
+          if (!isTrailer && ctrlCount > 0) {
+            setFocusArea('controls');
+            setCtrlIndex(hasEpisodeShelf ? 2 : 0);
+          } else {
+            setFocusArea('timeline');
+          }
+          return;
+        }
+        if (isUp) {
+          if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
+          setShowOsd(false);
+          setOsdDismissed(true);
+          return;
+        }
+        return;
+      }
+
+      // Focus Area 2: Controls row above timeline (Subtítulos / Audio / Episodios / Ajustes)
+      if (focusArea === 'controls') {
+        if (isUp) {
+          if (hasEpisodeShelf && ctrlIndex === 2) {
+            // Open or enter the Episode Drawer directly above
+            setMenu('episodes');
+            setFocusArea('episodes');
+            setEpisodeSubFocus('tiles');
+            return;
+          }
+          if (menu === 'episodes') {
+            setFocusArea('episodes');
+            setEpisodeSubFocus('tiles');
+            return;
+          }
+          setFocusArea('center');
+          setCenterIndex(1); // focus Play/Pause
+          return;
+        }
+        if (isDown) {
+          setFocusArea('timeline');
+          return;
+        }
+        if (isLeft) {
+          if (menu === 'episodes') setMenu(null);
+          setCtrlIndex(i => Math.max(0, i - 1));
+          return;
+        }
+        if (isRight) {
+          if (menu === 'episodes') setMenu(null);
+          setCtrlIndex(i => Math.min(ctrlCount - 1, i + 1));
+          return;
+        }
+        if (isEnter) {
+          if (ctrlIndex === settingsCtrl) {
+            if (menu === 'episodes') setMenu(null);
+            setMenu('settings');
+            setMenuCursor(Math.max(0, settingRows.findIndex(r => r.selected)));
+          } else if (hasEpisodeShelf && ctrlIndex === 2) {
+            if (menu === 'episodes') {
+              setMenu(null);
+            } else {
+              setMenu('episodes');
+              setFocusArea('episodes');
+              setEpisodeSubFocus('tiles');
+              const targetEpIdx = Math.max(0, epIndex);
+              setMenuCursor(targetEpIdx);
+              const r = Math.floor(targetEpIdx / EP_RANGE);
+              setActiveRange(r);
+              setRangeCursor(r);
+            }
+          } else {
+            if (menu === 'episodes') setMenu(null);
+            const which = ctrlIndex === 0 ? 'subs' : 'audio';
+            if (which === 'subs' && !hasSubtitles) {
+              flash('Este contenido no cuenta con subtítulos');
+              return;
+            }
+            const rows = which === 'subs' ? subRows : audioRows;
+            const current = which === 'subs' ? subIndex : audioIndex;
+            setMenu(which);
+            setMenuCursor(Math.max(0, rows.findIndex(r => r.value === current)));
+          }
+          return;
+        }
+        return;
+      }
+
+      // Focus Area 3: Timeline Progress Bar (Direct scrubbing with ◄ ►)
+      if (focusArea === 'timeline') {
+        if (isLeft || isRight) {
+          holdSeek(isRight ? 1 : -1, e.repeat);
+          return;
+        }
+        if (isEnter) {
+          togglePause();
+          setFocusArea('center');
+          setCenterIndex(1);
+          return;
+        }
+        if (isUp) {
+          if (!isTrailer && ctrlCount > 0) {
+            setFocusArea('controls');
+            setCtrlIndex(hasEpisodeShelf ? 2 : 0);
+          } else {
+            setFocusArea('center');
+            setCenterIndex(1);
+          }
+          return;
+        }
+        if (isDown) {
+          if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
+          setShowOsd(false);
+          setOsdDismissed(true);
+          return;
+        }
+        return;
       }
     };
 
@@ -857,13 +1203,21 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const remainingTime = duration > 0 ? Math.max(0, duration - currentTime) : 0;
-  const osdVisible = !!error || (!osdDismissed && (showOsd || !isPlaying || !!menu || focusArea === 'controls'));
+  const osdVisible = !!error || (!osdDismissed && showOsd);
   const osdVisibleRef = useRef(osdVisible);
   osdVisibleRef.current = osdVisible;
   const subtitleText = subIndex >= 0 ? cueAt(cues, currentTime) : '';
   const subSize = settings.size === 1 ? 'is-large' : settings.size === 2 ? 'is-small' : '';
   const subStyle = settings.style === 1 ? 'is-yellow' : settings.style === 2 ? 'is-boxed' : '';
   const year = item.year && item.year !== '—' ? item.year : '';
+
+  // Episode drawer horizontal scroll: 12 tiles fit comfortably in the 1824px wide container
+  const rangeCount = rangeEnd - rangeStart;
+  const idxInBlock = Math.max(0, Math.min(rangeCount - 1, menuCursor - rangeStart));
+  const VISIBLE_TILES = 12;
+  const maxScrollTiles = Math.max(0, rangeCount - VISIBLE_TILES);
+  const scrollTiles = Math.min(maxScrollTiles, Math.max(0, idxInBlock - 6));
+  const trackTranslateX = -(scrollTiles * 144);
 
   return (
     <div className={`vod-fullscreen-player ${avMode ? 'is-avplay' : ''}`}>
@@ -883,9 +1237,33 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         </div>
       )}
 
-      {/* Center feedback on seek / pause (disappears on its own) */}
-      {osdMessage && (
-        <div className="player-center-toast" key={toastId}>
+      {/* Apple TV Frosted Glass Seek HUD */}
+      {seekHud && (
+        <div className="vp-seek-hud">
+          <div className="vp-seek-icon">
+            {seekHud.delta > 0 ? (
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                <path d="M11 18V6l-8.5 6 8.5 6zm9 0V6l-8.5 6 8.5 6z" />
+              </svg>
+            )}
+          </div>
+          <div className="vp-seek-content">
+            <span className="vp-seek-delta">{formatSkip(seekHud.delta)}</span>
+            <span className="vp-seek-target">
+              {formatTime(seekHud.target)}
+              {seekHud.duration > 0 ? ` / ${formatTime(seekHud.duration)}` : ''}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Apple TV Frosted Toast for system notices (Audio, Subs) */}
+      {osdMessage && !seekHud && (
+        <div className="vp-hud-toast" key={toastId}>
           {osdMessage}
         </div>
       )}
@@ -903,13 +1281,47 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         </div>
       )}
 
+      {/* Apple TV Style Next Episode Card */}
       {nextCountdown !== null && nextEpisode && (
         <div className="vod-next-episode">
-          <div className="vod-next-label">Siguiente episodio en {nextCountdown} s</div>
-          <div className="vod-next-title">
-            {seasonNumber ? `T${seasonNumber}:` : ''}E{nextEpisode.number || epIndex + 2} · {nextEpisode.title || nextEpisode.name || 'Capítulo'}
+          <div className="vod-next-progress-track">
+            <div
+              className="vod-next-progress-fill"
+              style={{ width: `${Math.max(0, Math.min(100, ((NEXT_EPISODE_SECONDS - nextCountdown) / NEXT_EPISODE_SECONDS) * 100))}%` }}
+            />
           </div>
-          <div className="vod-next-hint">OK Ver ahora · VOLVER Salir</div>
+          <div className="vod-next-inner">
+            <div
+              className="vod-next-thumb"
+              style={{
+                backgroundImage: `url('${nextEpisode.picture || item.backdrop || item.landscape || 'assets/placeholder_landscape.png'}')`
+              }}
+            >
+              <div className="vod-next-play-icon">▶</div>
+            </div>
+            <div className="vod-next-info">
+              <div className="vod-next-badge-row">
+                <span className="vod-next-tag">SIGUIENTE EPISODIO</span>
+                <span className="vod-next-timer">en {nextCountdown}s</span>
+              </div>
+              <div className="vod-next-title">
+                {seasonNumber ? `T${seasonNumber}:` : ''}E{nextEpisode.number || epIndex + 2} · {nextEpisode.title || nextEpisode.name || 'Capítulo'}
+              </div>
+              <div className="vod-next-btn-row">
+                <div
+                  className="vod-next-btn"
+                  onClick={() => {
+                    setNextCountdown(null);
+                    if (onPlayEpisode) onPlayEpisode(nextEpisode);
+                  }}
+                >
+                  <span>▶ Ver ahora</span>
+                  <span className="vod-next-btn-key">OK</span>
+                </div>
+                <span className="vod-next-cancel-hint">VOLVER Salir</span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -919,20 +1331,20 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
         <div className="vp-center">
           <div
-            className={`vp-round ${focusArea === 'center' && !menu && centerIndex === 0 ? 'is-focused' : ''}`}
+            className={`vp-round ${focusArea === 'center' && centerIndex === 0 ? 'is-focused' : ''}`}
             onClick={() => seekBy(-10)}
           >
             <span className="vp-skip">↺</span>
             <span className="vp-skip-num">10</span>
           </div>
           <div
-            className={`vp-round vp-play ${focusArea === 'center' && !menu && centerIndex === 1 ? 'is-focused' : ''}`}
+            className={`vp-round vp-play ${focusArea === 'center' && centerIndex === 1 ? 'is-focused' : ''}`}
             onClick={togglePause}
           >
             {isPlaying ? '❚❚' : '▶'}
           </div>
           <div
-            className={`vp-round ${focusArea === 'center' && !menu && centerIndex === 2 ? 'is-focused' : ''}`}
+            className={`vp-round ${focusArea === 'center' && centerIndex === 2 ? 'is-focused' : ''}`}
             onClick={() => seekBy(10)}
           >
             <span className="vp-skip">↻</span>
@@ -949,31 +1361,47 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
             </div>
             {!isTrailer && (
               <div className="vp-ctrls">
-                <div className={`vp-ctrl ${focusArea === 'controls' && ctrlIndex === 0 ? 'is-focused' : ''} ${subIndex >= 0 ? 'is-on' : ''}`} title="Subtítulos">
+                <div
+                  className={`vp-ctrl ${focusArea === 'controls' && ctrlIndex === 0 ? 'is-focused' : ''} ${subIndex >= 0 ? 'is-on' : ''} ${!hasSubtitles ? 'is-disabled' : ''}`}
+                  title={hasSubtitles ? 'Subtítulos' : 'Sin subtítulos'}
+                >
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="3" y="5" width="18" height="14" rx="3" />
                     <path d="M7 13h4M13 13h4M7 16h7" />
                   </svg>
+                  <span className="vp-ctrl-label">{hasSubtitles ? 'Subtítulos' : 'Sin subs'}</span>
                 </div>
-                <div className={`vp-ctrl ${focusArea === 'controls' && ctrlIndex === 1 ? 'is-focused' : ''}`} title="Audio">
+                <div
+                  className={`vp-ctrl ${focusArea === 'controls' && ctrlIndex === 1 ? 'is-focused' : ''}`}
+                  title="Audio"
+                >
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" />
                   </svg>
+                  <span className="vp-ctrl-label">Audio</span>
                 </div>
                 {hasEpisodeShelf && (
-                  <div className={`vp-ctrl ${focusArea === 'controls' && ctrlIndex === 2 ? 'is-focused' : ''} ${menu === 'episodes' ? 'is-on' : ''}`} title="Episodios">
+                  <div
+                    className={`vp-ctrl ${focusArea === 'controls' && ctrlIndex === 2 ? 'is-focused' : ''} ${menu === 'episodes' ? 'is-on' : ''}`}
+                    title="Episodios"
+                  >
                     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
                       <rect x="3" y="4" width="18" height="12" rx="2" />
                       <path d="M7 20h10" />
                     </svg>
+                    <span className="vp-ctrl-label">Episodios</span>
                   </div>
                 )}
 
-                <div className={`vp-ctrl ${focusArea === 'controls' && ctrlIndex === settingsCtrl ? 'is-focused' : ''} ${menu === 'settings' ? 'is-on' : ''}`} title="Ajustes">
+                <div
+                  className={`vp-ctrl ${focusArea === 'controls' && ctrlIndex === settingsCtrl ? 'is-focused' : ''} ${menu === 'settings' ? 'is-on' : ''}`}
+                  title="Ajustes"
+                >
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="3" />
                     <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" />
                   </svg>
+                  <span className="vp-ctrl-label">Ajustes</span>
                 </div>
 
                 {menu === 'settings' && (
@@ -1011,21 +1439,101 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
           {menu === 'episodes' && (
             <div className="vp-episodes">
-              <div className="vp-menu-title">{seasonNumber ? `Temporada ${seasonNumber}` : 'Episodios'}</div>
-              <div className="vp-episodes-track" style={{ transform: `translateX(${-Math.max(0, menuCursor - 2) * 340}px)` }}>
-                {episodes.map((ep, i) => {
-                  const current = i === epIndex;
-                  return (
-                    <div key={ep.id} className={`vp-ep-card ${i === menuCursor ? 'is-focused' : ''} ${current ? 'is-current' : ''}`}>
-                      <div className="vp-ep-thumb" style={{ backgroundImage: `url('${ep.picture || item.backdrop || item.landscape || 'assets/placeholder_landscape.png'}')` }}>
-                        {current && <span className="vp-ep-now">Reproduciendo</span>}
-                        {current && <div className="vp-ep-progress"><div style={{ width: `${progressPercent}%` }} /></div>}
-                      </div>
-                      <div className="vp-ep-num">Episodio {ep.number || i + 1}</div>
-                      <div className="vp-ep-title">{ep.title || ep.name || `Capítulo ${i + 1}`}</div>
+              <div className="vp-episodes-header">
+                <div className="vp-episodes-head-left">
+                  <span className="vp-episodes-title">Episodios</span>
+                  {seasonNumber && (
+                    <div className="vp-episodes-season-pill">
+                      <span>Temporada {seasonNumber}</span>
+                      <span className="vp-episodes-season-arrow">▾</span>
                     </div>
-                  );
-                })}
+                  )}
+                </div>
+                {effectiveEpisodes[menuCursor] && (
+                  <div className="vp-episodes-caption">
+                    <span className="vp-episodes-caption-num">
+                      {seasonNumber ? `T${seasonNumber}:` : ''}E{effectiveEpisodes[menuCursor].number || menuCursor + 1}
+                    </span>
+                    <span className="vp-episodes-caption-title">
+                      {effectiveEpisodes[menuCursor].title || effectiveEpisodes[menuCursor].name || `Capítulo ${menuCursor + 1}`}
+                    </span>
+                    {effectiveEpisodes[menuCursor].duration && (
+                      <span className="vp-episodes-caption-meta">· {effectiveEpisodes[menuCursor].duration}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {totalRanges > 1 && (
+                <div className="vod-ep-ranges-clip">
+                  <div className="vod-ep-ranges" ref={vpRangesRef}>
+                    {Array.from({ length: totalRanges }, (_, r) => {
+                      const from = r * EP_RANGE + 1;
+                      const to = Math.min(effectiveEpisodes.length, (r + 1) * EP_RANGE);
+                      const isRangeActive = r === activeRange;
+                      const isRangeFocused = focusArea === 'episodes' && episodeSubFocus === 'ranges' && rangeCursor === r;
+                      const hasCurrentEp = r === currentRangeIdx;
+                      return (
+                        <div
+                          key={r}
+                          className={`vod-ep-range ${isRangeActive ? 'is-active' : ''} ${hasCurrentEp ? 'has-current' : ''} ${
+                            isRangeFocused ? 'is-focused' : ''
+                          }`}
+                          onClick={() => {
+                            setActiveRange(r);
+                            setRangeCursor(r);
+                            setFocusArea('episodes');
+                            setEpisodeSubFocus('tiles');
+                            setMenuCursor(r * EP_RANGE);
+                          }}
+                        >
+                          {from}-{to}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="vp-episodes-track">
+                <div
+                  className="vod-episodes-slider is-tiles"
+                  style={{
+                    transform: `translateX(${trackTranslateX}px)`
+                  }}
+                >
+                  {effectiveEpisodes.slice(rangeStart, rangeEnd).map((ep, j) => {
+                    const epIdx = rangeStart + j;
+                    const isFocused = focusArea === 'episodes' && episodeSubFocus === 'tiles' && epIdx === menuCursor;
+                    const isCurrent = epIdx === epIndex;
+                    const st = episodeStatuses[epIdx];
+                    const isWatched = st ? st.isWatched : epIdx < epIndex;
+                    const progress = isCurrent ? progressPercent : (st ? st.progressPercent : 0);
+
+                    return (
+                      <div
+                        key={ep.id || epIdx}
+                        className={`vod-ep-tile ${isFocused ? 'is-focused' : ''} ${isCurrent ? 'is-current' : ''} ${
+                          isWatched ? 'is-watched' : ''
+                        }`}
+                        onClick={() => {
+                          setMenu(null);
+                          setFocusArea('timeline');
+                          if (onPlayEpisode && epIdx !== epIndex) onPlayEpisode(ep);
+                        }}
+                      >
+                        {isCurrent && <span className="vod-ep-tile-play">▶</span>}
+                        <span className="vod-ep-tile-num">{ep.number || epIdx + 1}</span>
+                        {isWatched && <span className="vod-ep-tile-check">✓</span>}
+                        {progress > 0 && !isWatched && (
+                          <div className="vod-ep-tile-progress">
+                            <div style={{ width: `${progress}%` }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}

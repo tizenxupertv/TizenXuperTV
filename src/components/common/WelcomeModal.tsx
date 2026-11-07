@@ -2,23 +2,49 @@ import React, { useState, useEffect } from 'react';
 
 const STORAGE_KEY = 'xuper_welcome_shown_v2';
 
-export const WelcomeModal: React.FC = () => {
-  const [isOpen, setIsOpen] = useState<boolean>(false);
-  const [step, setStep] = useState<1 | 2>(1);
+export interface WelcomeModalProps {
+  forceStep?: 1 | 2;
+}
+
+export const WelcomeModal: React.FC<WelcomeModalProps> = ({ forceStep }) => {
+  const urlParam = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('test')
+    : null;
+
+  const isTest = Boolean(forceStep || urlParam === 'welcome' || urlParam === 'welcome1' || urlParam === 'welcome2');
+  const initialStep: 1 | 2 = forceStep || (urlParam === 'welcome2' ? 2 : 1);
+
+  const [isOpen, setIsOpen] = useState<boolean>(() => {
+    if (isTest) return true;
+    try {
+      const seen = localStorage.getItem(STORAGE_KEY);
+      return !seen;
+    } catch (_) {
+      return false;
+    }
+  });
+  const [step, setStep] = useState<1 | 2>(initialStep);
 
   useEffect(() => {
+    if (isTest) {
+      setIsOpen(true);
+      setStep(initialStep);
+      return;
+    }
     try {
       const seen = localStorage.getItem(STORAGE_KEY);
       if (!seen) {
         setIsOpen(true);
       }
     } catch (_) {}
-  }, []);
+  }, [isTest, initialStep]);
 
   const close = () => {
-    try {
-      localStorage.setItem(STORAGE_KEY, '1');
-    } catch (_) {}
+    if (!isTest) {
+      try {
+        localStorage.setItem(STORAGE_KEY, '1');
+      } catch (_) {}
+    }
     setIsOpen(false);
   };
 
@@ -104,7 +130,7 @@ export const WelcomeModal: React.FC = () => {
               </p>
 
               <button className="welcome-modal-btn is-focused" onClick={handleNext} autoFocus>
-                Continuar al paso 2 <span className="welcome-btn-hint">(Pulsa OK)</span>
+                Continuar al paso 2
               </button>
             </div>
           </>
@@ -119,35 +145,60 @@ export const WelcomeModal: React.FC = () => {
               </p>
             </div>
 
-            {/* Donation Content with Clean Square QR */}
+            {/* Donation Content with Clean Square QR & Timeline Stepper */}
             <div className="welcome-donate-content">
               <div className="welcome-donate-qr-card">
-                <img
-                  src="assets/paypal-donation-qr.png"
-                  alt="Código QR de Donación PayPal"
-                  className="welcome-donate-qr-img"
-                />
+                <div className="welcome-donate-qr-frame">
+                  <img
+                    src="assets/paypal-donation-qr.png"
+                    alt="Código QR de Donación PayPal"
+                    className="welcome-donate-qr-img"
+                  />
+                </div>
                 <div className="welcome-donate-badge">PayPal Oficial</div>
               </div>
 
               <div className="welcome-donate-info">
-                <div className="welcome-donate-steps">
-                  <div className="welcome-donate-step">
-                    <span className="welcome-step-num">1</span>
-                    <span>Abre la app de cámara o lector QR en tu teléfono móvil.</span>
+                {/* Timeline Stepper matching Login Screen */}
+                <div className="welcome-timeline">
+                  <div className="welcome-timeline-item">
+                    <div className="welcome-timeline-marker">
+                      <div className="welcome-timeline-dot">1</div>
+                      <div className="welcome-timeline-line"></div>
+                    </div>
+                    <div className="welcome-timeline-content">
+                      <div className="welcome-timeline-title">Escanea el código QR</div>
+                      <div className="welcome-timeline-sub">Abre la app de cámara o lector QR en tu teléfono móvil.</div>
+                    </div>
                   </div>
-                  <div className="welcome-donate-step">
-                    <span className="welcome-step-num">2</span>
-                    <span>Apunta directamente al código QR para ingresar a PayPal.</span>
+
+                  <div className="welcome-timeline-item">
+                    <div className="welcome-timeline-marker">
+                      <div className="welcome-timeline-dot">2</div>
+                      <div className="welcome-timeline-line"></div>
+                    </div>
+                    <div className="welcome-timeline-content">
+                      <div className="welcome-timeline-title">Ingresa a PayPal</div>
+                      <div className="welcome-timeline-sub">Apunta directamente al código QR para abrir el enlace seguro.</div>
+                    </div>
                   </div>
-                  <div className="welcome-donate-step">
-                    <span className="welcome-step-num">3</span>
-                    <span>Contribuye con el aporte voluntario que desees para apoyar el proyecto.</span>
+
+                  <div className="welcome-timeline-item is-last">
+                    <div className="welcome-timeline-marker">
+                      <div className="welcome-timeline-dot">3</div>
+                    </div>
+                    <div className="welcome-timeline-content">
+                      <div className="welcome-timeline-title">Apoya el proyecto</div>
+                      <div className="welcome-timeline-sub">Contribuye con el aporte voluntario que desees para sostener el servicio.</div>
+                    </div>
                   </div>
                 </div>
 
                 <div className="welcome-donate-note">
-                  💡 <strong>Nota:</strong> Siempre podrás volver a ver este código QR o realizar donaciones desde <strong>Ajustes &gt; Apoyo y Donaciones</strong>.
+                  <span className="welcome-donate-note-icon">💡</span>
+                  <div className="welcome-donate-note-text">
+                    <b>Nota:</b> Siempre podrás volver a ver este código QR o realizar donaciones desde <b>Ajustes &gt; Apoyo y Donaciones</b>.
+                  </div>
                 </div>
               </div>
             </div>
@@ -155,7 +206,7 @@ export const WelcomeModal: React.FC = () => {
             {/* Step 2 Footer */}
             <div className="welcome-modal-footer">
               <button className="welcome-modal-btn is-focused" onClick={close} autoFocus>
-                Comenzar a disfrutar <span className="welcome-btn-hint">(Pulsa OK)</span>
+                Comenzar a disfrutar
               </button>
             </div>
           </>

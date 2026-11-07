@@ -60,7 +60,12 @@ const Root: React.FC = () => {
   const status = updateService.status();
   const manualUpdate = update && (!status.canSelfUpdate || status.needsReinstall) ? update : null;
 
-  if (!signedIn) return <LoginScreen onSignedIn={() => setSignedIn(true)} />;
+  // Local testing support for WelcomeModal via ?test=welcome or ?test=welcome2
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const testParam = urlParams?.get('test');
+  const isTestingWelcome = testParam === 'welcome' || testParam === 'welcome1' || testParam === 'welcome2';
+
+  if (!signedIn && !isTestingWelcome) return <LoginScreen onSignedIn={() => setSignedIn(true)} />;
   return (
     <>
       <App />

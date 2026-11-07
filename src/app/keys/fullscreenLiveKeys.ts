@@ -29,6 +29,8 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
     drawerResultsRef,
     fullscreenCatCursor,
     setFullscreenCatCursor,
+    fullscreenFocusBtn,
+    setFullscreenFocusBtn,
     showFullscreenOsd,
     setShowFullscreenOsd,
     triggerOsd,
@@ -224,17 +226,80 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
     }
   }
 
+  // Back key
   if (key === 'back' || key === 'stop') {
+    if (fullscreenFocusBtn !== 'none') {
+      setFullscreenFocusBtn('none');
+      return true;
+    }
+    if (showFullscreenOsd) {
+      setShowFullscreenOsd(false);
+      setFullscreenFocusBtn('none');
+      return true;
+    }
     setIsFullscreenLive(false);
     playerService.exitFullscreen();
     return true;
   }
+
+  // When focused on InfoBar Action Buttons ([☰ Lista de canales] / [★ Favoritos])
+  if (fullscreenFocusBtn !== 'none') {
+    if (key === 'left') {
+      setFullscreenFocusBtn('channels');
+      triggerOsd();
+      return true;
+    }
+    if (key === 'right') {
+      setFullscreenFocusBtn('fav');
+      triggerOsd();
+      return true;
+    }
+    if (key === 'enter') {
+      if (fullscreenFocusBtn === 'fav' && ctx.tunedLiveChannel) {
+        ctx.toggleLiveFavorite(ctx.tunedLiveChannel);
+        triggerOsd();
+        return true;
+      }
+      if (fullscreenFocusBtn === 'channels') {
+        setFullscreenGuideIndex(liveTvFocus.channelIndex);
+        setFullscreenGuideArea('channels');
+        setShowFullscreenGuide(true);
+        setShowFullscreenOsd(false);
+        setFullscreenFocusBtn('none');
+        return true;
+      }
+      return true;
+    }
+    if (key === 'down' || key === 'up') {
+      setFullscreenFocusBtn('none');
+      triggerOsd();
+      return true;
+    }
+    return true;
+  }
+
+  // InfoBar buttons entry from normal viewing while OSD is visible:
+  // ▲ (Up) or ► (Right) enters the buttons, focusing [★ Favoritos] directly
+  if (showFullscreenOsd) {
+    if (key === 'up') {
+      setFullscreenFocusBtn('fav');
+      triggerOsd();
+      return true;
+    }
+    if (key === 'right') {
+      setFullscreenFocusBtn('channels');
+      triggerOsd();
+      return true;
+    }
+  }
+
   if (key === 'left' || key === 'right') {
     // Open Floating Channel Drawer
     setFullscreenGuideIndex(liveTvFocus.channelIndex);
     setFullscreenGuideArea('channels');
     setShowFullscreenGuide(true);
     setShowFullscreenOsd(false);
+    setFullscreenFocusBtn('none');
     return true;
   }
   if (key === 'up' || key === 'channelUp') {
@@ -258,6 +323,7 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
   if (key === 'info') {
     if (showFullscreenOsd) {
       setShowFullscreenOsd(false);
+      setFullscreenFocusBtn('none');
     } else {
       triggerOsd();
     }
@@ -267,6 +333,7 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
     // Toggle OSD Info Banner
     if (showFullscreenOsd) {
       setShowFullscreenOsd(false);
+      setFullscreenFocusBtn('none');
     } else {
       triggerOsd();
     }
