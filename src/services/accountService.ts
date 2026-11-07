@@ -6,7 +6,7 @@
  * Server: the TizenXuper Bot Worker (TizenXuper Bot/src/tvApi.ts).
  * No relative imports, so test/accountService.test.ts can load this file in Node.
  */
-export const ACCOUNT_API = 'https://tizenxuper-bot.juliochemoreno.workers.dev';
+export const ACCOUNT_API = 'https://tizenxuper-bot.tizenxupertv.workers.dev';
 
 const SESSION_KEY = 'xuper_tg_session_v1';
 const DEVICE_KEY = 'xuper_device_id_v1';
