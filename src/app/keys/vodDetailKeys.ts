@@ -5,6 +5,20 @@ import { VodDetailFocus, AUDIO_OPTIONS, SUB_OPTIONS, EP_RANGE } from '../../view
 import { VodItem, VodEpisode } from '../../types/vod';
 import { DetailCounts } from '../useVodDetail';
 import { Setter, VodPlayerState, DetailEpisodes } from '../types';
+import { effectiveChoice, titleChoices, type TitleChoices } from '../../lib/titleOptions';
+
+/** What the settings list offers: the title's own options, or all of them while they are unknown */
+export function settingChoices(counts: DetailCounts): TitleChoices {
+  return counts.choices || titleChoices(null, AUDIO_OPTIONS.length, QUALITY_OPTIONS, { matches: () => false, name: () => '' });
+}
+
+/** Position, inside the options shown for `col`, of the choice that applies now (the first one when the profile's is missing) */
+export function settingPosition(col: 'audio' | 'subs' | 'quality', counts: DetailCounts): number {
+  const st = settingsService.get();
+  const list = settingChoices(counts)[col];
+  const current = col === 'audio' ? st.audio : col === 'subs' ? subtitleChoiceIndex(st) : st.quality || 0;
+  return Math.max(0, list.indexOf(effectiveChoice(list, current)));
+}
 
 export interface VodDetailKeysCtx {
   setActiveVodPlayer: Setter<VodPlayerState | null>;
@@ -56,20 +70,19 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
         setDetailFocus(prev => ({ ...prev, modalIndex: key === 'up' ? Math.max(0, idx - 1) : Math.min(ROWS.length - 1, idx + 1) }));
       } else if (key === 'enter' || key === 'right') {
         const next = ROWS[idx];
-        const st = settingsService.get();
-        const current = next === 'audio' ? st.audio : next === 'subs' ? subtitleChoiceIndex(st) : st.quality || 0;
-        setDetailFocus(prev => ({ ...prev, modalCol: next, modalIndex: current }));
+        setDetailFocus(prev => ({ ...prev, modalCol: next, modalIndex: settingPosition(next, detailCounts) }));
       }
       return true;
     }
-    const options = col === 'audio' ? AUDIO_OPTIONS : col === 'subs' ? SUB_OPTIONS : QUALITY_OPTIONS;
+    const options = settingChoices(detailCounts)[col];
     if (key === 'back' || key === 'left') {
       setDetailFocus(prev => ({ ...prev, modalCol: 'menu', modalIndex: SETTINGS_ROW[col] }));
     } else if (key === 'up' || key === 'down') {
       setDetailFocus(prev => ({ ...prev, modalIndex: key === 'up' ? Math.max(0, idx - 1) : Math.min(options.length - 1, idx + 1) }));
     } else if (key === 'enter') {
       // Same preferences as the profile (Configuración global)
-      applySettingChoice(col, idx);
+      // `idx` is a position in the options shown; the preference stores the option's own index
+      if (options.length) applySettingChoice(col, options[Math.min(idx, options.length - 1)]);
       setDetailFocus(prev => ({ ...prev, modalCol: 'menu', modalIndex: SETTINGS_ROW[col] }));
     }
     return true;
