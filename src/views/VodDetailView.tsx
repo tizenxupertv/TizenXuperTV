@@ -7,6 +7,8 @@ import { historyService } from '../services/historyService';
 import { favoritesService } from '../services/favoritesService';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
 import { settingsService, PREFERRED_LANGUAGES, SUBTITLE_CHOICES, subtitleChoiceIndex, QUALITY_OPTIONS } from '../services/settingsService';
+import { effectiveChoice, ownAudioName, titleChoices, type LanguageRules, type TitleChoices, type TitleMedia } from '../lib/titleOptions';
+import { PREF_LANG_CODES, languageName, sameLanguage } from '../lib/subtitles';
 import { getResumeTarget, getEpisodeStatus, EpisodeStatus } from '../lib/vodResume';
 import { useViewProfiler } from '../lib/perfMonitor';
 
@@ -39,6 +41,12 @@ export const EP_RANGE = 20;
 export const AUDIO_OPTIONS = PREFERRED_LANGUAGES;
 export const SUB_OPTIONS = SUBTITLE_CHOICES;
 
+/** Language matching of the player, for the settings list */
+export const LANGUAGE_RULES: LanguageRules = {
+  matches: (label, i) => sameLanguage(label, PREF_LANG_CODES[i]),
+  name: languageName
+};
+
 interface VodDetailViewProps {
   item: VodItem;
   focus: VodDetailFocus;
@@ -52,7 +60,7 @@ interface VodDetailViewProps {
   /** Opens the season list (mouse) */
   onOpenSeasonMenu?: () => void;
   onSelectRelated?: (item: VodItem) => void;
-  onDetailLoaded?: (counts: { seasonsCount: number; episodesCount: number; relatedCount: number; isSeries: boolean; hasTrailer?: boolean }) => void;
+  onDetailLoaded?: (counts: { seasonsCount: number; episodesCount: number; relatedCount: number; isSeries: boolean; hasTrailer?: boolean; choices?: TitleChoices }) => void;
   onEpisodesChange?: (data: { episodes: VodEpisode[]; seasonId: string; seasonNumber?: number; activeEpisodeIndex?: number }) => void;
   /** Opens the settings list: its first level ('menu') or the options of one setting */
   onOpenAudioModal?: (col: SettingsCol) => void;
@@ -104,17 +112,6 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
       setIsFav(favoritesService.isFavorite(item.id));
     });
   }, [item.id]);
-
-  // Audio & subtitle preferences: the same ones as the profile (Configuración global)
-  const prefs = settingsService.get();
-  const currentAudio = AUDIO_OPTIONS[prefs.audio] || AUDIO_OPTIONS[0];
-  const currentSub = SUB_OPTIONS[subtitleChoiceIndex(prefs)] || SUB_OPTIONS[0];
-  const currentQuality = QUALITY_OPTIONS[prefs.quality] || QUALITY_OPTIONS[0];
-  const settingsRows: { col: 'audio' | 'subs' | 'quality'; label: string; value: string; options: string[] }[] = [
-    { col: 'audio', label: 'Audio', value: currentAudio, options: AUDIO_OPTIONS },
-    { col: 'subs', label: 'Subtítulos', value: currentSub, options: SUB_OPTIONS },
-    { col: 'quality', label: 'Resolución', value: currentQuality, options: QUALITY_OPTIONS }
-  ];
 
   const episodesSliderRef = useRef<HTMLDivElement>(null);
   const relatedSliderRef = useRef<HTMLDivElement>(null);
@@ -264,6 +261,38 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   const resume = getResumeTarget(item, episodes, historyEntry, currentSeasonNumber, currentSeasonId);
   void historyTick;
   const isSeries = Boolean(currentItem.isSeries || currentItem.kind === 'serie' || seasons.length > 0 || episodes.length > 0);
+
+  // What the title offers (audio languages, qualities, subtitles): the settings list shows only that. The portal answer is
+  // the one the player asks for next (shared cache), so playing right after is not slower. All options while it loads.
+  const playableId = isSeries ? String(resume.episode?.id || episodes[0]?.id || '') : String(item.id);
+  const playableSeries = isSeries ? currentSeasonId : '';
+  const [media, setMedia] = useState<TitleMedia | null>(null);
+  useEffect(() => {
+    setMedia(null);
+    const client = (window as any).MagisClient;
+    if (!playableId || !client || typeof client.mediaOptions !== 'function') return;
+    let cancelled = false;
+    client.mediaOptions(playableId, playableSeries, (err: any, m: TitleMedia) => {
+      if (!cancelled && !err && m) setMedia(m);
+    });
+    return () => { cancelled = true; };
+  }, [playableId, playableSeries]);
+  const choices = useMemo(() => titleChoices(media, AUDIO_OPTIONS.length, QUALITY_OPTIONS, LANGUAGE_RULES), [media]);
+
+  // Audio & subtitle preferences: the same ones as the profile (Configuración global); a preference the title
+  // lacks shows what the player will really use
+  const prefs = settingsService.get();
+  const audioIdx = effectiveChoice(choices.audio, prefs.audio);
+  const subIdx = effectiveChoice(choices.subs, subtitleChoiceIndex(prefs));
+  const qualityIdx = effectiveChoice(choices.quality, prefs.quality || 0);
+  const settingsRows: { col: 'audio' | 'subs' | 'quality'; label: string; value: string; options: string[]; indices: number[] }[] = [
+    {
+      col: 'audio', label: 'Audio', indices: choices.audio, options: choices.audio.map(i => AUDIO_OPTIONS[i]),
+      value: audioIdx >= 0 ? AUDIO_OPTIONS[audioIdx] : (ownAudioName(media, LANGUAGE_RULES) || 'Original')
+    },
+    { col: 'subs', label: 'Subtítulos', indices: choices.subs, options: choices.subs.map(i => SUB_OPTIONS[i]), value: SUB_OPTIONS[subIdx] || SUB_OPTIONS[0] },
+    { col: 'quality', label: 'Resolución', indices: choices.quality, options: choices.quality.map(i => QUALITY_OPTIONS[i]), value: QUALITY_OPTIONS[qualityIdx] || QUALITY_OPTIONS[0] }
+  ];
   const hasTrailer = Boolean(currentItem.trailerUrl || (currentItem as any).trailer);
   // Round buttons after Reproducir, in the same row
   const quickItems: ('fav' | 'settings' | 'trailer')[] = ['fav', 'settings', ...(hasTrailer ? ['trailer' as const] : [])];
@@ -283,10 +312,11 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         episodesCount: episodes.length,
         relatedCount: relatedItems.length,
         isSeries,
-        hasTrailer
+        hasTrailer,
+        choices
       });
     }
-  }, [seasons.length, episodes.length, relatedItems.length, isSeries, hasTrailer]);
+  }, [seasons.length, episodes.length, relatedItems.length, isSeries, hasTrailer, choices]);
 
   // Auto-scroll horizontal episode slider with comfortable threshold
   useEffect(() => {
@@ -462,11 +492,14 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                             return (
                               <>
                                 <div className="vod-settings-head">‹ {row.label}</div>
+                                {row.options.length === 0 && (
+                                  <div className="vod-action-option is-focused"><span>Este título solo trae su audio original</span></div>
+                                )}
                                 {row.options.map((opt, o) => (
                                   <div
                                     key={opt}
                                     className={`vod-action-option ${opt === row.value ? 'is-active' : ''} ${(focus.modalIndex || 0) === o ? 'is-focused' : ''}`}
-                                    onClick={() => onSelectSetting && onSelectSetting(row.col, o)}
+                                    onClick={() => onSelectSetting && onSelectSetting(row.col, row.indices[o])}
                                   >
                                     <span>{opt}</span>
                                     {opt === row.value && <span className="vod-season-check">✓</span>}

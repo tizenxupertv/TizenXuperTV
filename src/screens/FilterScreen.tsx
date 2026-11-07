@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { VodItem } from '../types/vod';
 import { useScreenKeys } from '../hooks/useScreenKeys';
-import { PosterCard } from '../components/vod/PosterCard';
 import { FilterRoot } from '../lib/screenStack';
 import { FilterOptions, FilterValues, getFilterOptions, getFilteredPage } from '../services/catalogService';
 import { setTrackOffset } from '../utils/scrollHelper';
@@ -11,6 +10,9 @@ import { ScreenHeader, SearchIcon } from '../components/layout/Header';
 /**
  * Filter screen of the official app: Tipo / Género / Año / País / Audio over the full catalog of a
  * root (v3/filterGenre for the values, v3/filterByContent for the titles).
+ *
+ * Layout: the type as pills on top, the other filters as a vertical menu on the left (OK opens that filter's
+ * options as a vertical list, like the ⚙ of the detail and Perfil), and the titles taking the rest of the screen.
  */
 
 const TYPES: { value: FilterRoot; label: string }[] = [
@@ -37,10 +39,10 @@ const COUNTRY_ES: Record<string, string> = {
 
 const AUDIO_ES: Record<string, string> = { por: 'Portugués', spa: 'Español', eng: 'Inglés' };
 
-type RowKey = 'type' | keyof FilterValues;
+type FilterKey = keyof FilterValues;
 
 interface FilterRow {
-  key: RowKey;
+  key: FilterKey;
   label: string;
   options: { value: string; label: string }[];
 }
@@ -48,15 +50,19 @@ interface FilterRow {
 const NO_FILTERS: FilterValues = { tags: '', year: '', originalCountry: '', audio: '' };
 const ALL = { value: '', label: 'Todos' };
 
-const CARD_H = 250;
+/** Same card as Buscar (poster, then title and year · genre); its height is fixed so the rows keep one pitch */
+const CARD_H = 384;
 const GAP_Y = 16;
 const ROW_HEIGHT = CARD_H + GAP_Y;
-const COLS = 7;
+const COLS = 6;
 const PAGE_SIZE = 42;
 const ROWS_BEFORE = 2;
 const ROWS_AFTER = 4;
 /** Wait for the selection to settle before asking the portal */
 const RELOAD_DEBOUNCE_MS = 250;
+/** Options list: height of one option and how many fit before it scrolls */
+const OPTION_H = 52;
+const OPTIONS_VISIBLE = 10;
 
 interface Results {
   items: VodItem[];
@@ -94,15 +100,17 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
   const [values, setValues] = useState<FilterValues>(NO_FILTERS);
   const [options, setOptions] = useState<FilterOptions | null>(null);
   const [results, setResults] = useState<Results>(EMPTY_RESULTS);
-  const [area, setArea] = useState<'header' | 'filters' | 'grid'>('filters');
-  const [rowIdx, setRowIdx] = useState(0);
-  const [colByRow, setColByRow] = useState<number[]>([0, 0, 0, 0, 0]);
+  const [area, setArea] = useState<'header' | 'type' | 'side' | 'grid'>('side');
+  const [typeCol, setTypeCol] = useState(Math.max(0, TYPES.findIndex(t => t.value === initialRoot)));
+  // Left menu: the list of filters, or the options of one of them
+  const [sideMode, setSideMode] = useState<'menu' | 'options'>('menu');
+  const [sideRow, setSideRow] = useState(0);
+  const [optIdx, setOptIdx] = useState(0);
   const [gridIndex, setGridIndex] = useState(0);
   const [maxLoadedRow, setMaxLoadedRow] = useState(2);
 
-  const pageTrackRef = useRef<HTMLDivElement>(null);
-  const gridRef = useRef<HTMLDivElement>(null);
-  const chipTrackRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const gridTrackRef = useRef<HTMLDivElement>(null);
+  const optionsTrackRef = useRef<HTMLDivElement>(null);
 
   // ---------- Values of the selected type
   useEffect(() => {
@@ -118,7 +126,6 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
   const rows: FilterRow[] = useMemo(() => {
     const o = options || { tags: [], year: [], originalCountry: [], audio: [] };
     return [
-      { key: 'type', label: 'Tipo', options: TYPES.map(t => ({ value: t.value, label: t.label })) },
       { key: 'tags', label: 'Género', options: [ALL, ...o.tags.map(t => ({ value: t, label: TAG_ES[t] || t }))] },
       { key: 'year', label: 'Año', options: [ALL, ...o.year.map(y => ({ value: y, label: y }))] },
       { key: 'originalCountry', label: 'País', options: [ALL, ...o.originalCountry.map(c => ({ value: c, label: COUNTRY_ES[c] || c }))] },
@@ -127,10 +134,14 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
   }, [options]);
 
   const selectedIndex = useCallback((row: FilterRow): number => {
-    const current = row.key === 'type' ? root : values[row.key];
-    const at = row.options.findIndex(opt => opt.value === current);
+    const at = row.options.findIndex(opt => opt.value === values[row.key]);
     return at === -1 ? 0 : at;
-  }, [root, values]);
+  }, [values]);
+
+  const activeFilters = rows.filter(r => values[r.key]);
+  const activeCount = activeFilters.length;
+  // The menu: the four filters, plus "Limpiar filtros" while any is on
+  const menuCount = rows.length + (activeCount > 0 ? 1 : 0);
 
   // ---------- Titles for the selection, page by page
   const tokenRef = useRef(0);
@@ -156,7 +167,7 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
     setResults(EMPTY_RESULTS);
     setGridIndex(0);
     setMaxLoadedRow(2);
-    if (pageTrackRef.current) setTrackOffset(pageTrackRef.current, 'y', 0, false);
+    if (gridTrackRef.current) setTrackOffset(gridTrackRef.current, 'y', 0, false);
     const timer = setTimeout(() => loadPage(1, { ...EMPTY_RESULTS, total: 0 }), RELOAD_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [loadPage]);
@@ -171,94 +182,94 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
     }
   }, [area, gridIndex, results, loadPage]);
 
-  // ---------- Scrolling: chips of the focused row, and the page when the grid has the focus
+  // ---------- Scrolling: the grid keeps the previous row in view; a long options list follows its focus
   useEffect(() => {
-    if (area !== 'filters') return;
-    const track = chipTrackRefs.current[rowIdx];
-    const chip = track && (track.children[colByRow[rowIdx]] as HTMLElement | undefined);
-    const clip = track && track.parentElement;
-    if (!track || !chip || !clip) return;
-    const view = clip.clientWidth;
-    const right = chip.offsetLeft + chip.offsetWidth;
-    const max = Math.max(0, track.scrollWidth - view);
-    const current = Number(track.dataset.offset || 0);
-    let next = current;
-    if (right > current + view - 40) next = right - view + 120;
-    else if (chip.offsetLeft < current + 40) next = chip.offsetLeft - 120;
-    next = Math.min(max, Math.max(0, next));
-    if (next !== current) {
-      track.dataset.offset = String(next);
-      setTrackOffset(track, 'x', next);
-    }
-  }, [area, rowIdx, colByRow]);
-
-  useEffect(() => {
-    const track = pageTrackRef.current;
-    if (!track) return;
-    if (area !== 'grid') {
-      setTrackOffset(track, 'y', 0);
-      return;
-    }
+    const track = gridTrackRef.current;
+    if (!track || area !== 'grid') return;
     const focusRow = Math.floor(gridIndex / COLS);
-    // First row under the filters; further down, the previous row stays visible on top
-    const gridTop = gridRef.current ? gridRef.current.offsetTop : 0;
-    setTrackOffset(track, 'y', focusRow === 0 ? 0 : gridTop + (focusRow - 1) * ROW_HEIGHT);
+    setTrackOffset(track, 'y', focusRow === 0 ? 0 : (focusRow - 1) * ROW_HEIGHT);
     setMaxLoadedRow(prev => Math.max(prev, focusRow + 2));
   }, [area, gridIndex]);
 
+  const optionsRow = rows[sideRow];
+  const optionsLength = optionsRow ? optionsRow.options.length : 0;
+  useEffect(() => {
+    const track = optionsTrackRef.current;
+    if (!track || sideMode !== 'options') return;
+    const max = Math.max(0, optionsLength - OPTIONS_VISIBLE);
+    const first = Math.min(max, Math.max(0, optIdx - Math.floor(OPTIONS_VISIBLE / 2)));
+    setTrackOffset(track, 'y', first * OPTION_H, false);
+  }, [sideMode, optIdx, optionsLength, sideRow]);
+
   // ---------- Remote
-  const select = (row: FilterRow, value: string) => {
-    if (row.key === 'type') {
-      if (value === root) return;
-      // Other type, other values: genre, year and country start again (audio stays)
-      setRoot(value as FilterRoot);
-      setValues(v => ({ ...NO_FILTERS, audio: v.audio }));
-      setColByRow(cols => cols.map((c, i) => (i === 0 ? c : 0)));
-      return;
-    }
+  const selectType = (value: FilterRoot) => {
+    if (value === root) return;
+    // Other type, other values: genre, year and country start again (audio stays)
+    setRoot(value);
+    setValues(v => ({ ...NO_FILTERS, audio: v.audio }));
+  };
+
+  const selectValue = (row: FilterRow, value: string) => {
     const key = row.key;
     setValues(v => (v[key] === value ? v : { ...v, [key]: value }));
   };
 
-  const focusRowAt = (next: number) => {
-    setRowIdx(next);
-    // A row takes the focus on its selected value
-    setColByRow(cols => cols.map((c, i) => (i === next ? selectedIndex(rows[next]) : c)));
-  };
-
   useScreenKeys(key => {
     if (key === 'back') {
-      if (area !== 'filters') setArea('filters');
+      if (area === 'grid') setArea('side');
+      else if (area === 'side' && sideMode === 'options') setSideMode('menu');
       else onClose();
       return;
     }
 
-    // Header action (Buscar), above the Tipo row
+    // Header action (Buscar), above the types
     if (area === 'header') {
-      if (key === 'down') setArea('filters');
+      if (key === 'down') setArea('type');
       else if (key === 'enter' && onOpenSearch) onOpenSearch();
       return;
     }
 
-    if (area === 'filters') {
-      const row = rows[rowIdx];
-      const col = colByRow[rowIdx];
-      if (key === 'up') {
-        if (rowIdx > 0) focusRowAt(rowIdx - 1);
-        else if (onOpenSearch) setArea('header');
-      } else if (key === 'down') {
-        if (rowIdx < rows.length - 1) focusRowAt(rowIdx + 1);
-        else if (results.items.length > 0) {
-          setArea('grid');
-          setGridIndex(0);
+    // Types: pills in a row
+    if (area === 'type') {
+      if (key === 'left') setTypeCol(c => Math.max(0, c - 1));
+      else if (key === 'right') setTypeCol(c => Math.min(TYPES.length - 1, c + 1));
+      else if (key === 'up') { if (onOpenSearch) setArea('header'); }
+      else if (key === 'down') setArea('side');
+      else if (key === 'enter') selectType(TYPES[typeCol].value);
+      return;
+    }
+
+    // Left menu
+    if (area === 'side') {
+      if (sideMode === 'menu') {
+        if (key === 'up') {
+          if (sideRow > 0) setSideRow(r => r - 1);
+          else { setTypeCol(Math.max(0, TYPES.findIndex(t => t.value === root))); setArea('type'); }
+        } else if (key === 'down') {
+          setSideRow(r => Math.min(menuCount - 1, r + 1));
+        } else if (key === 'right') {
+          if (results.items.length > 0) setArea('grid');
+        } else if (key === 'enter') {
+          if (sideRow >= rows.length) {
+            setValues(NO_FILTERS);
+            setSideRow(0);
+          } else {
+            setOptIdx(selectedIndex(rows[sideRow]));
+            setSideMode('options');
+          }
         }
-      } else if (key === 'left') {
-        if (col > 0) setColByRow(cols => cols.map((c, i) => (i === rowIdx ? c - 1 : c)));
-      } else if (key === 'right') {
-        if (col < row.options.length - 1) setColByRow(cols => cols.map((c, i) => (i === rowIdx ? c + 1 : c)));
-      } else if (key === 'enter') {
-        const opt = row.options[col];
-        if (opt) select(row, opt.value);
+        return;
+      }
+      // The options of one filter
+      const row = rows[sideRow];
+      if (!row) return;
+      if (key === 'up') setOptIdx(i => Math.max(0, i - 1));
+      else if (key === 'down') setOptIdx(i => Math.min(row.options.length - 1, i + 1));
+      else if (key === 'left') setSideMode('menu');
+      else if (key === 'enter') {
+        const opt = row.options[optIdx];
+        if (opt) selectValue(row, opt.value);
+        setSideMode('menu');
       }
       return;
     }
@@ -267,10 +278,11 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
     const total = results.items.length;
     if (key === 'left') {
       if (gridIndex % COLS !== 0) setGridIndex(i => i - 1);
+      else setArea('side');
     } else if (key === 'right') {
       if (gridIndex % COLS !== COLS - 1 && gridIndex + 1 < total) setGridIndex(i => i + 1);
     } else if (key === 'up') {
-      if (gridIndex < COLS) setArea('filters');
+      if (gridIndex < COLS) { setTypeCol(Math.max(0, TYPES.findIndex(t => t.value === root))); setArea('type'); }
       else setGridIndex(i => i - COLS);
     } else if (key === 'down') {
       const lastRowStart = Math.floor((total - 1) / COLS) * COLS;
@@ -284,13 +296,11 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
 
   // Only the rows around the focus are in the DOM; a spacer keeps them at their real place
   const focusRow = Math.floor(gridIndex / COLS);
-  const firstRow = area === 'grid' ? Math.max(0, focusRow - ROWS_BEFORE) : 0;
-  const lastRow = (area === 'grid' ? focusRow : 0) + ROWS_AFTER;
+  const firstRow = Math.max(0, focusRow - ROWS_BEFORE);
+  const lastRow = focusRow + ROWS_AFTER;
   const windowItems = results.items.slice(firstRow * COLS, (lastRow + 1) * COLS);
   const totalLabel = results.total < 0 ? 'Cargando…' : `${results.total.toLocaleString('es')} títulos`;
-
   const typeLabel = TYPES.find(t => t.value === root)?.label || '';
-  const activeCount = (['tags', 'year', 'originalCountry', 'audio'] as (keyof FilterValues)[]).filter(k => values[k]).length;
 
   return (
     <div className="filter-screen" style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
@@ -300,39 +310,75 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
         focusedAction={area === 'header' ? 0 : null}
       />
 
-      <div className="filter-page-clip">
-        <div className="filter-page-track" ref={pageTrackRef}>
-          <div className="filter-panel">
-            {rows.map((row, r) => {
-              const sel = selectedIndex(row);
-              return (
-                <div key={row.key} className="filter-row">
-                  <div className="filter-row-label">{row.label}:</div>
-                  <div className="filter-chips-clip">
-                    <div className="filter-chips" ref={el => { chipTrackRefs.current[r] = el; }}>
-                      {row.options.map((opt, c) => (
-                        <div
-                          key={opt.value || 'all'}
-                          className={`filter-chip ${c === sel ? 'is-selected' : ''} ${row.key === 'type' ? 'is-type' : ''} ${
-                            area === 'filters' && r === rowIdx && c === colByRow[r] ? 'is-focused' : ''
-                          }`}
-                          onClick={() => select(row, opt.value)}
-                        >
-                          {opt.label}
-                        </div>
-                      ))}
-                      {row.key !== 'type' && !options && <div className="filter-chip is-loading">…</div>}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+      <div className="filter-types">
+        {TYPES.map((t, c) => (
+          <div
+            key={t.value}
+            className={`filter-type ${t.value === root ? 'is-selected' : ''} ${area === 'type' && c === typeCol ? 'is-focused' : ''}`}
+            onClick={() => selectType(t.value)}
+          >
+            {t.label}
           </div>
+        ))}
+      </div>
 
+      <div className="filter-body">
+        <div className="filter-side">
+          {sideMode === 'menu' ? (
+            <>
+              {rows.map((row, r) => (
+                <div
+                  key={row.key}
+                  className={`filter-side-row ${area === 'side' && sideRow === r ? 'is-focused' : ''}`}
+                  onClick={() => { setArea('side'); setSideRow(r); setOptIdx(selectedIndex(row)); setSideMode('options'); }}
+                >
+                  <span className="filter-side-label">{row.label}</span>
+                  <span className={`filter-side-value ${values[row.key] ? 'is-set' : ''}`}>{row.options[selectedIndex(row)]?.label}</span>
+                  <span className="filter-side-chevron">›</span>
+                </div>
+              ))}
+              {activeCount > 0 && (
+                <div
+                  className={`filter-side-row is-clear ${area === 'side' && sideRow === rows.length ? 'is-focused' : ''}`}
+                  onClick={() => setValues(NO_FILTERS)}
+                >
+                  <span className="filter-side-label">Limpiar filtros</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="filter-side-head">‹ {optionsRow ? optionsRow.label : ''}</div>
+              <div className="filter-options-clip" style={{ maxHeight: OPTIONS_VISIBLE * OPTION_H }}>
+                <div className="filter-options-track" ref={optionsTrackRef}>
+                  {optionsRow && optionsRow.options.map((opt, o) => {
+                    const chosen = opt.value === values[optionsRow.key];
+                    return (
+                      <div
+                        key={opt.value || 'all'}
+                        className={`filter-option ${chosen ? 'is-chosen' : ''} ${o === optIdx ? 'is-focused' : ''}`}
+                        style={{ height: OPTION_H }}
+                        onClick={() => { selectValue(optionsRow, opt.value); setSideMode('menu'); }}
+                      >
+                        <span>{opt.label}</span>
+                        {chosen && <span className="filter-option-check">✓</span>}
+                      </div>
+                    );
+                  })}
+                  {!options && <div className="filter-option is-loading" style={{ height: OPTION_H }}>Cargando…</div>}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="filter-main">
           <div className="filter-results-head">
             <span className="filter-results-type">{typeLabel}</span>
             <span>{totalLabel}</span>
-            {activeCount > 0 && <span className="filter-results-active">{activeCount} {activeCount === 1 ? 'filtro activo' : 'filtros activos'}</span>}
+            {activeFilters.map(r => (
+              <span key={r.key} className="filter-active-chip">{r.options[selectedIndex(r)]?.label}</span>
+            ))}
           </div>
 
           {results.error && results.items.length === 0 ? (
@@ -345,21 +391,49 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
               <div className="browse-empty-icon">🎬</div>
               <div className="browse-empty-text">No hay títulos con estos filtros.</div>
             </div>
+          ) : results.total < 0 ? (
+            // First page on its way: cards of the same size, so the layout does not jump when the titles arrive
+            <div className="filter-grid-clip">
+              <div className="browse-cards-grid filter-grid">
+                {Array.from({ length: COLS * 3 }, (_, i) => (
+                  <div key={i} className="filter-skeleton skeleton-shimmer" />
+                ))}
+              </div>
+            </div>
           ) : (
-            <div className="browse-cards-grid filter-grid" ref={gridRef}>
-              {firstRow > 0 && <div style={{ gridColumn: '1 / -1', height: firstRow * ROW_HEIGHT - GAP_Y }} />}
-              {windowItems.map((item, i) => {
-                const idx = firstRow * COLS + i;
-                return (
-                  <PosterCard
-                    key={`${item.id}-${idx}`}
-                    item={item}
-                    isFocused={area === 'grid' && idx === gridIndex}
-                    showImage={Math.floor(idx / COLS) <= maxLoadedRow}
-                    onActivate={onOpenVod}
-                  />
-                );
-              })}
+            <div className="filter-grid-clip">
+              <div className="browse-cards-grid filter-grid" ref={gridTrackRef}>
+                {firstRow > 0 && <div style={{ gridColumn: '1 / -1', height: firstRow * ROW_HEIGHT - GAP_Y }} />}
+                {windowItems.map((item, i) => {
+                  const idx = firstRow * COLS + i;
+                  return (
+                    <div
+                      key={`${item.id}-${idx}`}
+                      className={`search-vod-card ${area === 'grid' && idx === gridIndex ? 'is-focused' : ''}`}
+                      onClick={() => onOpenVod(item)}
+                    >
+                      <div className="svc-poster-wrap">
+                        {Math.floor(idx / COLS) <= maxLoadedRow && (
+                          <img
+                            className="svc-poster"
+                            src={item.poster || 'assets/placeholder_vertical.png'}
+                            alt={item.title}
+                            onError={e => {
+                              (e.target as HTMLImageElement).src = 'assets/placeholder_vertical.png';
+                            }}
+                          />
+                        )}
+                        {item.score && <div className="svc-score-badge">★ {item.score}</div>}
+                        <div className="svc-kind-badge">{item.kind === 'serie' ? 'SERIE' : 'PELÍCULA'}</div>
+                      </div>
+                      <div className="svc-info">
+                        <div className="svc-title">{item.title}</div>
+                        <div className="svc-meta">{item.year} • {item.genres?.[0] || 'Contenido'}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

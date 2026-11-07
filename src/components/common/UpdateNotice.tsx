@@ -79,7 +79,7 @@ export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; onClose
           <div className="upd-notice-steps">
             <div className="upd-notice-step"><span className="tg-login-num">1</span><span>En Apps2Samsung, abre la pestaña <b>On the TV</b></span></div>
             <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Pulsa <b>Update</b> en TizenXuper TV</span></div>
-            <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Tus favoritos y tu sesión se conservan</span></div>
+            <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Tu lista, tus canales favoritos y tu sesión se conservan</span></div>
           </div>
           <div className="upd-notice-ok">
             <span className="upd-notice-key">OK</span><span>Continuar</span>

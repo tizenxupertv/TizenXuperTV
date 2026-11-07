@@ -184,15 +184,19 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const POPULAR_SIZE = 10;
   const [popular, setPopular] = useState<{ items: VodItem[]; total: number; page: number } | null>(null);
   const popularTokenRef = useRef(0);
+  const [popularLoading, setPopularLoading] = useState(false);
   const loadPopular = (page: number) => {
     const token = ++popularTokenRef.current;
+    setPopularLoading(true);
     getPopularSearchPage(page, POPULAR_SIZE).then(
       res => {
-        if (token !== popularTokenRef.current || !res.items.length) return;
+        if (token !== popularTokenRef.current) return;
+        setPopularLoading(false);
+        if (!res.items.length) return;
         setPopular({ items: res.items, total: res.total, page });
         setFocusedResultIndex(0);
       },
-      () => {}
+      () => { if (token === popularTokenRef.current) setPopularLoading(false); }
     );
   };
   const refreshPopular = () => {
@@ -217,6 +221,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   }, [isTvSearch, submittedQuery, allVodItems, localHaystacks, remoteVod, popular]);
 
   const totalResults = isTvSearch ? filteredChannels.length : filteredVod.length;
+
+  const showSkeleton = !isTvSearch && ((!submittedQuery.trim() && !popular && popularLoading) || (!!submittedQuery.trim() && remoteState === 'loading' && totalResults === 0));
 
   // Auto-focus input only when search opens fresh (preserves query & results when returning from VOD detail view!)
   const prevOpenRef = useRef(false);
@@ -482,7 +488,20 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           </div>
           )}
 
-          {totalResults === 0 ? (
+          {showSkeleton ? (
+            // Titles on their way (first popular list, or the portal search with nothing to show yet): same cards, grayed
+            <div className="search-vod-grid">
+              {Array.from({ length: 10 }, (_, i) => (
+                <div key={i} className="search-vod-card svc-skeleton">
+                  <div className="svc-poster-wrap skeleton-shimmer" />
+                  <div className="svc-info">
+                    <div className="svc-skeleton-line" />
+                    <div className="svc-skeleton-line is-short" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : totalResults === 0 ? (
             <div className="search-empty-state">
               <div className="search-empty-icon">🔍</div>
               <div className="search-empty-title">
