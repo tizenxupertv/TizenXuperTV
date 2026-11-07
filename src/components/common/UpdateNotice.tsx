@@ -33,27 +33,24 @@ function useNoticeKeys(onClose: () => void): void {
 /** Novedades page on Telegraph (created by the bot repo's `npm run guide`) */
 const NEWS_URL = 'https://telegra.ph/Novedades-de-TizenXuper-TV-11-07';
 
-/** First launch after the app updated itself: once per version */
+/** First launch after the app updated itself: once per version. Same look as the restart dialog (UpdateReady) */
 export const UpdatedNotice: React.FC<{ version: string; onClose: () => void }> = ({ version, onClose }) => {
   useNoticeKeys(onClose);
   return (
-    <div className="upd-notice" role="dialog" aria-modal="true">
-      <div className="upd-notice-card">
-        <div className="upd-notice-qr">
-          <QrCode text={NEWS_URL} size={200} />
-          <div className="upd-notice-qr-caption">Novedades</div>
-        </div>
-        <div className="upd-notice-info">
-          <div className="upd-notice-badge">✅ Actualizada</div>
-          <h1 className="upd-notice-title">TizenXuper TV se actualizó a la {version}</h1>
-          <p className="upd-notice-lead">
-            La app se actualizó sola, sin Apps2Samsung. Tus favoritos, tu perfil y tu sesión siguen igual.
-            Escanea el código para ver qué hay de nuevo.
-          </p>
-          <div className="upd-notice-ok">
-            <span className="upd-notice-key">OK</span><span>Continuar</span>
+    <div className="upd-ready" role="dialog" aria-modal="true" aria-labelledby="upd-done-title">
+      <div className="upd-ready-card">
+        <img className="upd-ready-logo" src="assets/logo_3d.png" alt="" />
+        <div className="upd-done-badge">Actualizada</div>
+        <div className="upd-ready-title" id="upd-done-title">Ya tienes la versión {version}</div>
+        <div className="upd-ready-desc">Tu sesión, tu lista y tus ajustes siguen igual.</div>
+        <div className="upd-done-news">
+          <div className="upd-done-qr"><QrCode text={NEWS_URL} size={132} /></div>
+          <div className="upd-done-news-text">
+            <div className="upd-done-news-title">Novedades</div>
+            <div>Escanea el código con el móvil para ver qué hay de nuevo.</div>
           </div>
         </div>
+        <div className="pf-btn is-focused upd-ready-btn" onClick={onClose}>Continuar</div>
       </div>
     </div>
   );
