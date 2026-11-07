@@ -66,8 +66,10 @@ test('stored bundles that must not run are dropped, each with its reason', () =>
   assert.equal(mismatch.drop, true);
 });
 
-test('a bundle whose last launch never reached the first screen is marked bad', () => {
-  const r = choose(meta, bundle, { ...ctx, booting: '1.10.1' });
+test('one unfinished launch (user left during the splash) runs the bundle again; two mark it bad', () => {
+  assert.equal(choose(meta, bundle, { ...ctx, booting: { version: '1.10.1', count: 1 } }).bundle, bundle);
+  assert.equal(choose(meta, bundle, { ...ctx, booting: { version: '1.10.0', count: 5 } }).bundle, bundle);
+  const r = choose(meta, bundle, { ...ctx, booting: { version: '1.10.1', count: 2 } });
   assert.equal(r.bundle, null);
   assert.equal(r.drop, true);
   assert.equal(r.markBad, '1.10.1');

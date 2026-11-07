@@ -20,7 +20,7 @@ const Root: React.FC = () => {
   // A newer version announced by the server, shown once per version
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   // The version this launch runs, when the app updated itself to it (shown once)
-  const [updatedTo, setUpdatedTo] = useState<string | null>(null);
+  const [updatedTo, setUpdatedTo] = useState<string | null>(() => updateService.updatedNotice());
   const [, setTick] = useState(0);
 
   // Self-update checks run in the background, signed in or not (public/js/boot.js, services/updateService.ts)
@@ -39,7 +39,6 @@ const Root: React.FC = () => {
           window.location.reload();
           return;
         }
-        setUpdatedTo(updateService.updatedNotice());
         if (result === 'ok') setUpdate(accountService.pendingUpdate());
       });
     }, VERIFY_DELAY_MS);

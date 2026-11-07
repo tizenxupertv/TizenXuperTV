@@ -31,8 +31,11 @@
   var K_BOOTING = 'xuper_update_booting';
   var K_BAD = 'xuper_update_bad';
   var K_FALLBACK = 'xuper_boot_fallback';
-  /* Never hold the start-up longer than this waiting for IndexedDB */
-  var READ_TIMEOUT_MS = 1500;
+  /* Never hold the start-up longer than this waiting for IndexedDB (the splash is showing meanwhile) */
+  var READ_TIMEOUT_MS = 4000;
+  /* Launches of one bundle that never reached the first screen before it counts as broken: a single one can be the
+     user leaving during the splash */
+  var MAX_UNFINISHED_BOOTS = 2;
 
   function lsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
   function lsPut(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
@@ -58,7 +61,7 @@
 
   /*
    * Which stored bundle runs, if any. Pure: { bundle } to run it, or { drop: true, note, markBad? } to forget it.
-   * ctx = { packaged, shell, bad, booting }.
+   * ctx = { packaged, shell, bad, booting: { version, count } of launches that never reached the first screen }.
    */
   function choose(meta, bundle, ctx) {
     if (!meta || !meta.version) return { bundle: null, drop: false, note: '' };
@@ -71,7 +74,7 @@
     if (ctx.bad[meta.version]) {
       return { bundle: null, drop: true, note: meta.version + ' failed to start on this TV before' };
     }
-    if (ctx.booting === meta.version) {
+    if (ctx.booting && ctx.booting.version === meta.version && ctx.booting.count >= MAX_UNFINISHED_BOOTS) {
       return { bundle: null, drop: true, markBad: meta.version, note: meta.version + ' did not reach the first screen last time: back to the installed ' + ctx.packaged };
     }
     if (!bundle || bundle.version !== meta.version || !bundle.files || !bundle.scripts || !bundle.scripts.length) {
@@ -212,14 +215,16 @@
   }
 
   function start(meta, bundle) {
-    var pick = choose(meta, bundle, { packaged: info.packaged, shell: SHELL, bad: badList(), booting: lsGet(K_BOOTING) });
+    var booting = parse(lsGet(K_BOOTING));
+    var pick = choose(meta, bundle, { packaged: info.packaged, shell: SHELL, bad: badList(), booting: booting });
     if (pick.markBad) markBad(pick.markBad);
     if (pick.drop) { lsDel(K_BOOTING); clearStored(); }
     info.note = pick.note;
     if (pick.bundle) {
       info.running = pick.bundle.version;
       startedBundle = pick.bundle.version;
-      lsPut(K_BOOTING, startedBundle);
+      var count = booting && booting.version === startedBundle ? (booting.count || 0) + 1 : 1;
+      lsPut(K_BOOTING, JSON.stringify({ version: startedBundle, count: count }));
       window.addEventListener('error', onEarlyError);
       try {
         swapStyles(pick.bundle);
