@@ -1,3 +1,5 @@
+import { withoutFavorite } from '../lib/profileHistory';
+
 const PROFILE_KEY = 'xuper_local_profile_v1';
 
 class FavoritesService {
@@ -31,6 +33,17 @@ class FavoritesService {
     } catch (e) {}
     this.notify();
     return newState;
+  }
+
+  /** Removes one favorite. False if it could not be saved. */
+  public removeFavorite(id: string | number): boolean {
+    try {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(withoutFavorite(this.getProfile(), id)));
+    } catch (e) {
+      return false;
+    }
+    this.notify();
+    return true;
   }
 
   public getFavoriteIds(): string[] {

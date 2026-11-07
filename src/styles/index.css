@@ -6270,3 +6270,34 @@ html.xuper-vod-avplay .app-root,
 .upd-notice-key {
   padding: 6px 16px; border-radius: 10px; background: #00e5ff; color: #04141a; font-weight: 900;
 }
+
+/* ==========================================================================
+   Perfil › Historial / Mis favoritos: remove titles, clear the history
+   ========================================================================== */
+.pf-list-action { margin-left: 12px; padding: 8px 18px; font-size: 15px; white-space: nowrap; }
+.pf-list-action.is-on { border-color: #00e5ff; color: #00e5ff; }
+.pf-list-action.is-on.is-focused { color: #000; }
+.pf-edit-hint { margin: -6px 0 16px; font-size: 15px; color: #00e5ff; }
+.pf-card-item.is-removing .pf-poster { position: relative; }
+.pf-card-item.is-removing .pf-poster::after {
+  content: '✕'; position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(225, 29, 72, 0.92); color: #fff; font-size: 18px; font-weight: 900;
+}
+.pf-card-item.is-removing.is-focused .pf-poster { outline: 3px solid #fb7185; }
+.pf-confirm {
+  position: fixed; inset: 0; z-index: 50000; display: flex; align-items: center; justify-content: center;
+  background: rgba(4, 6, 10, 0.8);
+}
+.pf-confirm-card {
+  max-width: 640px; padding: 36px 42px; border-radius: 24px; background: #111622;
+  border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+.pf-confirm-title { font-size: 30px; font-weight: 900; margin: 0 0 10px; color: #fff; }
+.pf-confirm-text { font-size: 17px; line-height: 1.5; color: #94a3b8; margin: 0 0 26px; }
+.pf-toast {
+  position: fixed; left: 50%; bottom: 56px; transform: translateX(-50%); z-index: 50001;
+  padding: 12px 26px; border-radius: 999px; background: #14532d; color: #dcfce7; font-size: 17px; font-weight: 700;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.pf-toast.is-error { background: #7f1d1d; color: #fee2e2; }

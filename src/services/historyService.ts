@@ -1,6 +1,7 @@
 import { HistoryItem, EpisodePlaybackRecord } from '../types/history';
 import { VodItem, VodEpisode } from '../types/vod';
 import { isFinished } from '../lib/vodResume';
+import { withoutHistory, withoutHistoryEntry } from '../lib/profileHistory';
 
 const PROFILE_KEY = 'xuper_local_profile_v1';
 
@@ -108,6 +109,28 @@ class HistoryService {
     } catch (e) {}
 
     this.notify();
+  }
+
+  /** Forgets what was watched on this TV (titles and their progress); favorites and settings stay. False if it could not be saved. */
+  public clearHistory(): boolean {
+    try {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(withoutHistory(this.getProfile())));
+    } catch (e) {
+      return false;
+    }
+    this.notify();
+    return true;
+  }
+
+  /** Forgets one title (and its progress). False if it could not be saved. */
+  public removeEntry(itemId: string | number): boolean {
+    try {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(withoutHistoryEntry(this.getProfile(), itemId)));
+    } catch (e) {
+      return false;
+    }
+    this.notify();
+    return true;
   }
 
   public subscribe(cb: () => void): () => void {
