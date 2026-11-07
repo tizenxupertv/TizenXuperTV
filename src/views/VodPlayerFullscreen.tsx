@@ -3,6 +3,7 @@ import { VodItem, VodEpisode } from '../types/vod';
 import { historyService } from '../services/historyService';
 import { playerService } from '../services/playerService';
 import { logPlayback, setPlaybackContext } from '../lib/playbackLog';
+import { createSeekHold, formatSkip } from '../lib/seekAccel';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
   SubtitleTrack,
@@ -562,6 +563,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   // seek (slow on AVPlay) is sent once, 350 ms after the last press. Until the player reaches the
   // target, its time updates are ignored so the bar does not jump back.
   const accumulatedSkipRef = useRef(0);
+  // Holding ◄ ► (or ⏪ ⏩) makes the jumps grow: 10 s, 30 s, 1, 2, 5 min (lib/seekAccel.ts)
+  const seekHoldRef = useRef(createSeekHold());
+  const holdSeek = (dir: 1 | -1, isRepeat: boolean) => {
+    const delta = seekHoldRef.current.press(dir, isRepeat, Date.now());
+    if (delta) seekBy(delta);
+  };
   const seekBy = (delta: number) => {
     const d = timeRef.current.d;
     const pending = pendingSeekRef.current;
@@ -571,17 +578,20 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     timeRef.current.t = target;
     setCurrentTime(target);
 
-    // Visual scrubbing pill feedback (+10s, +20s, -10s)
+    // Feedback with the total of this burst of presses (+10 s, +1:30, −5:00)
     accumulatedSkipRef.current += delta;
-    const sign = accumulatedSkipRef.current > 0 ? '+' : '';
-    flash(`${accumulatedSkipRef.current > 0 ? '⏩ ' : '⏪ '}${sign}${accumulatedSkipRef.current}s`);
+    flash(`${accumulatedSkipRef.current > 0 ? '⏩' : '⏪'} ${formatSkip(accumulatedSkipRef.current)}`);
 
     if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
     seekTimerRef.current = setTimeout(() => {
       seekTimerRef.current = null;
       accumulatedSkipRef.current = 0;
       if (useAvPlayRef.current && window.XuperAVPlay) {
-        window.XuperAVPlay.seekTo(target);
+        window.XuperAVPlay.seekTo(target, undefined, (err: any) => {
+          // The player refused the jump: say so (the bar goes back to where the video is) and leave a trace for support
+          flash('No se pudo mover el video a ese punto');
+          logPlayback({ kind: 'error', player: 'AVPlay', detail: `seek ${Math.round(target)} s: ${(err && (err.name || err.message)) || err}` });
+        });
       } else if (videoRef.current) {
         videoRef.current.currentTime = target;
       }
@@ -683,12 +693,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         triggerOsd();
         return;
       }
-      if (isFastForward) {
-        seekBy(30);
-        return;
-      }
-      if (isRewind) {
-        seekBy(-30);
+      if (isFastForward || isRewind) {
+        holdSeek(isFastForward ? 1 : -1, e.repeat);
         return;
       }
 
@@ -766,8 +772,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       // Timeline (bottom): ◄ ► scrub (hold for bigger jumps), OK pauses, ▲ goes to the controls row
       if (focusArea === 'timeline') {
         if (isBack) onClose();
-        else if (isLeft) seekBy(e.repeat ? -30 : -10);
-        else if (isRight) seekBy(e.repeat ? 30 : 10);
+        else if (isLeft || isRight) holdSeek(isRight ? 1 : -1, e.repeat);
         else if (isEnter) togglePause();
         else if (isUp) setFocusArea(isTrailer ? 'center' : 'controls');
         return;
@@ -806,6 +811,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         return;
       }
 
+      // While watching (controls hidden), ◄ ► seek right away, as on any TV player; the timeline keeps the focus
+      if (wasHidden && (isLeft || isRight)) {
+        setFocusArea('timeline');
+        holdSeek(isRight ? 1 : -1, e.repeat);
+        return;
+      }
       if (wasHidden && !isEnter) return;
 
       // Center buttons: ◄ ► move between them, OK presses the focused one
@@ -832,9 +843,15 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       }
     };
 
+    // Letting go of the key ends the hold: the next press starts again at 10 s
+    const onKeyUp = (e: KeyboardEvent) => {
+      if ([37, 39, 412, 417].indexOf(e.keyCode) >= 0) seekHoldRef.current.release();
+    };
     window.addEventListener('keydown', onKeyDown, { capture: true });
+    window.addEventListener('keyup', onKeyUp, { capture: true });
     return () => {
       window.removeEventListener('keydown', onKeyDown, { capture: true });
+      window.removeEventListener('keyup', onKeyUp, { capture: true });
     };
   });
 
