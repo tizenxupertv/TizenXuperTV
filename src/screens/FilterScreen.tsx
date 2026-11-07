@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { VodItem } from '../types/vod';
 import { useScreenKeys } from '../hooks/useScreenKeys';
-import { PosterCard } from '../components/vod/PosterCard';
 import { FilterRoot } from '../lib/screenStack';
 import { FilterOptions, FilterValues, getFilterOptions, getFilteredPage } from '../services/catalogService';
 import { setTrackOffset } from '../utils/scrollHelper';
@@ -51,7 +50,8 @@ interface FilterRow {
 const NO_FILTERS: FilterValues = { tags: '', year: '', originalCountry: '', audio: '' };
 const ALL = { value: '', label: 'Todos' };
 
-const CARD_H = 250;
+/** Same card as Buscar (poster, then title and year · genre); its height is fixed so the rows keep one pitch */
+const CARD_H = 384;
 const GAP_Y = 16;
 const ROW_HEIGHT = CARD_H + GAP_Y;
 const COLS = 6;
@@ -391,6 +391,15 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
               <div className="browse-empty-icon">🎬</div>
               <div className="browse-empty-text">No hay títulos con estos filtros.</div>
             </div>
+          ) : results.total < 0 ? (
+            // First page on its way: cards of the same size, so the layout does not jump when the titles arrive
+            <div className="filter-grid-clip">
+              <div className="browse-cards-grid filter-grid">
+                {Array.from({ length: COLS * 3 }, (_, i) => (
+                  <div key={i} className="filter-skeleton skeleton-shimmer" />
+                ))}
+              </div>
+            </div>
           ) : (
             <div className="filter-grid-clip">
               <div className="browse-cards-grid filter-grid" ref={gridTrackRef}>
@@ -398,13 +407,30 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
                 {windowItems.map((item, i) => {
                   const idx = firstRow * COLS + i;
                   return (
-                    <PosterCard
+                    <div
                       key={`${item.id}-${idx}`}
-                      item={item}
-                      isFocused={area === 'grid' && idx === gridIndex}
-                      showImage={Math.floor(idx / COLS) <= maxLoadedRow}
-                      onActivate={onOpenVod}
-                    />
+                      className={`search-vod-card ${area === 'grid' && idx === gridIndex ? 'is-focused' : ''}`}
+                      onClick={() => onOpenVod(item)}
+                    >
+                      <div className="svc-poster-wrap">
+                        {Math.floor(idx / COLS) <= maxLoadedRow && (
+                          <img
+                            className="svc-poster"
+                            src={item.poster || 'assets/placeholder_vertical.png'}
+                            alt={item.title}
+                            onError={e => {
+                              (e.target as HTMLImageElement).src = 'assets/placeholder_vertical.png';
+                            }}
+                          />
+                        )}
+                        {item.score && <div className="svc-score-badge">★ {item.score}</div>}
+                        <div className="svc-kind-badge">{item.kind === 'serie' ? 'SERIE' : 'PELÍCULA'}</div>
+                      </div>
+                      <div className="svc-info">
+                        <div className="svc-title">{item.title}</div>
+                        <div className="svc-meta">{item.year} • {item.genres?.[0] || 'Contenido'}</div>
+                      </div>
+                    </div>
                   );
                 })}
               </div>

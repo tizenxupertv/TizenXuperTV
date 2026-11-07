@@ -6208,11 +6208,24 @@ html.xuper-vod-avplay .app-root,
 
 /* The grid scrolls inside its own area: the types and the menu stay where they are */
 .filter-grid-clip {
+  padding-top: 6px; /* room for the focused card, which lifts 4 px */
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
+
+.filter-skeleton {
+  height: 384px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Buscar's card inside the filter grid: fixed height, the poster takes what the info leaves */
+.filter-grid .search-vod-card { height: 384px; box-sizing: border-box; }
+.filter-grid .svc-poster-wrap { aspect-ratio: auto; flex: 1; min-height: 0; }
+.filter-grid .svc-info { flex-shrink: 0; }
 
 .filter-grid.browse-cards-grid {
   grid-template-columns: repeat(6, 1fr);
