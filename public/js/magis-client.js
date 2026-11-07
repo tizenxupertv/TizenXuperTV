@@ -32,11 +32,13 @@
   var USER_AGENT = 'okhttp/3.12.12';
   var CONTENT_TYPE = 'application/json;charset=utf-8';
   var SNTOKEN_SALT = 'ntFT65w6itH!lHCPw7D=@qnsFC5adD28';
-  var FIXED_MAC = '02:00:00:00:00:00';
   var FIXED_RESERVE1 = '583442714b345572434a4d5769637461545a735936413d3d';
   var FIXED_DRM_ID = '0iSGEyv2EqiS/nqI/I3hqdu12irw5Q3/uqrWvRFx9bM=';
   var UA_CDN = 'Ranger/4.9.4-17294ac0';
   var SESSION_STORAGE_KEY = 'xuper_magis_session_v1';
+  // This TV's identity for the portal (MACs and device ids), made up once and kept. Every install used to activate
+  // with the same MAC, so to the portal they all looked like one device.
+  var DEVICE_IDENTITY_KEY = 'xuper_magis_device_v1';
   var isBrowserEnv = typeof window !== 'undefined' && (
     window.location.hostname === 'localhost' ||
     window.location.hostname === '127.0.0.1' ||
@@ -245,6 +247,31 @@
       out += Math.floor(Math.random() * 16).toString(16);
     }
     return out;
+  }
+
+  /** Random MAC, locally administered and unicast (first byte xxxxxx10), like a virtual network card */
+  function randomMac() {
+    var hex = randomHex(6);
+    var first = (parseInt(hex.slice(0, 2), 16) & 0xfc) | 0x02;
+    return (('0' + first.toString(16)).slice(-2) + hex.slice(2)).replace(/(..)(?=.)/g, '$1:');
+  }
+
+  function deviceIdentity(fresh) {
+    var saved = null;
+    if (!fresh) {
+      try { saved = JSON.parse((window.localStorage && localStorage.getItem(DEVICE_IDENTITY_KEY)) || 'null'); } catch (e) {}
+    }
+    if (saved && saved.androidId && saved.etheMac) return saved;
+    var id = {
+      androidId: randomHex(8),
+      cpuId: randomHex(8),
+      serialNumber: randomHex(8),
+      etheMac: randomMac(),
+      gatewayMac: randomMac(),
+      wifiMac: randomMac()
+    };
+    try { if (window.localStorage) localStorage.setItem(DEVICE_IDENTITY_KEY, JSON.stringify(id)); } catch (e) {}
+    return id;
   }
 
   function md5(val) {
@@ -546,6 +573,10 @@
     if (session.ready && session.userId && session.userToken) {
       return callback(null, session);
     }
+    startSession(false, callback);
+  }
+
+  function startSession(freshIdentity, callback) {
     sessionWaiters.push(callback);
     if (sessionStarting) return;
 
@@ -556,12 +587,13 @@
     for (var k in FINGERPRINT_FIXED) {
       if (Object.prototype.hasOwnProperty.call(FINGERPRINT_FIXED, k)) fp[k] = FINGERPRINT_FIXED[k];
     }
-    fp.androidId = randomHex(8);
-    fp.cpuId = randomHex(8);
-    fp.serialNumber = randomHex(8);
-    fp.etheMac = randomHex(6).replace(/(..)(?=.)/g, '$1:');
-    fp.gatewayMac = randomHex(6).replace(/(..)(?=.)/g, '$1:');
-    fp.wifiMac = randomHex(6).replace(/(..)(?=.)/g, '$1:');
+    var identity = deviceIdentity(freshIdentity);
+    fp.androidId = identity.androidId;
+    fp.cpuId = identity.cpuId;
+    fp.serialNumber = identity.serialNumber;
+    fp.etheMac = identity.etheMac;
+    fp.gatewayMac = identity.gatewayMac;
+    fp.wifiMac = identity.wifiMac;
 
     function notifyWaiters(err, res) {
       sessionStarting = false;
@@ -585,7 +617,7 @@
         authVersion: '',
         authCode: '',
         preCode: '',
-        macAddr: FIXED_MAC,
+        macAddr: identity.etheMac,
         reserve1: '',
         openNum: 4,
         channel: 'default',
@@ -594,6 +626,18 @@
       };
 
       call('v8/active', activePayload, { baseFields: false }, function (aErr, aRes) {
+        // Activation refused for this identity (seen as code 100024): try once more as a new device
+        if (aErr && !freshIdentity && /100024$/.test(String(aErr.portalCode || ''))) {
+          console.warn('[MagisClient] v8/active refused (' + aErr.portalCode + '), retrying with a new device identity');
+          sessionStarting = false;
+          var waiting = sessionWaiters.slice(0);
+          sessionWaiters = [];
+          return startSession(true, function (rErr, rRes) {
+            for (var w = 0; w < waiting.length; w++) {
+              try { waiting[w](rErr, rRes); } catch (e) {}
+            }
+          });
+        }
         if (aErr) return notifyWaiters(aErr);
         var uId = trim(aRes && (aRes.userId || aRes.id || (aRes.userInfo && aRes.userInfo.userId)));
         var uTok = trim(aRes && (aRes.userToken || aRes.token || (aRes.userInfo && aRes.userInfo.userToken)));
@@ -1427,7 +1471,7 @@
         type: '0',
         sortType: '0',
         language: 'en',
-        macAddr: FIXED_MAC
+        macAddr: deviceIdentity(false).etheMac
       }, function (dErr, dRes) {
         var local = findItemInLocalCatalogs(cid);
         if (dErr) {
