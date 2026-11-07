@@ -355,7 +355,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       radio('size', SIZE_OPTS, 'size');
       radio('style', STYLE_OPTS, 'style');
     } else if (id === 'tabs') {
-      HIDEABLE_TABS.forEach(t => r.push([{ id: `tab-${t.id}`, onActivate: () => tabPrefs.setHidden(t.id, !tabPrefs.isHidden(t.id)) }]));
+      // One row of cards, like TV abierta: ◄ ► move between them
+      r.push(HIDEABLE_TABS.map(t => ({ id: `tab-${t.id}`, onActivate: () => tabPrefs.setHidden(t.id, !tabPrefs.isHidden(t.id)) })));
     } else if (id === 'parental') {
       if (!hasPin) {
         r.push([{ id: 'create', onActivate: () => onRequestPin('create') }]);
@@ -587,20 +588,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <p className="pf-note">
             Elige qué pestañas se muestran arriba. Lo que ocultes sigue disponible en Buscar y en Explorar.
           </p>
-          {HIDEABLE_TABS.map(t => {
-            const shown = !tabPrefs.isHidden(t.id);
-            return (
-              <div key={t.id} className={`pf-row pf-row-wide ${isF(`tab-${t.id}`) ? 'is-focused' : ''}`} onClick={tap(`tab-${t.id}`)}>
-                <div className="pf-row-label">
-                  <div className="pf-row-title">{t.name}</div>
-                  <div className="pf-row-desc">{shown ? 'Visible en la barra de arriba' : 'Oculta'}</div>
+          <div className="pf-iptv-grid" style={{ gridTemplateColumns: `repeat(${IPTV_COLUMNS}, 1fr)` }}>
+            {HIDEABLE_TABS.map(t => {
+              const shown = !tabPrefs.isHidden(t.id);
+              return (
+                <div key={t.id} className={`pf-iptv-card ${shown ? 'is-on' : ''} ${isF(`tab-${t.id}`) ? 'is-focused' : ''}`} onClick={tap(`tab-${t.id}`)}>
+                  <div className="pf-iptv-card-top">
+                    <div className="pf-iptv-card-name">{t.name}</div>
+                    <div className={`pf-switch ${shown ? 'on' : 'off'}`}>
+                      <span className="pf-switch-knob" />
+                    </div>
+                  </div>
                 </div>
-                <div className={`pf-switch ${shown ? 'on' : 'off'}`}>
-                  <span className="pf-switch-knob" />
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       );
     }
