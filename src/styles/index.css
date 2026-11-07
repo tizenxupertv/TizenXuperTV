@@ -7398,3 +7398,26 @@ html.xuper-vod-avplay .app-root,
 .pf-tg-qr { padding: 10px; border-radius: 12px; background: #ffffff; line-height: 0; flex-shrink: 0; }
 .pf-tg-name { font-size: 19px; font-weight: 800; color: #ffffff; }
 .pf-tg-desc { margin-top: 6px; font-size: 15px; font-weight: 500; line-height: 1.4; color: #94a3b8; }
+
+/* Perfil › Sobre nosotros: version and updates as a bar at the bottom of the panel */
+.pf-about { display: flex; flex-direction: column; min-height: calc(100vh - 68px - 96px); }
+.pf-update-bar {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 24px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  max-width: 1380px;
+}
+.pf-update-bar-text { min-width: 0; }
+.pf-update-bar-title { font-size: 19px; font-weight: 800; color: #ffffff; }
+.pf-update-bar-desc { margin-top: 4px; font-size: 15px; color: #94a3b8; }
+.pf-update-bar-actions { display: flex; gap: 12px; flex-shrink: 0; }
+
+.pf-about-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1380px; margin-top: 22px; }
+.pf-about-card { padding: 18px 22px; border-radius: 16px; background: rgba(255, 255, 255, 0.04); }
+.pf-about-card-title { font-size: 19px; font-weight: 800; color: #ffffff; }
+.pf-about-card-text { margin-top: 8px; font-size: 15px; line-height: 1.5; color: #94a3b8; }

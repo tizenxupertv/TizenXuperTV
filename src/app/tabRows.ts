@@ -69,6 +69,24 @@ export function heroItemsForTab(selectedTab: TabId, data: TabRowsData): VodItem[
   return featuredItems.slice(0, 8);
 }
 
+/**
+ * "Seguir viendo" of a tab: what was left unfinished that belongs to it. Películas and Series by the kind of title;
+ * Kids and Anime by the titles of that section; Destacados shows all. Explorar (platform rows) has none.
+ */
+function continueRow(selectedTab: TabId, data: TabRowsData): ContentRowDef | null {
+  const history = data.historyItems || [];
+  if (!history.length) return null;
+  const idsOf = (list: VodItem[]) => new Set((list || []).map(it => String(it.id)));
+  let items: HistoryItem[];
+  if (selectedTab === 'destacados') items = history;
+  else if (selectedTab === 'peliculas') items = history.filter(h => !h.series);
+  else if (selectedTab === 'series') items = history.filter(h => h.series);
+  else if (selectedTab === 'kids') { const ids = idsOf(data.kidsItems); items = history.filter(h => ids.has(String(h.id))); }
+  else if (selectedTab === 'anime') { const ids = idsOf(data.animeItems); items = history.filter(h => ids.has(String(h.id))); }
+  else return null;
+  return items.length ? { id: 'history', title: 'Seguir viendo', type: 'history', items } : null;
+}
+
 /** Rows shown for a VOD tab (Apple TV+ hierarchy) */
 export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowDef[] {
   const { historyItems, featuredItems, movieItems, seriesItems, kidsItems, animeItems, catalogRows } = data;
@@ -76,9 +94,8 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
 
   const portal = portalTabRows(selectedTab, data);
   if (portal.length > 0) {
-    if (selectedTab === 'destacados' && historyItems && historyItems.length > 0) {
-      list.push({ id: 'history', title: 'Seguir viendo', type: 'history', items: historyItems });
-    }
+    const resumeRow = continueRow(selectedTab, data);
+    if (resumeRow) list.push(resumeRow);
     return list.concat(portal);
   }
 
@@ -90,7 +107,7 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
     if (seriesItems && seriesItems.length > 0) {
       list.push({
         id: 'top_series',
-        title: 'Top 10: series en Xuper TV',
+        title: 'Top 10: series en TizenXuper TV',
         type: 'vod',
         isRanked: true,
         items: seriesItems.slice(0, 10)
@@ -99,7 +116,7 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
     if (movieItems && movieItems.length > 0) {
       list.push({
         id: 'top_movies',
-        title: 'Top 10: películas en Xuper TV',
+        title: 'Top 10: películas en TizenXuper TV',
         type: 'vod',
         isRanked: true,
         items: movieItems.slice(0, 10)
@@ -131,7 +148,7 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
     if (movieItems && movieItems.length > 5) {
       list.push({
         id: 'must_watch',
-        title: 'Éxitos imperdibles en Xuper TV',
+        title: 'Éxitos imperdibles en TizenXuper TV',
         type: 'vod',
         items: movieItems.slice(10, 26)
       });
@@ -175,7 +192,7 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
     if (featuredItems && featuredItems.length > 0) {
       list.push({
         id: 'new_releases',
-        title: 'Últimos estrenos en Xuper TV',
+        title: 'Últimos estrenos en TizenXuper TV',
         type: 'vod',
         items: featuredItems.slice(0, 16)
       });
@@ -184,7 +201,7 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
     if (movieItems && movieItems.length > 0) {
       list.push({
         id: 'top_movies',
-        title: 'Top 10: películas en Xuper TV',
+        title: 'Top 10: películas en TizenXuper TV',
         type: 'vod',
         isRanked: true,
         items: movieItems.slice(0, 10)
@@ -259,7 +276,7 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
     if (seriesItems && seriesItems.length > 0) {
       list.push({
         id: 'top_series',
-        title: 'Top 10: series en Xuper TV',
+        title: 'Top 10: series en TizenXuper TV',
         type: 'vod',
         isRanked: true,
         items: seriesItems.slice(0, 10)
@@ -373,7 +390,7 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
     const items = animeItems.length > 0 ? animeItems : seriesItems.slice(0, 15);
     list.push({
       id: 'anime_top',
-      title: 'Top 10: Anime en Xuper TV',
+      title: 'Top 10: Anime en TizenXuper TV',
       type: 'vod',
       isRanked: true,
       items: items.slice(0, 10)
@@ -427,6 +444,11 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
     });
   }
 
+  // Offline rows of the other tabs also start with what was left unfinished (Destacados adds it above)
+  if (selectedTab !== 'destacados') {
+    const resumeRow = continueRow(selectedTab, data);
+    if (resumeRow) list.unshift(resumeRow);
+  }
   return list;
 }
 

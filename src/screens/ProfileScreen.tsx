@@ -236,7 +236,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     const fromHistory = listTab === 'history';
     const ok = fromHistory ? historyService.removeEntry(id) : favoritesService.removeFavorite(id);
     setNotice(ok
-      ? { text: `«${title}» quitado ${fromHistory ? 'del historial' : 'de favoritos'}` }
+      ? { text: `«${title}» quitado ${fromHistory ? 'del historial' : 'de mi lista'}` }
       : { text: 'No se pudo quitar. Inténtalo de nuevo.', error: true });
   };
   // Edit mode ends when the list changes tab or section, or runs out of titles
@@ -495,7 +495,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <div className="pf-account-info">
               <div className="pf-account-id">{account ? account.name || 'Usuario de Telegram' : '—'}</div>
               <div className="pf-account-type">
-                Sesión iniciada con Telegram{account && account.username ? ` (@${account.username})` : ''} · tu historial y favoritos se quedan en este TV
+                Sesión iniciada con Telegram{account && account.username ? ` (@${account.username})` : ''} · tu historial y tu lista se quedan en este TV
               </div>
             </div>
             <div className={`pf-btn pf-btn-danger pf-logout ${isF('logout') ? 'is-focused' : ''}`} onClick={tap('logout')}>
@@ -505,7 +505,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <div className="pf-hr" />
           <div className="pf-tabs">
             <div className={`pf-tab ${listTab === 'history' ? 'is-selected' : ''} ${isF('tab-history') ? 'is-focused' : ''}`} onClick={tap('tab-history')}>Historial</div>
-            <div className={`pf-tab ${listTab === 'favs' ? 'is-selected' : ''} ${isF('tab-favs') ? 'is-focused' : ''}`} onClick={tap('tab-favs')}>Mis favoritos</div>
+            <div className={`pf-tab ${listTab === 'favs' ? 'is-selected' : ''} ${isF('tab-favs') ? 'is-focused' : ''}`} onClick={tap('tab-favs')}>Mi lista</div>
             {listItems.length > 0 && (
               <div className={`pf-btn pf-list-action ${editMode ? 'is-on' : ''} ${isF('edit-list') ? 'is-focused' : ''}`} onClick={tap('edit-list')}>
                 {editMode ? 'Listo' : 'Quitar títulos'}
@@ -687,7 +687,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         <div className="pf-diag">
           <h2 className="pf-title">Diagnóstico de red</h2>
           <p className="pf-note">
-            Comprueba si el televisor llega a los servidores de XuperTV y mide tu internet, todo con un solo botón. Si un canal o una película no se ve,
+            Comprueba si el televisor llega a los servidores de TizenXuper TV y mide tu internet, todo con un solo botón. Si un canal o una película no se ve,
             envíanos un reporte justo después: incluye el modelo de la TV, la red, la velocidad y los últimos errores de reproducción.
           </p>
           <div className="pf-diag-actions">
@@ -775,32 +775,24 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         <h2 className="pf-title">Sobre nosotros</h2>
         <div className="pf-hr" />
         <p className="pf-about-body">
-          Xuper TV se dedica a ofrecer a los usuarios una amplia variedad de recursos de alta calidad. Aquí encontrarás
-          miles de películas, series, animes y canales en vivo, todo reunido en un solo lugar. Brindamos una experiencia
-          estable, diversa y siempre actualizada, además de contenidos gratuitos para disfrutar.
+          TizenXuper TV es una interfaz hecha para televisores Samsung: pensada para el control remoto, rápida, ordenada y
+          cómoda de usar. No producimos ni alojamos contenido: el catálogo y los canales vienen de servicios de terceros, y
+          nos ocupamos de que se vean y se manejen bien.
         </p>
-        <div className="pf-about-port">TizenXuperTV · v{accountService.deviceInfo().version}</div>
-        <div className="pf-about-update">
-          {updateChecking
-            ? 'Buscando actualizaciones…'
-            : updateResult === 'uptodate' ? 'Estás al día.'
-            : updateResult === 'downloaded' ? `Versión ${updateService.status().downloaded} descargada. Reinicia para estrenarla.`
-            : updateResult === 'reinstall' ? 'Hay una versión nueva que se instala con Apps2Samsung.'
-            : updateResult === 'error' ? 'No se pudo comprobar. Revisa la conexión e inténtalo de nuevo.'
-            : updateLine(updateService.status())}
-        </div>
-        {updateService.status().canSelfUpdate && (
-          <div className="pf-about-actions">
-            <div className={`pf-btn ${isF('update-check') ? 'is-focused' : ''}`} onClick={tap('update-check')}>
-              {updateChecking ? 'Buscando…' : 'Buscar actualizaciones'}
-            </div>
-            {updateService.status().downloaded && (
-              <div className={`pf-btn ${isF('update-restart') ? 'is-focused' : ''}`} onClick={tap('update-restart')}>
-                Reiniciar para actualizar
-              </div>
-            )}
+        <div className="pf-about-cards">
+          <div className="pf-about-card">
+            <div className="pf-about-card-title">Lo que hacemos</div>
+            <div className="pf-about-card-text">Navegación pensada para el control, filtros y búsqueda, fichas claras, un reproductor cómodo, tu lista y tu historial en la TV, y actualizaciones automáticas.</div>
           </div>
-        )}
+          <div className="pf-about-card">
+            <div className="pf-about-card-title">Lo que no hacemos</div>
+            <div className="pf-about-card-text">No somos dueños del contenido ni de los servicios que lo ofrecen. La disponibilidad de películas, series y canales depende de ellos.</div>
+          </div>
+          <div className="pf-about-card">
+            <div className="pf-about-card-title">Un proyecto independiente</div>
+            <div className="pf-about-card-text">Gratuito, hecho por la comunidad y mantenido con tu ayuda. Si algo falla o tienes ideas, cuéntanos por Telegram.</div>
+          </div>
+        </div>
         <h3 className="pf-subtitle">Telegram</h3>
         <p className="pf-about-body">Escanea un código con la cámara de tu teléfono.</p>
         <div className="pf-tg-grid">
@@ -813,6 +805,33 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               </div>
             </div>
           ))}
+        </div>
+        {/* Version and updates as a bar at the bottom: the text at the left, the actions at the right */}
+        <div className="pf-update-bar">
+          <div className="pf-update-bar-text">
+            <div className="pf-update-bar-title">TizenXuper TV · v{accountService.deviceInfo().version}</div>
+            <div className="pf-update-bar-desc">
+              {updateChecking
+                ? 'Buscando actualizaciones…'
+                : updateResult === 'uptodate' ? 'Estás al día.'
+                : updateResult === 'downloaded' ? `Versión ${updateService.status().downloaded} descargada. Reinicia para estrenarla.`
+                : updateResult === 'reinstall' ? 'Hay una versión nueva que se instala con Apps2Samsung.'
+                : updateResult === 'error' ? 'No se pudo comprobar. Revisa la conexión e inténtalo de nuevo.'
+                : updateLine(updateService.status())}
+            </div>
+          </div>
+          {updateService.status().canSelfUpdate && (
+            <div className="pf-update-bar-actions">
+              <div className={`pf-btn ${isF('update-check') ? 'is-focused' : ''}`} onClick={tap('update-check')}>
+                {updateChecking ? 'Buscando…' : 'Buscar actualizaciones'}
+              </div>
+              {updateService.status().downloaded && (
+                <div className={`pf-btn ${isF('update-restart') ? 'is-focused' : ''}`} onClick={tap('update-restart')}>
+                  Reiniciar para actualizar
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );

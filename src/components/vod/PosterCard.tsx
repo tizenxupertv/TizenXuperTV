@@ -59,7 +59,7 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
   const wideSubtitle = `${categoryName} · ${genresStr}`;
   const wideTagline = item.score && parseFloat(item.score) >= 8.5
     ? `★ ${item.score} · Aclamada por la crítica`
-    : `Top 10 en Xuper TV`;
+    : `Top 10 en TizenXuper TV`;
 
   const metaSubtitle = item.score && item.score !== '0'
     ? `★ ${item.score} · ${item.year && item.year !== '—' ? item.year : '2024'}`
