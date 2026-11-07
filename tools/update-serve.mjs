@@ -16,14 +16,15 @@ const DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../build/update');
 const port = Number(process.argv[2]) || 8098;
 
 createServer((req, res) => {
-  const path = new URL(req.url || '/', 'http://local').pathname;
+  const url = new URL(req.url || '/', 'http://local');
+  const path = url.pathname;
   const headers = { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store', 'Content-Type': 'application/json' };
   let file = '';
   if (path === '/tv/update') file = join(DIR, 'update-manifest.json');
   const m = path.match(/^\/tv\/update\/bundle\/(\d+(?:\.\d+){1,3})$/);
   if (m) file = join(DIR, `update-bundle-${m[1]}.json`);
   const ok = req.method === 'GET' && file && existsSync(file);
-  console.log(`${new Date().toISOString().slice(11, 19)} ${req.method} ${path} ${ok ? 200 : 404}`);
+  console.log(`${new Date().toISOString().slice(11, 19)} ${req.method} ${path}${url.search} ${ok ? 200 : 404}`);
   if (!ok) {
     res.writeHead(404, headers);
     return res.end('{"error":"no_update"}');
