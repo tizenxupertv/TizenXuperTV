@@ -36,6 +36,7 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
   const [phase, setPhase] = useState<Phase>(() => {
     if (testParam === 'error' || testParam === 'help') return { name: 'error' };
     if (testParam === 'expired') return { name: 'expired' };
+    if (testParam === 'done') return { name: 'done', userName: 'Ana' };
     return { name: 'loading', retryCount: 0 };
   });
   const [attempt, setAttempt] = useState(0);
@@ -51,7 +52,7 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
   // Ask for a code with automatic retry backoff, then poll until linked
   useEffect(() => {
     // If testing forced state locally, skip API calls
-    if (testParam === 'error' || testParam === 'help' || testParam === 'expired' || testParam === 'loading') {
+    if (testParam === 'error' || testParam === 'help' || testParam === 'expired' || testParam === 'loading' || testParam === 'done') {
       return;
     }
 
@@ -210,6 +211,22 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
               <div className="tg-login-timer">
                 <span className="tg-login-timer-icon">⏱</span>
                 <span>El código vence en <b>{countdown(remainingMs)}</b></span>
+              </div>
+            </>
+          ) : phase.name === 'done' ? (
+            <>
+              <div className="tg-login-placeholder-card is-done">
+                <div className="tg-login-placeholder-qr is-done">
+                  <svg viewBox="0 0 64 64" width="88" height="88" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="32" cy="32" r="26" />
+                    <path d="M20 33l8 8 16-17" />
+                  </svg>
+                </div>
+                <div className="tg-login-placeholder-label is-done">TV vinculada</div>
+              </div>
+              <div className="tg-login-timer is-done">
+                <span className="tg-login-spinner"></span>
+                <span>Abriendo TizenXuper TV…</span>
               </div>
             </>
           ) : (
