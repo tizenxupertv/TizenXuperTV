@@ -34,7 +34,7 @@ import { useVodDetail } from './app/useVodDetail';
 import { useParentalGuards } from './app/useParentalGuards';
 import { heroItemsForTab, buildTabRows, rowHasSeeAll, browseTargetForRow, portalRootForTab } from './app/tabRows';
 import { handleFullscreenLiveKeys } from './app/keys/fullscreenLiveKeys';
-import { handleVodDetailKeys } from './app/keys/vodDetailKeys';
+import { handleVodDetailKeys, settingPosition } from './app/keys/vodDetailKeys';
 import { handleHeaderKeys } from './app/keys/headerKeys';
 import { handleLiveTvKeys } from './app/keys/liveTvKeys';
 import { handleVodTabsKeys } from './app/keys/vodTabsKeys';
@@ -711,8 +711,7 @@ export const App: React.FC = () => {
           onSelectRelated={rel => handleOpenDetail(rel)}
           onDetailLoaded={counts => setDetailCounts(counts)}
           onOpenAudioModal={col => {
-            const st = settingsService.get();
-            const current = col === 'audio' ? st.audio : col === 'subs' ? subtitleChoiceIndex(st) : col === 'quality' ? st.quality || 0 : 0;
+            const current = col === 'menu' ? 0 : settingPosition(col, detail.detailCounts);
             setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: col, modalIndex: current, quickIndex: 1 }));
           }}
           onCloseAudioModal={() => setDetailFocus(prev => ({ ...prev, area: 'quick', quickIndex: 1 }))}

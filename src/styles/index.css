@@ -2307,6 +2307,11 @@ html, body {
   position: relative;
   z-index: 10;
   padding: 100px 64px 60px 64px; /* under the screen header */
+  /* Fills the screen: a short page (a movie) keeps its related titles at the bottom instead of leaving it empty */
+  min-height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .vod-detail-header-block {
@@ -2512,6 +2517,12 @@ html, body {
 /* Series Section */
 .vod-detail-series-section {
   margin-bottom: 44px;
+  /* The episode row moves as a transform track and its parent (this section) clips it (utils/scrollHelper.ts):
+     the focused tile grows by 8%, so the section needs room at the sides or the first tile is cut at the left.
+     Padding and negative margin cancel out: everything stays aligned with the title. */
+  padding: 0 16px;
+  margin-left: -16px;
+  margin-right: -16px;
 }
 
 .vod-series-header {
@@ -2824,7 +2835,8 @@ html, body {
 
 /* Related Section (uses unified PosterCard component) */
 .vod-detail-related-section {
-  margin-top: 14px;
+  margin-top: auto;
+  padding-top: 14px;
 }
 
 .vod-related-slider {
@@ -4324,8 +4336,9 @@ html, body {
   z-index: 7;
   padding: 24px 32px;
   border-radius: 20px;
-  background: rgba(17, 22, 34, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  /* Same neutral grays as the rest of the player (control pill, menus), not the blue of the app's panels */
+  background: rgba(28, 28, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   color: #ffffff;
   left: 50%;
   top: 50%;
@@ -4339,10 +4352,32 @@ html, body {
   font-weight: 800;
 }
 
+.vod-player-error-keys {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+.vod-player-error-key {
+  padding: 5px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+.vod-player-error-key + span + .vod-player-error-key { margin-left: 14px; }
+
 .vod-player-error-hint {
   margin-top: 10px;
   font-size: 14px;
-  color: #94a3b8;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 /* Next Episode Card (Clean & Fast, Apple TV Grays) */
