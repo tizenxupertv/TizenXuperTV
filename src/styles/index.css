@@ -3681,6 +3681,11 @@ html, body {
   margin-top: 3px;
 }
 
+.svc-skeleton { pointer-events: none; }
+.svc-skeleton .svc-poster-wrap { background: rgba(255, 255, 255, 0.06); }
+.svc-skeleton-line { height: 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); }
+.svc-skeleton-line.is-short { width: 55%; margin-top: 8px; height: 10px; }
+
 .search-empty-state {
   margin: auto;
   padding: 60px 20px;
