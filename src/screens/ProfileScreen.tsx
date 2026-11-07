@@ -9,7 +9,7 @@ import { settingsService } from '../services/settingsService';
 import { parentalService } from '../services/parentalService';
 import { diagnosticService, DiagReport } from '../services/diagnosticService';
 import { iptvService, IPTV_LISTS } from '../services/iptvService';
-import { accountService } from '../services/accountService';
+import { accountService, tvBuildInfo } from '../services/accountService';
 import { updateService, type UpdateStatus } from '../services/updateService';
 import { playbackEvents } from '../lib/playbackLog';
 import { formatSpeed, runSpeedTest, SpeedResult, streamingVerdict } from '../lib/speedTest';
@@ -171,6 +171,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     } catch (e) {}
     const now = new Date();
     const local = `${now.getHours() < 10 ? '0' : ''}${now.getHours()}:${now.getMinutes() < 10 ? '0' : ''}${now.getMinutes()}`;
+    const build = tvBuildInfo();
     accountService.sendReport({
       app: version,
       model,
@@ -179,6 +180,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       diag: report ? { verdict: report.verdict, portalMs: report.portalMs, cdns: report.cdns } : null,
       events: [
         ...playbackEvents(),
+        ...(build ? [{ at: now.getTime(), local, kind: 'info', channel: 'Televisor', detail: build }] : []),
         ...(caps ? [{ at: now.getTime(), local, kind: 'info', channel: 'Formatos del reproductor', detail: caps }] : []),
         ...(speed ? [{
           at: now.getTime(), local, kind: 'info', channel: 'Velocidad de internet',

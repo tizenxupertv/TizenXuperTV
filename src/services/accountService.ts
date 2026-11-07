@@ -252,6 +252,30 @@ export type AccountService = ReturnType<typeof createAccountService>;
 
 declare const __APP_VERSION__: string;
 
+/**
+ * Firmware and model code for the support report, e.g. "Firmware T-KSU2EFUABC-0090-1300.9 · modelo 24_PONTUSM_UHD (2024)":
+ * playback problems often depend on the firmware. Needs the productinfo privilege (already in config.xml); '' in a browser.
+ */
+export function tvBuildInfo(
+  productinfo: any = typeof window !== 'undefined' && (window as any).webapis ? (window as any).webapis.productinfo : null
+): string {
+  if (!productinfo) return '';
+  const read = (fn: string): string => {
+    try {
+      return typeof productinfo[fn] === 'function' ? String(productinfo[fn]() || '').trim() : '';
+    } catch (e) {
+      return '';
+    }
+  };
+  const firmware = read('getFirmware');
+  const code = read('getModelCode');
+  const year = /^(\d{2})_/.exec(code);
+  return [firmware && `Firmware ${firmware}`, code && `modelo ${code}${year ? ` (20${year[1]})` : ''}`]
+    .filter(Boolean)
+    .join(' · ')
+    .slice(0, 120);
+}
+
 /** TV model and Tizen version for support, e.g. "UN50U8000FKXZL · Tizen 9.0" (empty in a browser) */
 function tvModel(): string {
   const w = window as any;

@@ -169,3 +169,15 @@ test('sendReport without a session does not call the server', async () => {
   assert.equal(await service.sendReport({}), 'signed_out');
   assert.equal(sent.length, 0);
 });
+
+test('firmware and model code for the report; nothing outside a TV or when a call throws', async () => {
+  const { tvBuildInfo } = await import('../src/services/accountService.ts');
+  assert.equal(
+    tvBuildInfo({ getFirmware: () => 'T-KSU2EFUABC-0090-1300.9', getModelCode: () => '24_PONTUSM_UHD' }),
+    'Firmware T-KSU2EFUABC-0090-1300.9 · modelo 24_PONTUSM_UHD (2024)'
+  );
+  assert.equal(tvBuildInfo({ getFirmware: () => 'T-X', getModelCode: () => { throw new Error('denied'); } }), 'Firmware T-X');
+  assert.equal(tvBuildInfo({ getModelCode: () => 'UNKNOWN' }), 'modelo UNKNOWN');
+  assert.equal(tvBuildInfo(null), '');
+  assert.equal(tvBuildInfo(), '');
+});
