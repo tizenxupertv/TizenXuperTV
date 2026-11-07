@@ -9,6 +9,7 @@ import { settingsService } from '../services/settingsService';
 import { parentalService } from '../services/parentalService';
 import { diagnosticService, DiagReport } from '../services/diagnosticService';
 import { iptvService, IPTV_LISTS } from '../services/iptvService';
+import { HIDEABLE_TABS, tabPrefs } from '../services/tabPrefs';
 import { accountService, tvBuildInfo } from '../services/accountService';
 import { updateService, type UpdateStatus } from '../services/updateService';
 import { playbackEvents } from '../lib/playbackLog';
@@ -51,6 +52,7 @@ interface Cell {
 const SECTIONS = [
   { id: 'account', label: 'Mi perfil', icon: '<circle cx="16" cy="10" r="5"/><path d="M6 27c.7-6 4.3-9 10-9s9.3 3 10 9"/>' },
   { id: 'playback', label: 'Configuración global', icon: '<rect x="4" y="6" width="24" height="20" rx="3"/><path d="M13 11l8 5-8 5z"/>' },
+  { id: 'tabs', label: 'Pestañas', icon: '<rect x="4" y="8" width="24" height="18" rx="2"/><path d="M4 13h24M12 8v5M20 8v5"/>' },
   { id: 'parental', label: 'Bloqueo', icon: '<rect x="7" y="14" width="18" height="14" rx="2"/><path d="M11 14V10a5 5 0 0 1 10 0v4"/><path d="M16 19v4"/>' },
   { id: 'iptv', label: 'TV abierta', icon: '<rect x="4" y="9" width="24" height="16" rx="2"/><path d="M11 4l5 5 5-5"/><path d="M12 29h8"/>' },
   { id: 'diag', label: 'Diagnóstico', icon: '<path d="M3 13a19 19 0 0 1 26 0"/><path d="M8 18a12 12 0 0 1 16 0"/><path d="M13 23a6 6 0 0 1 6 0"/><circle cx="16" cy="27.5" r="1.2"/>' },
@@ -147,7 +149,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       parentalService.subscribe(rerender),
       iptvService.subscribe(rerender),
       accountService.subscribe(rerender),
-      updateService.subscribe(rerender)
+      updateService.subscribe(rerender),
+      tabPrefs.subscribe(rerender)
     ];
     return () => {
       unsubs.forEach(u => u());
@@ -351,6 +354,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       radio('subLang', AUDIO_OPTS, 'subLang');
       radio('size', SIZE_OPTS, 'size');
       radio('style', STYLE_OPTS, 'style');
+    } else if (id === 'tabs') {
+      HIDEABLE_TABS.forEach(t => r.push([{ id: `tab-${t.id}`, onActivate: () => tabPrefs.setHidden(t.id, !tabPrefs.isHidden(t.id)) }]));
     } else if (id === 'parental') {
       if (!hasPin) {
         r.push([{ id: 'create', onActivate: () => onRequestPin('create') }]);
@@ -571,6 +576,31 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           {radioRow('Idioma', 'subLang', AUDIO_OPTS, settings.subLang)}
           {radioRow('Tamaño', 'size', SIZE_OPTS, settings.size)}
           {radioRow('Estilo', 'style', STYLE_OPTS, settings.style)}
+        </div>
+      );
+    }
+
+    if (id === 'tabs') {
+      return (
+        <div className="pf-parental">
+          <h2 className="pf-title">Pestañas</h2>
+          <p className="pf-note">
+            Elige qué pestañas se muestran arriba. Lo que ocultes sigue disponible en Buscar y en Explorar.
+          </p>
+          {HIDEABLE_TABS.map(t => {
+            const shown = !tabPrefs.isHidden(t.id);
+            return (
+              <div key={t.id} className={`pf-row pf-row-wide ${isF(`tab-${t.id}`) ? 'is-focused' : ''}`} onClick={tap(`tab-${t.id}`)}>
+                <div className="pf-row-label">
+                  <div className="pf-row-title">{t.name}</div>
+                  <div className="pf-row-desc">{shown ? 'Visible en la barra de arriba' : 'Oculta'}</div>
+                </div>
+                <div className={`pf-switch ${shown ? 'on' : 'off'}`}>
+                  <span className="pf-switch-knob" />
+                </div>
+              </div>
+            );
+          })}
         </div>
       );
     }
