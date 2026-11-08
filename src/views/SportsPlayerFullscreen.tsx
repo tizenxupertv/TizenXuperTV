@@ -279,7 +279,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         return;
       }
 
-      // Watching: the first key only shows the bar; ◄ ► move along the signals, OK switches, Back hides the bar
+      // Watching: the first key only shows the bar; ▲ ▼ move along the signals, OK switches, Back hides the bar
       if (!osdVisibleRef.current) {
         if (isBack) { e.preventDefault(); onClose(); return; }
         e.preventDefault();
@@ -288,8 +288,8 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         return;
       }
       triggerOsd();
-      if (e.key === 'ArrowLeft') { e.preventDefault(); setServerMenuIdx(i => Math.max(0, i - 1)); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); setServerMenuIdx(i => Math.min(streams.length - 1, i + 1)); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setServerMenuIdx(i => Math.max(0, i - 1)); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); setServerMenuIdx(i => Math.min(streams.length - 1, i + 1)); }
       else if (e.key === 'Enter') { e.preventDefault(); if (serverMenuIdx !== currentStreamIdx) setCurrentStreamIdx(serverMenuIdx); }
       else if (isBack) { e.preventDefault(); hideOsd(); }
     };
@@ -386,18 +386,19 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
           </div>
           {streams.length > 1 && (
             <div className="spp-bar-signals">
-              <span className="spp-bar-label">Señal</span>
+              <div className="spp-bar-label">Señal</div>
               {streams.map((st, idx) => (
                 <div
                   key={idx}
                   className={`spp-chip ${idx === serverMenuIdx ? 'is-focused' : ''} ${idx === currentStreamIdx ? 'is-playing' : ''} ${failed.has(idx) ? 'is-failed' : ''}`}
                   onClick={() => setCurrentStreamIdx(idx)}
                 >
-                  {idx === currentStreamIdx && <span className="spp-chip-dot" />}
-                  {st.name}
+                  <span className="spp-chip-name">{st.name}</span>
+                  {idx === currentStreamIdx && <span className="spp-chip-tag">Viendo</span>}
+                  {failed.has(idx) && idx !== currentStreamIdx && <span className="spp-chip-tag is-failed">No disponible</span>}
                 </div>
               ))}
-              <span className="spp-bar-hint">◄ ► · OK para cambiar</span>
+              <div className="spp-bar-hint">▲ ▼ · OK para cambiar</div>
             </div>
           )}
         </div>
