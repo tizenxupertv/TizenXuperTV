@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { TabId, TABS, getTabs } from './components/layout/TopNavbar';
+import { TabId, getTabs } from './components/layout/TopNavbar';
+import { tabPrefs } from './services/tabPrefs';
 import { parentalService } from './services/parentalService';
 import { Header } from './components/layout/Header';
 import { DestacadosView, DestacadosFocus, ContentRowDef } from './views/DestacadosView';
@@ -42,12 +43,15 @@ import { handleHeaderKeys } from './app/keys/headerKeys';
 import { handleLiveTvKeys } from './app/keys/liveTvKeys';
 import { handleVodTabsKeys } from './app/keys/vodTabsKeys';
 import { getTrackOffset, setTrackOffset } from './utils/scrollHelper';
+import { updateService } from './services/updateService';
+import { UpdateReady } from './components/common/UpdateReady';
 
 export const App: React.FC = () => {
   // Read initial tab from URL if present (useful for deep-links & testing)
   const initialTabParam = (new URLSearchParams(window.location.search).get('tab') as TabId) || 'destacados';
-  const validInitialTab = TABS.some(t => t.id === initialTabParam) ? initialTabParam : 'destacados';
-  const initialTabIdx = TABS.findIndex(t => t.id === validInitialTab);
+  const initialTabs = getTabs(false, tabPrefs.hidden());
+  const validInitialTab = initialTabs.some(t => t.id === initialTabParam) ? initialTabParam : 'destacados';
+  const initialTabIdx = initialTabs.findIndex(t => t.id === validInitialTab);
 
   // Navigation / Focus State
   // Domains: 'header' | 'content'
@@ -134,6 +138,25 @@ export const App: React.FC = () => {
       }
     }, 5 * 60 * 1000);
   }, [activeVodPlayer, isFullscreenLive]);
+
+  // ---------- A downloaded update (services/updateService.ts): a TV app is rarely started from scratch, so it is not
+  // left for the next launch. Restarting = reloading the page (public/js/boot.js starts the new version).
+  const [, setUpdateTick] = useState(0);
+  useEffect(() => updateService.subscribe(() => setUpdateTick(t => t + 1)), []);
+  const isPlaying = !!activeVodPlayer || isFullscreenLive;
+  const playingRef = useRef(isPlaying);
+  playingRef.current = isPlaying;
+  // Back from another app or with the screen on again: apply it right away, unless a video is playing
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden && !playingRef.current && updateService.status().downloaded) window.location.reload();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+  // Or ask for it: a blocking "Reiniciar ahora", never over a video (it waits for the video to end)
+  const readyVersion = updateService.status().downloaded;
+  const showUpdateReady = !!readyVersion && !isPlaying;
 
   useEffect(() => {
     resetScreensaverTimer();
@@ -364,7 +387,22 @@ export const App: React.FC = () => {
   // "+18" tab: shown only when enabled in Perfil › Bloqueo; opens the adult section after the PIN
   const [adultEnabled, setAdultEnabled] = useState<boolean>(() => parentalService.isAdultEnabled());
   useEffect(() => parentalService.subscribe(() => setAdultEnabled(parentalService.isAdultEnabled())), []);
-  const tabs = useMemo(() => getTabs(adultEnabled), [adultEnabled]);
+  // Kids / Anime can be hidden in Perfil › Pestañas
+  const [hiddenTabs, setHiddenTabs] = useState<TabId[]>(() => tabPrefs.hidden());
+  useEffect(() => tabPrefs.subscribe(() => setHiddenTabs(tabPrefs.hidden())), []);
+  const tabs = useMemo(() => getTabs(adultEnabled, hiddenTabs), [adultEnabled, hiddenTabs]);
+  // Search, filter and profile follow the tabs in the header: keep their focus when the number of tabs changes
+  const tabCountRef = useRef(tabs.length);
+  useEffect(() => {
+    const delta = tabs.length - tabCountRef.current;
+    const oldCount = tabCountRef.current;
+    tabCountRef.current = tabs.length;
+    if (delta) setHeaderFocusIndex(i => (i >= oldCount ? i + delta : Math.min(i, tabs.length - 1)));
+  }, [tabs.length]);
+  // A hidden tab cannot stay selected
+  useEffect(() => {
+    if (hiddenTabs.indexOf(selectedTab) >= 0) setSelectedTab('destacados');
+  }, [hiddenTabs, selectedTab]);
   const openAdult = useCallback(() => {
     const go = () => push({ id: 'browse', root: 'adult', title: 'Adultos +18' });
     if (parentalService.isAdultEnabled()) requestPin('unlock', go);
@@ -384,9 +422,9 @@ export const App: React.FC = () => {
   // Helper to return to the active tab in header
   const returnToHeader = useCallback(() => {
     setFocusDomain('header');
-    const curTabIdx = TABS.findIndex(t => t.id === selectedTab);
+    const curTabIdx = tabs.findIndex(t => t.id === selectedTab);
     setHeaderFocusIndex(curTabIdx !== -1 ? curTabIdx : 1);
-  }, [selectedTab]);
+  }, [selectedTab, tabs]);
 
   // Handle D-pad Navigation: routes each key to the handler of the active screen.
   // Kept in a ref so the window listener never runs with stale state.
@@ -760,6 +798,10 @@ export const App: React.FC = () => {
             setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: SETTINGS_ROW[col] }));
           }}
         />
+      )}
+
+      {showUpdateReady && (
+        <UpdateReady version={readyVersion} onRestart={() => window.location.reload()} />
       )}
 
       {/* Fullscreen Cinema Player (VOD & Trailers) */}

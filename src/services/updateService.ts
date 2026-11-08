@@ -14,8 +14,8 @@ import {
 
 const UPDATE_API = (typeof __UPDATE_API__ !== 'undefined' && __UPDATE_API__) || ACCOUNT_API;
 const FIRST_CHECK_MS = 60 * 1000;
-/** Back in front after this long without a check: check again */
-const WAKE_GAP_MS = 3600 * 1000;
+/** Back in front: check again, unless the last check is fresher than this (quick back-and-forth with another app) */
+const WAKE_GAP_MS = 2 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 30 * 1000;
 const LAST_KEY = 'xuper_update_last';
 /** Last running update version the "Actualizado" notice was shown for */
