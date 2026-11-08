@@ -152,6 +152,25 @@ function homeRoot(root: string, low: boolean): Promise<any[]> {
   });
 }
 
+function fetchCompositeHome(): Promise<any[]> {
+  return new Promise((resolve) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.getHome !== 'function') return resolve([]);
+    client.getHome((err: any, res: any) => {
+      if (err || !res) return resolve([]);
+      const items: any[] = [];
+      const blocks = res.homeBlockList || res.blockBeanList || res.shelveList || [];
+      for (const b of blocks) {
+        const assets = b.shelveAssetList || b.assetList || b.dataList || [];
+        for (const a of assets) {
+          if (a && (a.contentId || a.id)) items.push(a);
+        }
+      }
+      resolve(items);
+    });
+  });
+}
+
 /** Downloads every root's rows; saves them when complete enough */
 /** `low`: background refresh, behind every request the user is waiting for */
 function fetchLiveCatalog(low = false): Promise<any[]> {
@@ -168,7 +187,10 @@ function fetchLiveCatalog(low = false): Promise<any[]> {
         (acc, root) => acc.then(lists => idle().then(() => homeRoot(root, true)).catch(() => [] as any[]).then(items => lists.concat([items]))),
         Promise.resolve([])
       )
-    : Promise.all(LIVE_ROOTS.map(root => homeRoot(root, false).catch(() => [] as any[])));
+    : Promise.all([
+        ...LIVE_ROOTS.map(root => homeRoot(root, false).catch(() => [] as any[])),
+        fetchCompositeHome().catch(() => [] as any[])
+      ]);
   liveInFlight = roots.then(lists => {
     const items = ([] as any[]).concat(...lists);
     console.log(`[catalog] live catalog: ${items.length} items in ${Date.now() - t0} ms`);
