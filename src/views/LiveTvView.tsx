@@ -64,6 +64,79 @@ export const DEFAULT_LIVE_CATEGORIES: LiveCategory[] = [
   { id: 'addons', name: '➕ Addons M3U', isM3u: true }
 ];
 
+export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
+  {
+    id: 'wiwy-espn-1',
+    code: 'wiwy-espn-1',
+    name: 'ESPN',
+    url: 'https://barinaslive1.boldmss.com/ESPN/ESPN.isml/ESPN.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
+    now: 'En vivo · ESPN',
+    next: 'Programación deportiva',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-2',
+    code: 'wiwy-espn-2',
+    name: 'ESPN 2',
+    url: 'https://barinaslive1.boldmss.com/ESPN_2/ESPN_2.isml/ESPN_2.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-2-us.png',
+    now: 'En vivo · ESPN 2',
+    next: 'Programación deportiva',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-3',
+    code: 'wiwy-espn-3',
+    name: 'ESPN 3',
+    url: 'https://barinaslive1.boldmss.com/ESPN_3/ESPN_3.isml/ESPN_3.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-3-us.png',
+    now: 'En vivo · ESPN 3',
+    next: 'Programación deportiva',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-4',
+    code: 'wiwy-espn-4',
+    name: 'ESPN 4',
+    url: 'https://barinaslive1.boldmss.com/ESPN_4/ESPN_4.isml/ESPN_4.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-4-us.png',
+    now: 'En vivo · ESPN 4',
+    next: 'Programación deportiva',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-5',
+    code: 'wiwy-espn-5',
+    name: 'ESPN 5',
+    url: 'https://barinaslive1.boldmss.com/ESPN_5/ESPN_5.isml/ESPN_5.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
+    now: 'En vivo · ESPN 5',
+    next: 'Programación deportiva',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-6',
+    code: 'wiwy-espn-6',
+    name: 'ESPN 6',
+    url: 'https://barinaslive1.boldmss.com/ESPN_6/ESPN_6.isml/ESPN_6.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
+    now: 'En vivo · ESPN 6',
+    next: 'Programación deportiva',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-7',
+    code: 'wiwy-espn-7',
+    name: 'ESPN 7',
+    url: 'https://barinaslive1.boldmss.com/ESPN_7/ESPN_7.isml/ESPN_7.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
+    now: 'En vivo · ESPN 7',
+    next: 'Programación deportiva',
+    time: 'EN VIVO'
+  }
+];
+
 export interface LiveTvFocus {
   area: 'cats' | 'channels' | 'preview_btns';
   catIndex: number;
@@ -499,7 +572,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       return;
     }
 
-    // ESPN category: curated aggregation of all ESPN feeds (analogous to Cactus TV live-view)
+    // ESPN category: direct verified ESPN feeds (analogous to Cactus TV / WiwyXuper) + portal feeds
     if (activeCategory.id === 'espn' || activeCategory.isEspn) {
       const isEspnChannel = (name: string) => /\bespn\b/i.test(name) || /^espn/i.test(name.trim());
       const sortEspn = (a: LiveChannel, b: LiveChannel) => {
@@ -511,77 +584,32 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         return a.name.localeCompare(b.name);
       };
 
-      if (categoryChannelsCache.has('espn')) {
-        const cached = filterLockedChannels(categoryChannelsCache.get('espn')!, categories, 'espn');
-        setChannels(cached);
-        setIsLoadingChannels(false);
-        if (onChannelsLoaded) onChannelsLoaded(cached);
-        return;
-      }
+      // 1. Start with the guaranteed Cactus TV direct feeds
+      const feeds: LiveChannel[] = ESPN_DEFAULT_FEEDS.map(f => ({
+        ...f,
+        isFav: !!favMap[channelKey(f)]
+      }));
 
-      try {
-        const parsed = getChannelEntry('espn');
-        if (parsed && Array.isArray(parsed.channels) && parsed.channels.length) {
-          const cachedList = normalizeChannels<LiveChannel>(parsed.channels);
-          categoryChannelsCache.set('espn', cachedList);
-          const visible = filterLockedChannels(cachedList, categories, 'espn');
-          setChannels(visible);
-          cachedList.forEach((c: LiveChannel) => {
-            channelMasterCache.current[String(c.id || c.code)] = c;
-          });
-          setIsLoadingChannels(false);
-          if (onChannelsLoaded) onChannelsLoaded(visible);
-          return;
-        }
-      } catch (e) {}
-
+      // 2. Discover any additional ESPN feeds from portal channels in master cache
       const fromMaster = Object.values(channelMasterCache.current).filter(c => isEspnChannel(c.name));
-      if (fromMaster.length >= 3) {
-        fromMaster.sort(sortEspn);
-        categoryChannelsCache.set('espn', fromMaster);
-        setChannelEntry('espn', fromMaster);
-        const visible = filterLockedChannels(fromMaster, categories, 'espn');
-        setChannels(visible);
-        setIsLoadingChannels(false);
-        if (onChannelsLoaded) onChannelsLoaded(visible);
-        return;
-      }
+      fromMaster.forEach(ch => {
+        const exists = feeds.some(f => f.name.toLowerCase() === ch.name.toLowerCase() || (ch.code && f.code === ch.code));
+        if (!exists) {
+          feeds.push({ ...ch, isFav: !!favMap[channelKey(ch)] });
+        }
+      });
 
-      setIsLoadingChannels(true);
-      if (window.MagisClient && typeof window.MagisClient.getLiveChannels === 'function') {
-        window.MagisClient.getLiveChannels('76206', 1, 50, (err: any, list: any[]) => {
-          if (!err && Array.isArray(list) && list.length) {
-            const chs: LiveChannel[] = list.map((c, idx) => ({
-              id: c.channelCode || c.id || idx,
-              name: c.name || c.channelName || 'Canal',
-              code: c.channelCode || String(c.id || ''),
-              url: c.streamUrl || '',
-              logo: c.logo || c.channelLogo || '',
-              now: realText(c.now || c.currentProgram),
-              next: realText(c.next || c.nextProgram),
-              time: c.time || 'EN VIVO',
-              isFav: !!favMap[channelKey(c)]
-            }));
-            chs.forEach(c => {
-              channelMasterCache.current[String(c.id || c.code)] = c;
-            });
-            const espnOnly = chs.filter(c => isEspnChannel(c.name)).sort(sortEspn);
-            categoryChannelsCache.set('espn', espnOnly);
-            setChannelEntry('espn', espnOnly);
-            const visible = filterLockedChannels(espnOnly, categories, 'espn');
-            setChannels(visible);
-            if (onChannelsLoaded) onChannelsLoaded(visible);
-          } else {
-            setChannels(fromMaster);
-            if (onChannelsLoaded) onChannelsLoaded(fromMaster);
-          }
-          setIsLoadingChannels(false);
-        });
-      } else {
-        setChannels(fromMaster);
-        if (onChannelsLoaded) onChannelsLoaded(fromMaster);
-        setIsLoadingChannels(false);
-      }
+      feeds.sort(sortEspn);
+      feeds.forEach(c => {
+        channelMasterCache.current[String(c.id || c.code)] = c;
+      });
+
+      const visible = filterLockedChannels(feeds, categories, 'espn');
+      setChannels(visible);
+      categoryChannelsCache.set('espn', feeds);
+      setChannelEntry('espn', feeds);
+      setIsLoadingChannels(false);
+      if (onChannelsLoaded) onChannelsLoaded(visible);
       return;
     }
 
