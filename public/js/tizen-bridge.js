@@ -534,9 +534,12 @@
         var detEl = document.getElementById('screen-detail');
         var isLivePrev = this.isPreviewActive || (spEl && spEl.classList.contains('is-live-preview'));
         if (isLivePrev) {
-          var pEl = this.previewVideoEl || document.getElementById('live-preview-video');
-          if (pEl) {
-            var r = pEl.getBoundingClientRect();
+          // The element on screen now (the view may have mounted a new one since playback started), else the box
+          var pEl = document.getElementById('live-preview-video') || this.previewVideoEl;
+          var boxEl = document.querySelector('.live-grand-preview-box');
+          var r = pEl ? pEl.getBoundingClientRect() : null;
+          if ((!r || r.width <= 0 || r.height <= 0) && boxEl) r = boxEl.getBoundingClientRect();
+          if (r) {
             if (r.width > 0 && r.height > 0) {
               webapis.avplay.setDisplayRect(
                 Math.round(sc.ox + r.left * sc.s),
@@ -1075,7 +1078,8 @@
         self._lastPreviewUrl = cleanUrl;
         webapis.avplay.open(cleanUrl);
         self.syncDisplayRect();
-        webapis.avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
+        // Never stretch the preview: a channel that is not 16:9 gets bars instead
+        webapis.avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX');
 
         var meta = window.__xuperCurrentStreamMeta || {};
         self._applyHeaders(meta.headers);
