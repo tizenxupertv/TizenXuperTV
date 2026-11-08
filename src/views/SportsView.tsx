@@ -26,6 +26,11 @@ const SPORTS: Array<{ id: SportCategory; label: string }> = [
 ];
 const GRID_COLS = 3;
 const SCORE_REFRESH_MS = 45_000;
+/** The schedule reloads this often while the tab is open… */
+const RELOAD_EVERY_MS = 5 * 60_000;
+/** …once the remote has been still this long */
+const RELOAD_IDLE_MS = 3_000;
+const RELOAD_CHECK_MS = 15_000;
 
 type Line =
   | { kind: 'chips' }
@@ -127,11 +132,13 @@ const RENDER_BELOW = 1500;
 
 interface Props {
   isFocusActive: boolean;
+  /** A match or a title is open over the tab: no background reload meanwhile */
+  paused?: boolean;
   onFocusHeader: () => void;
   onPlayEventStream: (event: SportsEvent, streamIndex: number, streams: SportsStream[]) => void;
 }
 
-export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPlayEventStream }) => {
+export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onFocusHeader, onPlayEventStream }) => {
   const [events, setEvents] = useState<SportsEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -148,11 +155,15 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
   const trackRef = useRef<HTMLDivElement>(null);
   const liveTrackRef = useRef<HTMLDivElement>(null);
 
+  const loadedAtRef = useRef(0);
+  const lastKeyAtRef = useRef(0);
+
   const load = useCallback(async (force = false) => {
     setLoading(true);
     setError(false);
     try {
       setEvents(await sportsService.getEvents(force));
+      loadedAtRef.current = Date.now();
     } catch (e) {
       setError(true);
     } finally {
@@ -160,6 +171,21 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // The schedule reloads quietly every few minutes while the tab is on screen: no skeleton, no error (the list
+  // that is there stays), and never while the remote is in use, so the swap cannot cause a hiccup
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  useEffect(() => {
+    const t = setInterval(() => {
+      const nowMs = Date.now();
+      if (document.hidden || pausedRef.current) return;
+      if (nowMs - loadedAtRef.current < RELOAD_EVERY_MS || nowMs - lastKeyAtRef.current < RELOAD_IDLE_MS) return;
+      loadedAtRef.current = nowMs;
+      sportsService.getEvents(true).then(list => { if (list.length) setEvents(list); }, () => {});
+    }, RELOAD_CHECK_MS);
+    return () => clearInterval(t);
+  }, []);
 
   // Scores and "En N min" stay fresh while the tab is open
   useEffect(() => {
@@ -226,7 +252,33 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
   const lineLength = (l: Line) => (l.kind === 'chips' ? chips.length : l.events.length);
 
   // The sport changes: back to the first card of the chips line
-  useEffect(() => { setFocus(f => ({ line: Math.min(f.line, lines.length - 1), col: f.line === 0 ? f.col : 0 })); }, [lines.length]);
+  // After a reload or a sport change the focus stays on the same match when it is still listed; otherwise on the
+  // nearest card of the same row
+  const focusedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = focusedIdRef.current;
+    setFocus(f => {
+      if (id) {
+        for (let li = 0; li < lines.length; li++) {
+          const l = lines[li];
+          if (l.kind === 'chips') continue;
+          const ci = l.events.findIndex(e => e.id === id);
+          if (ci >= 0) return li === f.line && ci === f.col ? f : { line: li, col: ci };
+        }
+      }
+      const line = Math.min(f.line, lines.length - 1);
+      const l = lines[line];
+      const len = !l ? 0 : l.kind === 'chips' ? Number.MAX_SAFE_INTEGER : l.events.length;
+      const col = Math.max(0, Math.min(f.col, len - 1));
+      return line === f.line && col === f.col ? f : { line, col };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines]);
+  // Declared after the effect above: on a new list that effect still reads the match focused before it
+  useEffect(() => {
+    const cur = lines[focus.line];
+    focusedIdRef.current = cur && cur.kind !== 'chips' && cur.events[focus.col] ? cur.events[focus.col].id : null;
+  }, [focus, lines]);
 
   // Top of each line in the track and its height
   const layout = useMemo(() => {
@@ -272,6 +324,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
   useEffect(() => {
     if (!isFocusActive) return;
     const onKey = (e: KeyboardEvent) => {
+      lastKeyAtRef.current = Date.now();
       const k = e.key;
       const isBack = k === 'Escape' || k === 'Backspace' || e.keyCode === 10009;
       if (selected) {
