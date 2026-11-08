@@ -37,8 +37,11 @@ interface VodPlayerFullscreenProps {
 const DEV_FALLBACK_URL = 'https://media.w3.org/2010/05/bunny/movie.mp4';
 const SAVE_EVERY_MS = 15000;
 const NEXT_EPISODE_SECONDS = 10;
-/** The next-episode card shows over the credits, this many seconds before the end of an episode */
-const CREDITS_WINDOW_S = 45;
+/**
+ * The next-episode card shows this many seconds before the end of an episode, over the credits; its countdown is
+ * the time left in the episode, and the next one starts when it ends
+ */
+const CREDITS_WINDOW_S = 15;
 
 interface SettingRow {
   group: string;
@@ -277,13 +280,20 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       timeRef.current.t = timeRef.current.d || timeRef.current.t;
       saveProgress();
     }
+    // The card was counting down over the credits: the end is its zero
+    if (nextOffer === 'credits' && settingsService.get().autoNext !== false && nextEpisode && onPlayEpisode) {
+      setNextOffer(null);
+      setNextCountdown(null);
+      onPlayEpisode(nextEpisode);
+      return;
+    }
     if (nextEpisode && onPlayEpisode && !isTrailer) {
       setNextOffer('end');
       setNextCountdown(settingsService.get().autoNext !== false ? NEXT_EPISODE_SECONDS : null);
     } else {
       onClose();
     }
-  }, [isTrailer, nextEpisode, onPlayEpisode, onClose, saveProgress]);
+  }, [isTrailer, nextEpisode, onPlayEpisode, onClose, saveProgress, nextOffer]);
 
   // Credits: the last CREDITS_WINDOW_S seconds of an episode with a next one offer it while the credits play
   // (once; Back hides it). Seeking back before the credits hides it again
@@ -291,14 +301,18 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     if (isTrailer || !nextEpisode || !onPlayEpisode || !(duration > 120) || nextOffer === 'end') return;
     const left = duration - currentTime;
     const inCredits = left <= CREDITS_WINDOW_S && left > 1;
-    if (inCredits && !nextOffer && isPlaying && !creditsDismissedRef.current && !pendingSeekRef.current) {
-      setNextOffer('credits');
-      setNextCountdown(settingsService.get().autoNext !== false ? NEXT_EPISODE_SECONDS : null);
+    const opening = inCredits && !nextOffer && isPlaying && !creditsDismissedRef.current && !pendingSeekRef.current;
+    if (opening) setNextOffer('credits');
+    if (inCredits && (opening || nextOffer === 'credits')) {
+      // The countdown is the time left in the episode (it stops while paused)
+      setNextCountdown(settingsService.get().autoNext !== false ? Math.max(0, Math.ceil(left)) : null);
     } else if (!inCredits && nextOffer === 'credits') {
       setNextOffer(null);
       setNextCountdown(null);
     }
   }, [currentTime, duration, isPlaying, isTrailer, nextEpisode, onPlayEpisode, nextOffer]);
+  // Length of the card's countdown bar: the credits window, or the 10 s after the end
+  const countdownTotal = nextOffer === 'credits' ? CREDITS_WINDOW_S : NEXT_EPISODE_SECONDS;
   const playNext = useCallback(() => {
     setNextOffer(null);
     setNextCountdown(null);
@@ -321,14 +335,14 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
   // Next-episode countdown
   useEffect(() => {
-    if (nextCountdown === null) return;
+    if (nextCountdown === null || nextOffer !== 'end') return;
     if (nextCountdown <= 0) {
       playNext();
       return;
     }
     const t = setTimeout(() => setNextCountdown(c => (c === null ? null : c - 1)), 1000);
     return () => clearTimeout(t);
-  }, [nextCountdown, playNext]);
+  }, [nextCountdown, nextOffer, playNext]);
 
   // ---------------------------------------------------------------------------
   // Resolve the stream and start playback
@@ -1377,7 +1391,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
             <div className="vod-next-progress-track">
               <div
                 className="vod-next-progress-fill"
-                style={{ width: `${Math.max(0, Math.min(100, ((NEXT_EPISODE_SECONDS - nextCountdown) / NEXT_EPISODE_SECONDS) * 100))}%` }}
+                style={{ width: `${Math.max(0, Math.min(100, ((countdownTotal - nextCountdown) / countdownTotal) * 100))}%` }}
               />
             </div>
           )}
