@@ -883,7 +883,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                 ? 'Aún no tienes canales en ★ Favoritos.\nSintoniza un canal y presiona Añadir a Favoritos.'
                 : activeCategory.iptvListId && channelsError
                   ? channelsError
-                  : 'No hay canales disponibles en esta categoría'}
+                  : 'No hay canales disponibles en esta categoría.\nSi no carga ningún canal, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en Configuración › General › Red › Estado de la red › Configuración de IP.'}
             </div>
           ) : (
             <>
@@ -942,8 +942,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
               <div className="live-signal-error">
                 <div className="live-signal-error-title">Tu proveedor de internet bloquea este canal</div>
                 <div className="live-signal-error-desc">
-                  Cambia el DNS de la TV a 1.1.1.1: Configuración › General › Red › Estado de la red › Configuración de IP ›
-                  Configuración de DNS › Introducir manualmente. Si sigue igual, prueba con otra red.
+                  En la TV ve a Configuración › General › Red › Estado de la red › Configuración de IP y fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8). Si sigue igual, prueba con otra red.
                 </div>
               </div>
             ) : (/espn/i.test(tunedChannel?.name || '') || /deportes/i.test(activeCategory.name)) ? (
@@ -956,7 +955,9 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             ) : (
               <div className="live-signal-error">
                 <div className="live-signal-error-title">Señal no disponible</div>
-                <div className="live-signal-error-desc">Este canal no responde en este momento. Prueba con otro canal.</div>
+                <div className="live-signal-error-desc">
+                  Este canal no responde en este momento. Prueba con otro canal o, si no abre ninguno, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en la red de la TV.
+                </div>
               </div>
             )
           )}

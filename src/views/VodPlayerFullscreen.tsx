@@ -1373,8 +1373,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           <div className="vod-player-error-title">{error}</div>
           {playerService.ispBlocked && !isTrailer && (
             <div className="vod-player-error-hint">
-              Tu proveedor de internet bloquea los servidores de video. Cambia el DNS de la TV a 1.1.1.1 (Configuración › General ›
-              Red › Estado de la red › Configuración de IP › Configuración de DNS) o prueba con otra red.
+              Tu proveedor de internet bloquea los servidores de video. En la TV fija la IP y el DNS en manual a 1.1.1.1 o 8.8.8.8 (Configuración › General ›
+              Red › Estado de la red › Configuración de IP) o prueba con otra red.
             </div>
           )}
           <div className="vod-player-error-keys">

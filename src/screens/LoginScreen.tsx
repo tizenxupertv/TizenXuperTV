@@ -412,11 +412,11 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
               <div className="tg-login-help-item">
                 <div className="tg-login-help-num">1</div>
                 <div className="tg-login-help-info">
-                  <div className="tg-login-help-name">Cambia el DNS a 1.1.1.1 o 8.8.8.8 (Recomendado)</div>
+                  <div className="tg-login-help-name">Fija la IP y el DNS en 1.1.1.1 o 8.8.8.8 (Recomendado)</div>
                   <div className="tg-login-help-sub">
-                    Muchos operadores de internet (Claro, Movistar, Tigo) bloquean subdominios de Cloudflare.
-                    En tu TV ve a: <b>Configuración › General › Red › Estado de la red › Configuración de IP › Configuración de DNS</b>,
-                    selecciona <b>Ingresar manualmente</b> y escribe <b>1.1.1.1</b> o <b>8.8.8.8</b>.
+                    Muchos operadores de internet bloquean dominios de video o Cloudflare.
+                    En tu TV ve a: <b>Configuración › General › Red › Estado de la red › Configuración de IP</b>,
+                    pasa la IP y la <b>Configuración de DNS</b> a <b>Ingresar manualmente</b> y escribe <b>1.1.1.1</b> o <b>8.8.8.8</b>.
                   </div>
                 </div>
               </div>

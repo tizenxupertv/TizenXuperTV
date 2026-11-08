@@ -85,9 +85,9 @@ const NOTICE_MS = 3000;
 const VERDICTS: Record<string, { cls: string; text: string }> = {
   ok: { cls: 'ok', text: 'Todo correcto: el portal y los servidores de video responden.' },
   'no-internet': { cls: 'bad', text: 'Sin conexión a internet. Revisa la red del televisor.' },
-  'doh-blocked': { cls: 'bad', text: 'La red bloquea el DNS seguro (Cloudflare por HTTPS).' },
-  'portal-down': { cls: 'warn', text: 'El portal no responde. Puede estar caído o bloqueado en tu red.' },
-  'no-cdn': { cls: 'warn', text: 'El portal responde pero no hay servidor de video disponible.' }
+  'doh-blocked': { cls: 'bad', text: 'La red bloquea el DNS seguro. Fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en Configuración › General › Red › Estado de la red › Configuración de IP.' },
+  'portal-down': { cls: 'warn', text: 'El portal no responde. Si está bloqueado en tu red, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en la red de la TV.' },
+  'no-cdn': { cls: 'warn', text: 'El portal responde pero no hay servidor de video disponible. Prueba fijando la IP y el DNS en manual (1.1.1.1 o 8.8.8.8).' }
 };
 
 function formatTime(sec: number): string {
