@@ -81,6 +81,50 @@ class ScoreboardService {
 
   /** Normalized names, cached: findScore compares every match with every ESPN game */
   private normalized = new Map<string, string>();
+  /** Games by the words of their team names, so a match is only compared with the games that share a word */
+  private index = new Map<string, number[]>();
+  private indexedGames: NormalizedEspnGame[] | null = null;
+  /** findScore answers for the current games (cleared when new games arrive) */
+  private results = new Map<string, LiveMatchScore | null>();
+
+  /** Index keys of a name: its distinctive words, its initials and its abbreviation */
+  private keysOf(name: string, abbr = ''): string[] {
+    const n = this.normalizeText(name);
+    const keys = this.words(n);
+    const parts = n.split(' ').filter(Boolean);
+    if (parts.length > 1) keys.push('~' + parts.map(x => (x === 'fc' || x === 'sc' || x === 'cf' ? x : x[0])).join(''));
+    const a = this.normalizeText(abbr).replace(/ /g, '');
+    if (a.length >= 3) keys.push('~' + a);
+    return keys;
+  }
+
+  private ensureIndex(): void {
+    if (this.indexedGames === this.games) return;
+    this.indexedGames = this.games;
+    this.index.clear();
+    this.results.clear();
+    this.games.forEach((g, i) => {
+      const keys = [
+        ...this.keysOf(g.homeFull, g.homeAbbr), ...this.keysOf(g.homeShort),
+        ...this.keysOf(g.awayFull, g.awayAbbr), ...this.keysOf(g.awayShort)
+      ];
+      for (const k of keys) {
+        const list = this.index.get(k);
+        if (!list) this.index.set(k, [i]);
+        else if (list[list.length - 1] !== i) list.push(i);
+      }
+    });
+  }
+
+  /** Games that share at least one key with either team */
+  private candidates(homeName: string, awayName: string): NormalizedEspnGame[] {
+    const seen = new Set<number>();
+    for (const k of [...this.keysOf(homeName), ...this.keysOf(awayName)]) {
+      const list = this.index.get(k);
+      if (list) list.forEach(i => seen.add(i));
+    }
+    return Array.from(seen, i => this.games[i]);
+  }
 
   private normalizeText(str?: string): string {
     const key = str || '';
@@ -239,8 +283,17 @@ class ScoreboardService {
    */
   public findScore(homeName: string, awayName: string): LiveMatchScore | null {
     if (!homeName || !awayName || this.games.length === 0) return null;
+    this.ensureIndex();
+    const cacheKey = `${homeName}|${awayName}`;
+    if (this.results.has(cacheKey)) return this.results.get(cacheKey) || null;
+    const found = this.matchScore(homeName, awayName);
+    this.results.set(cacheKey, found);
+    return found;
+  }
+
+  private matchScore(homeName: string, awayName: string): LiveMatchScore | null {
     let best: { game: NormalizedEspnGame; swapped: boolean; score: number } | null = null;
-    for (const g of this.games) {
+    for (const g of this.candidates(homeName, awayName)) {
       const direct = [this.teamScore(homeName, g.homeFull, g.homeShort, g.homeAbbr), this.teamScore(awayName, g.awayFull, g.awayShort, g.awayAbbr)];
       const cross = [this.teamScore(homeName, g.awayFull, g.awayShort, g.awayAbbr), this.teamScore(awayName, g.homeFull, g.homeShort, g.homeAbbr)];
       const d = direct[0] && direct[1] ? direct[0] + direct[1] : 0;

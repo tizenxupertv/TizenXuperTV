@@ -28,6 +28,11 @@ export class SportsService {
     return this.baseUrl;
   }
 
+  /** The last events loaded, however old (shown at once while a fresh list loads) */
+  public peekEvents(): SportsEvent[] {
+    return this.cachedEvents;
+  }
+
   /**
    * Retrieves all sports events, using cache if still fresh.
    */
