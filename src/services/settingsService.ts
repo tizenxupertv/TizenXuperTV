@@ -1,4 +1,5 @@
-const KEY = 'xuper_global_playback_v1';
+import { pk } from '../lib/localProfiles';
+const KEY = pk('xuper_global_playback_v1');
 
 export interface PlaybackSettings {
   display: number;   // 0 = fit (letterbox), 1 = fullscreen, 2 = auto

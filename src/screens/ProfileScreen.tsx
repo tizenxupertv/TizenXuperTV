@@ -17,6 +17,7 @@ import { formatSpeed, runSpeedTest, SpeedResult, streamingVerdict } from '../lib
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
 import { QrCode } from '../components/common/QrCode';
+import { localProfiles } from '../lib/localProfiles';
 
 /** Perfil › Sobre nosotros: what the self-update is doing on this TV */
 function updateLine(s: UpdateStatus): string {
@@ -293,6 +294,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     runDiag().then(() => { if (mountedRef.current) runSpeed(); });
   };
 
+  const profiles = localProfiles.list();
+  const activeProfile = localProfiles.active();
+
   // Items shown in "Mi lista"
   const listItems = useMemo(() => {
     if (listTab === 'history') {
@@ -503,7 +507,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <div className="pf-account-info">
               <div className="pf-account-id">{account ? account.name || 'Usuario de Telegram' : '—'}</div>
               <div className="pf-account-type">
-                Sesión iniciada con Telegram{account && account.username ? ` (@${account.username})` : ''} · tu historial y tu lista se quedan en este TV
+                Sesión iniciada con Telegram{account && account.username ? ` (@${account.username})` : ''}
+                {profiles.length > 1 ? ` · perfil ${activeProfile.name}` : ''} · tu historial y tu lista se quedan en este TV
               </div>
             </div>
             <div className={`pf-btn pf-btn-danger pf-logout ${isF('logout') ? 'is-focused' : ''}`} onClick={tap('logout')}>
@@ -875,7 +880,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   return (
     <div className="profile-screen" style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
       <ScreenHeader
-        title="Perfil"
+        title="Ajustes"
         actions={[{ id: 'back', title: 'Volver', icon: BackIcon, onClick: onClose }]}
       />
       <div className="profile-body">

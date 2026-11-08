@@ -1,6 +1,8 @@
 import React from 'react';
 import { TabId, TABS, TabItem } from './TopNavbar';
 import { BrandLogo } from '../common/BrandLogo';
+import { localProfiles } from '../../lib/localProfiles';
+import { ProfileAvatar } from '../../screens/ProfilePickerScreen';
 
 export interface HeaderProps {
   selectedTab: TabId;
@@ -69,12 +71,13 @@ export const Header: React.FC<HeaderProps> = ({
           {FilterIcon}
         </button>
 
+        {/* The profile in use: its menu switches profile and opens Mi lista and Ajustes */}
         <button
-          className={`notify-btn ${profileActive ? 'is-active' : ''} ${focusedIndex === searchIdx + 2 ? 'is-focused' : ''}`}
+          className={`notify-btn lp-header-avatar ${profileActive ? 'is-active' : ''} ${focusedIndex === searchIdx + 2 ? 'is-focused' : ''}`}
           onClick={onProfileClick}
-          title="Perfil"
+          title={`Perfil: ${localProfiles.active().name}`}
         >
-          {ProfileIcon}
+          <ProfileAvatar profile={localProfiles.active()} size={36} />
         </button>
       </div>
     </header>
