@@ -1413,16 +1413,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
                 {seasonNumber ? `T${seasonNumber}:` : ''}E{nextEpisode.number || epIndex + 2} · {nextEpisode.title || nextEpisode.name || 'Capítulo'}
               </div>
               <div className="vod-next-btn-row">
-                <div
-                  className="vod-next-btn"
-                  onClick={playNext}
-                >
-                  <span>▶ Ver ahora</span>
-                  <span className="vod-next-btn-key">OK</span>
+                <div className="vod-next-btn" onClick={playNext}>
+                  <span className="vod-next-btn-icon">▶</span>
+                  <span>Ver ahora</span>
                 </div>
                 <span className="vod-next-cancel-hint">
-                  <span className="vod-next-hint-key">ATRÁS</span>
-                  {nextOffer === 'credits' ? 'Seguir viendo' : 'Salir'}
+                  <b>Atrás</b> {nextOffer === 'credits' ? 'para seguir viendo' : 'para salir'}
                 </span>
               </div>
             </div>

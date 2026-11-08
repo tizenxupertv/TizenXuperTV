@@ -4842,51 +4842,43 @@ html, body {
 .vod-next-btn-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-top: 12px;
+  gap: 18px;
+  margin-top: 14px;
 }
 
+/* Same pill as the detail's focused Reproducir: solid white, no glow (costly and blurry on the TV) */
 .vod-next-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   flex-shrink: 0;
   white-space: nowrap;
-  padding: 8px 10px 8px 18px;
+  height: 46px;
+  padding: 0 26px;
   border-radius: 9999px;
+  border: 3px solid #ffffff;
+  box-sizing: border-box;
   background: #ffffff;
-  color: #04141a;
-  font-size: 14px;
+  color: #000000;
+  font-size: 17px;
   font-weight: 800;
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
   cursor: pointer;
 }
 
-.vod-next-btn-key {
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: #04141a;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 900;
+.vod-next-btn-icon {
+  font-size: 14px;
 }
 
 .vod-next-cancel-hint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
-  color: #cbd5e1;
+  color: #94a3b8;
 }
 
-.vod-next-hint-key {
-  padding: 3px 7px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  color: #ffffff;
-  font-size: 11px;
+.vod-next-cancel-hint b {
+  color: #e2e8f0;
   font-weight: 800;
 }
 
