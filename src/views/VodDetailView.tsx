@@ -550,46 +550,25 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
             </p>
           )}
 
-          {/* Cast & Crew */}
-          <div className="vod-detail-crew-row">
-            <span className="crew-label">Director:</span>
-            {effectiveDirectors.length > 0 ? (
-              effectiveDirectors.map((d, di) => (
-                <button
-                  type="button"
-                  key={d.puId || `${d.name}-${di}`}
-                  className="crew-person-chip"
-                  onClick={e => {
-                    e.stopPropagation();
-                    setSelectedPerson(d);
-                  }}
-                >
-                  {d.name}
-                </button>
-              ))
-            ) : (
-              <span className="crew-value">{currentItem.director || '—'}</span>
-            )}
-            <span className="crew-divider">·</span>
-            <span className="crew-label">Reparto:</span>
-            {effectiveActors.length > 0 ? (
-              effectiveActors.slice(0, 8).map((a, ai) => (
-                <button
-                  type="button"
-                  key={a.puId || `${a.name}-${ai}`}
-                  className="crew-person-chip"
-                  onClick={e => {
-                    e.stopPropagation();
-                    setSelectedPerson(a);
-                  }}
-                >
-                  {a.name}
-                </button>
-              ))
-            ) : (
-              <span className="crew-value">{currentItem.actors || 'Reparto estelar'}</span>
-            )}
-          </div>
+          {/* Director and cast as text only when there are no cast cards below ("Reparto y Equipo"), and only
+              what the portal gives (no made-up names) */}
+          {effectiveCast.length === 0 && (currentItem.director || currentItem.actors) && (
+            <div className="vod-detail-crew-row">
+              {currentItem.director && (
+                <>
+                  <span className="crew-label">Director:</span>
+                  <span className="crew-value">{currentItem.director}</span>
+                </>
+              )}
+              {currentItem.director && currentItem.actors && <span className="crew-divider">·</span>}
+              {currentItem.actors && (
+                <>
+                  <span className="crew-label">Reparto:</span>
+                  <span className="crew-value">{currentItem.actors}</span>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* One row (as streaming apps): Reproducir / Continuar, then round buttons (Mi lista, Ajustes,
@@ -672,7 +651,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                 <button
                   key={q}
                   className={`vod-quick-btn ${focused ? 'is-focused' : ''}`}
-                  onClick={() => (onToggleFavorite ? onToggleFavorite(currentItem) : favoritesService.toggleFavorite(currentItem.id))}
+                  onClick={() => (onToggleFavorite ? onToggleFavorite(currentItem) : favoritesService.toggleFavorite(currentItem.id, currentItem))}
                 >
                   <span className="vod-quick-circle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                     {isFav ? <path d="M5 12.5l4.5 4.5L19 7.5" /> : <path d="M12 5v14M5 12h14" />}

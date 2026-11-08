@@ -312,19 +312,41 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       }));
     }
     return favoritesService.getFavoriteIds().slice(0, MAX_LIST).map(id => {
+      // The loaded catalog, else what was saved with the favorite (a title from another tab or page)
       const vod = catalogItems.find(it => String(it.id) === id);
+      const info = favoritesService.getFavoriteInfo(id);
+      const title = vod ? vod.title : info ? info.title : 'Cargando…';
+      const series = vod ? !!vod.isSeries : !!(info && info.series);
+      const target: VodItem | null = vod || (info ? ({ id, title: info.title, poster: info.poster, isSeries: info.series, kind: info.series ? 'serie' : 'película' } as VodItem) : null);
       return {
         key: id,
-        title: vod ? vod.title : 'Contenido',
-        poster: vod ? (vod.poster || vod.landscape || '') : '',
-        subtitle: vod && vod.isSeries ? 'Serie' : 'Película',
-        open: () => { if (vod) onOpenVod(vod); },
-        remove: () => removeFromList(id, vod ? vod.title : 'Contenido')
+        title,
+        poster: vod ? (vod.poster || vod.landscape || '') : info ? info.poster : '',
+        subtitle: series ? 'Serie' : 'Película',
+        open: () => { if (target) onOpenVod(target); },
+        remove: () => removeFromList(id, title)
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listTab, catalogItems, historyService.getHistory().length, favoritesService.getFavoriteIds().join(',')]);
+  }, [listTab, catalogItems, historyService.getHistory().length, favoritesService.getFavoriteIds().map(id => (favoritesService.getFavoriteInfo(id) ? id + '+' : id)).join(',')]);
 
+
+  // Favorites saved before titles were kept with them, and not in the loaded catalog: ask the portal once
+  const askedInfoRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (listTab !== 'favs') return;
+    const client = (window as any).MagisClient;
+    if (!client || typeof client.detail !== 'function') return;
+    favoritesService.getFavoriteIds().slice(0, MAX_LIST).forEach(id => {
+      if (askedInfoRef.current.has(id) || favoritesService.getFavoriteInfo(id)) return;
+      if (catalogItems.some(it => String(it.id) === id)) return;
+      askedInfoRef.current.add(id);
+      client.detail(id, (err: any, data: any) => {
+        const it = !err && data && data.item;
+        if (it && (it.title || it.name)) favoritesService.setFavoriteInfo(id, { ...it, title: it.title || it.name });
+      });
+    });
+  }, [listTab, catalogItems]);
 
   useEffect(() => {
     if (editMode && listItems.length === 0) setEditMode(false);

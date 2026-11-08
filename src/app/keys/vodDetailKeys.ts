@@ -214,7 +214,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
     }
     if (key === 'enter') {
       const q = quick[qi];
-      if (q === 'fav') favoritesService.toggleFavorite(activeDetailItem.id);
+      if (q === 'fav') favoritesService.toggleFavorite(activeDetailItem.id, activeDetailItem);
       else if (q === 'settings') setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: 0 }));
       else if (q === 'trailer') playFromDetail(activeDetailItem, undefined, true);
       return true;
