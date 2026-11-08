@@ -7,12 +7,14 @@
  * the app comes back to the front more than an hour after the last check. Manifest < 1 KB; each version's bundle
  * (~650 KB) downloads once. TVs without WebCrypto or without the boot loader never self-update (manual notice).
  */
-import { ACCOUNT_API } from './accountService';
+import { ACCOUNT_APIS } from './accountService';
 import {
   compareVersions, judge, readBundle, readManifest, record, waitAfter, type CheckRecord
 } from '../lib/updateCore';
 
-const UPDATE_API = (typeof __UPDATE_API__ !== 'undefined' && __UPDATE_API__) || ACCOUNT_API;
+const UPDATE_OVERRIDE = (typeof __UPDATE_API__ !== 'undefined' && __UPDATE_API__) || '';
+/** Where the update is asked for, in order (the relay on pages.dev for networks that block workers.dev) */
+const UPDATE_APIS: string[] = UPDATE_OVERRIDE ? [UPDATE_OVERRIDE] : ACCOUNT_APIS;
 const FIRST_CHECK_MS = 60 * 1000;
 /** Back in front: check again, unless the last check is fresher than this (quick back-and-forth with another app) */
 const WAKE_GAP_MS = 2 * 60 * 1000;
@@ -55,6 +57,23 @@ async function getBytes(url: string): Promise<Uint8Array> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * A path from the first address that answers; returns that address too, so the bundle comes from the same one.
+ * A 404 is an answer (no update), not a reason to try the next address.
+ */
+async function getBytesAny(path: string, bases: string[] = UPDATE_APIS): Promise<{ bytes: Uint8Array; base: string }> {
+  let lastError: unknown = null;
+  for (const base of bases) {
+    try {
+      return { bytes: await getBytes(`${base}${path}`), base };
+    } catch (e) {
+      if (e instanceof HttpStatusError && e.status === 404) throw e;
+      lastError = e;
+    }
+  }
+  throw lastError || new Error('network_error');
 }
 
 class UpdateService {
@@ -166,9 +185,12 @@ class UpdateService {
     try {
       const subtle = window.crypto.subtle;
       let manifestBytes: Uint8Array;
+      let base = UPDATE_APIS[0];
       try {
         // The running version rides along so the server can count versions; the answer is the same for everyone
-        manifestBytes = await getBytes(`${UPDATE_API}/tv/update?v=${encodeURIComponent(boot.info.running)}`);
+        const got = await getBytesAny(`/tv/update?v=${encodeURIComponent(boot.info.running)}`);
+        manifestBytes = got.bytes;
+        base = got.base;
       } catch (e) {
         if (e instanceof HttpStatusError && e.status === 404) return this.finish('no update published', false);
         throw e;
@@ -180,7 +202,9 @@ class UpdateService {
       const why = judge(manifest, { running: boot.info.running, shell: boot.SHELL, bad: boot.badList(), downloaded: this.downloaded });
       if (why) return this.finish(why, false);
 
-      const bundleBytes = await getBytes(`${UPDATE_API}/tv/update/bundle/${encodeURIComponent(manifest.version)}`);
+      // From the address that answered first; the signed manifest's sha256 checks the bundle whatever the address
+      const bundlePath = `/tv/update/bundle/${encodeURIComponent(manifest.version)}`;
+      const bundleBytes = (await getBytesAny(bundlePath, [base, ...UPDATE_APIS.filter(u => u !== base)])).bytes;
       const b = await readBundle(subtle, manifest, bundleBytes);
       if (!b.bundle) return this.finish(`not taken: ${b.why}`, true);
       const meta = { version: manifest.version, shell: manifest.shell, sha256: manifest.sha256, size: manifest.size, at: Date.now() };
