@@ -4,6 +4,7 @@ import { MatchCrest, MatchHeader } from '../components/sports/MatchHeader';
 import { scoreboardService } from '../services/scoreboardService';
 import { SportsEvent, SportsStream } from '../types/sports.ts';
 import { sportsService } from '../services/sportsService.ts';
+import { hostOf, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 
 interface SportsPlayerFullscreenProps {
   event: SportsEvent;
@@ -36,6 +37,9 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   const shakaRef = useRef<any>(null);
   const osdTimerRef = useRef<any>(null);
   const errorRef = useRef<string | null>(null);
+  // Which player and link the current signal uses, for the Perfil › Diagnóstico report
+  const playerKindRef = useRef('');
+  const startLoggedRef = useRef(false);
 
   const currentStream = streams[currentStreamIdx] || streams[0];
   const versus = !!event.away && event.away.trim().toLowerCase() !== event.home.trim().toLowerCase();
@@ -119,6 +123,16 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
 
     const isDash = streamUrl.includes('.mpd') || streamUrl.includes('dash') || Boolean(currentStream.drmApi);
     const isHls = streamUrl.includes('.m3u8') || streamUrl.includes('hls');
+
+    playerKindRef.current = isAvPlayAvailable && !isDash ? 'AVPlay'
+      : isDash && shaka?.Player ? `Shaka${currentStream.drmApi ? ' ClearKey' : ''}`
+      : isHls && Hls?.isSupported?.() ? 'HLS.js' : 'HTML5';
+    startLoggedRef.current = false;
+    setPlaybackContext({
+      channel: versus ? `${event.home} vs ${event.away}` : event.home,
+      category: event.league ? `Deportes · ${event.league}` : 'Deportes',
+      source: currentStream.name
+    });
 
     if (shaka?.polyfill) {
       try { shaka.polyfill.installAll(); } catch {}
@@ -261,10 +275,18 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     };
   }, [currentStreamIdx, currentStream, cleanupPlayer]);
 
+  // The first moment a signal plays, once per signal
+  useEffect(() => {
+    if (isBuffering || error || startLoggedRef.current || !currentStream?.url) return;
+    startLoggedRef.current = true;
+    logPlayback({ kind: 'start', player: playerKindRef.current, detail: 'reproduciendo', host: hostOf(currentStream.url) });
+  }, [isBuffering, error, currentStream]);
+
   // A failed signal: mark it and open the list on the next one that has not failed
   useEffect(() => {
     errorRef.current = error;
     if (!error) return;
+    logPlayback({ kind: 'error', player: playerKindRef.current, detail: error, host: hostOf(currentStream?.url) });
     setFailed(prev => new Set(prev).add(currentStreamIdx));
     if (streams.length > 1) {
       const next = streams.findIndex((_, i) => i !== currentStreamIdx && !failed.has(i));
