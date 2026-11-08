@@ -109,6 +109,10 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     const isDash = streamUrl.includes('.mpd') || streamUrl.includes('dash') || Boolean(currentStream.drmApi);
     const isHls = streamUrl.includes('.m3u8') || streamUrl.includes('hls');
 
+    if (shaka?.polyfill) {
+      try { shaka.polyfill.installAll(); } catch {}
+    }
+
     console.log('[SportsPlayer] Starting stream:', currentStream.name, streamUrl, 'isDash:', isDash, 'drmApi:', currentStream.drmApi);
 
     if (isAvPlayAvailable && !isDash) {
@@ -124,7 +128,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
           setIsBuffering(false);
           setError(`No se pudo cargar la señal (${currentStream.name})`);
         };
-        if (av.playStream(streamUrl, {}, video) === false) throw new Error('AVPlay did not start');
+        if (av.playStream(streamUrl, currentStream.headers || {}, video) === false) throw new Error('AVPlay did not start');
       } catch (err: any) {
         console.error('[SportsPlayer] AVPlay error:', err);
         setUsingAvplay(false);
@@ -134,7 +138,6 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     } else if (isDash && shaka && shaka.Player && shaka.Player.isBrowserSupported()) {
       // Shaka Player for MPEG-DASH & ClearKey DRM (Works in Chrome, Edge, Firefox, Tizen EME)
       try {
-        shaka.polyfill?.installAll?.();
         const player = new shaka.Player(video);
         shakaRef.current = player;
 
@@ -142,8 +145,8 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         if (currentStream.drmApi) {
           const parts = currentStream.drmApi.split(':');
           if (parts.length === 2) {
-            const keyIdHex = parts[0].trim().toLowerCase();
-            const keyHex = parts[1].trim().toLowerCase();
+            const keyIdHex = parts[0].trim().toLowerCase().replace(/-/g, '');
+            const keyHex = parts[1].trim().toLowerCase().replace(/-/g, '');
             player.configure({
               drm: {
                 clearKeys: {
@@ -183,13 +186,23 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         setError(`Error inicializando reproductor DASH (${currentStream.name})`);
       }
     } else if (isHls && Hls && Hls.isSupported()) {
-      // Browser / Hls.js fallback
+      // Browser / Hls.js fallback with dev proxy support for local testing
+      const isBrowserEnv = typeof window !== 'undefined' && (
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        (typeof (window as any).tizen === 'undefined' && typeof (window as any).webOS === 'undefined')
+      );
+      const referer = currentStream.headers?.['Referer'] || currentStream.headers?.['referer'] || '';
+      const effectiveHlsUrl = (isBrowserEnv && streamUrl.startsWith('http') && !streamUrl.includes('/stream-proxy'))
+        ? `/stream-proxy?url=${encodeURIComponent(streamUrl)}${referer ? `&referer=${encodeURIComponent(referer)}` : ''}`
+        : streamUrl;
+
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false
       });
       hlsRef.current = hls;
-      hls.loadSource(streamUrl);
+      hls.loadSource(effectiveHlsUrl);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         video.play().catch(err => {

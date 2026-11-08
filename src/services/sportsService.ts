@@ -1,16 +1,16 @@
 import type { SportCategory, SportsEvent, SportsStream } from '../types/sports.ts';
 import { decryptSportsPayload } from '../lib/sportsCrypto.ts';
+import CryptoJS from 'crypto-js';
 
 const DEFAULT_BASE_URL = 'https://hello-how.pages.dev/';
 const CACHE_TTL_MS = 120_000; // 2 minutes
 const STREAMS_CACHE_TTL_MS = 300_000; // 5 minutes
 
 /**
- * Signals the app plays: a direct URL that needs no extra request headers. Signals resolved through third-party
- * web players (tokenApi) or that only answer to another site's Referer / User-Agent are left out.
+ * Signals the app plays: any stream resolved to an active HTTP/HTTPS playback URL.
  */
 export function isPlayableStream(s: SportsStream): boolean {
-  return !!s.url && Object.keys(s.headers || {}).length === 0;
+  return !!s && !!s.url && s.url.startsWith('http');
 }
 
 export class SportsService {
@@ -64,6 +64,112 @@ export class SportsService {
   /**
    * Fetches and decrypts streams for a specific event.
    */
+  private cachedPublicIp: string = '';
+  private ipFetchTime: number = 0;
+
+  private async getPublicIp(): Promise<string> {
+    const now = Date.now();
+    if (this.cachedPublicIp && now - this.ipFetchTime < 600_000) {
+      return this.cachedPublicIp;
+    }
+    try {
+      const res = await fetch('https://api.ipify.org/');
+      if (res.ok) {
+        this.cachedPublicIp = (await res.text()).trim();
+        this.ipFetchTime = now;
+      }
+    } catch {
+      this.cachedPublicIp = this.cachedPublicIp || '127.0.0.1';
+    }
+    return this.cachedPublicIp;
+  }
+
+  private async resolveDynamicStream(stream: SportsStream): Promise<SportsStream> {
+    if (!stream.tokenApi) return stream;
+
+    try {
+      const desc = JSON.parse(stream.tokenApi);
+      const type = (desc.type || '').toLowerCase();
+
+      // 1. LS Token Algorithm (HMAC SHA-256 for live server endpoints)
+      if (type === 'ls' || desc.default_string) {
+        const rawUrl = desc.url || stream.url;
+        if (rawUrl && rawUrl.startsWith('http')) {
+          const u = new URL(rawUrl);
+          const segments = u.pathname.split('/').filter(Boolean);
+          if (segments.length >= 2) {
+            const channel = segments[segments.length - 2];
+            const defaultStr = desc.default_string || '9HY(#b1q6';
+            const now = Math.floor(Date.now() / 1000);
+            const ip = await this.getPublicIp();
+            const seed = channel + defaultStr + now + ip;
+            const hash = CryptoJS.SHA256(CryptoJS.enc.Latin1.parse(seed)).toString(CryptoJS.enc.Hex);
+            const token = `${hash}-${now + 77}-${now}`;
+            const signedUrl = `${rawUrl}${rawUrl.includes('?') ? '&' : '?'}token=${token}`;
+            return {
+              ...stream,
+              url: signedUrl
+            };
+          }
+        }
+      }
+
+      // 2. Embed page resolver (fetches embed HTML and extracts live m3u8)
+      if (type === 'embed' && desc.api) {
+        let pageUrl = desc.api.split('|')[0];
+        if (pageUrl.startsWith('http')) {
+          try {
+            const isLocal = typeof window !== 'undefined' && (
+              window.location.hostname === 'localhost' ||
+              window.location.hostname === '127.0.0.1'
+            );
+
+            for (let i = 0; i < 3; i++) {
+              const fetchUrl = isLocal
+                ? `/stream-proxy?url=${encodeURIComponent(pageUrl)}`
+                : pageUrl;
+
+              const pageRes = await fetch(fetchUrl);
+              if (!pageRes.ok) break;
+
+              const html = await pageRes.text();
+              const match = html.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>"]*/i);
+              if (match) {
+                const origin = new URL(pageUrl).origin;
+                return {
+                  ...stream,
+                  url: match[0],
+                  headers: {
+                    ...stream.headers,
+                    'Referer': `${origin}/`
+                  }
+                };
+              }
+
+              // Check for JS redirect (e.g. streamtp domain replacement)
+              const jsRedirect = html.match(/nuevoDominio\s*=\s*["'](https?:\/\/[^"']+)["']/i) ||
+                                 html.match(/window\.location\.replace\(\s*["'](https?:\/\/[^"']+)["']/i);
+              if (jsRedirect && jsRedirect[1]) {
+                const newBase = jsRedirect[1].replace(/\/+$/, '');
+                const oldUrlObj = new URL(pageUrl);
+                pageUrl = `${newBase}${oldUrlObj.pathname}${oldUrlObj.search}`;
+                continue;
+              }
+
+              break;
+            }
+          } catch (embedErr) {
+            console.warn('[sports] Failed to resolve embed page:', pageUrl, embedErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[sports] tokenApi parsing error:', err);
+    }
+
+    return stream;
+  }
+
   public async getStreams(linksPath: string, forceRefresh = false): Promise<SportsStream[]> {
     if (!linksPath) return [];
 
@@ -85,7 +191,8 @@ export class SportsService {
 
     const encrypted = await resp.text();
     const decrypted = decryptSportsPayload(encrypted);
-    const streams = this.parseStreams(decrypted);
+    const parsed = this.parseStreams(decrypted);
+    const streams = await Promise.all(parsed.map(s => this.resolveDynamicStream(s)));
 
     this.streamsCache.set(linksPath, { streams, time: now });
     return streams;
