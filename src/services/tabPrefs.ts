@@ -1,4 +1,5 @@
 import type { TabId } from '../components/layout/TopNavbar';
+import { pk } from '../lib/localProfiles';
 
 /** Tabs the user can show or hide in Perfil › Pestañas */
 export const HIDEABLE_TABS: Array<{ id: TabId; name: string }> = [
@@ -10,7 +11,7 @@ export const HIDEABLE_TABS: Array<{ id: TabId; name: string }> = [
 /** Until the user chooses: Deportes shown, Kids and Anime hidden (their titles stay in Buscar and Explorar) */
 const DEFAULT_HIDDEN: TabId[] = ['kids', 'anime'];
 
-const KEY = 'xuper_hidden_tabs';
+const KEY = pk('xuper_hidden_tabs');
 
 class TabPrefs {
   private listeners: Array<() => void> = [];

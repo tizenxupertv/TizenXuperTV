@@ -5,13 +5,14 @@ import { KbState, KB_INITIAL } from '../components/live/OnScreenKeyboard';
 import { DrawerArea, LiveLocation } from './types';
 import { getChannelEntry } from '../lib/channelCache';
 import { channelKey, cleanFavMap, isSameChannel, normalizeChannel, normalizeChannels } from '../lib/channelKey';
+import { pk } from '../lib/localProfiles';
 
 /** Live TV state: categories, channels, tuned channel, favorites and the fullscreen player/drawer */
 export function useLiveTv() {
   // Focus & State within Live TV (Restores last viewed category & channel!)
   const [liveTvFocus, setLiveTvFocus] = useState<LiveTvFocus>(() => {
     try {
-      const savedIdx = localStorage.getItem('xuper_last_live_cat_idx');
+      const savedIdx = localStorage.getItem(pk('xuper_last_live_cat_idx'));
       const parsedIdx = savedIdx !== null ? parseInt(savedIdx, 10) : 4;
       const initialIdx = isNaN(parsedIdx) ? 4 : parsedIdx;
       return {
@@ -45,7 +46,7 @@ export function useLiveTv() {
 
   const [tunedLiveChannel, setTunedLiveChannel] = useState<LiveChannel | null>(() => {
     try {
-      const raw = localStorage.getItem('xuper_last_live_ch');
+      const raw = localStorage.getItem(pk('xuper_last_live_ch'));
       return raw ? normalizeChannel<LiveChannel>(JSON.parse(raw)) : null;
     } catch {
       return null;
@@ -55,18 +56,18 @@ export function useLiveTv() {
   useEffect(() => {
     const idx = liveTvFocus.selectedCatIndex;
     if (idx === undefined) return;
-    try { localStorage.setItem('xuper_last_live_cat_idx', String(idx)); } catch {}
+    try { localStorage.setItem(pk('xuper_last_live_cat_idx'), String(idx)); } catch {}
   }, [liveTvFocus.selectedCatIndex]);
 
   // Remember the last tuned channel whatever changed it (list, fullscreen up/down, drawer, search)
   useEffect(() => {
     if (!tunedLiveChannel) return;
-    try { localStorage.setItem('xuper_last_live_ch', JSON.stringify(tunedLiveChannel)); } catch {}
+    try { localStorage.setItem(pk('xuper_last_live_ch'), JSON.stringify(tunedLiveChannel)); } catch {}
   }, [tunedLiveChannel]);
 
   const [liveFavMap, setLiveFavMap] = useState<Record<string, boolean>>(() => {
     try {
-      const raw = localStorage.getItem('xuper_live_favs_v1');
+      const raw = localStorage.getItem(pk('xuper_live_favs_v1'));
       return raw ? cleanFavMap(JSON.parse(raw)) : {};
     } catch {
       return {};
@@ -120,7 +121,7 @@ export function useLiveTv() {
     setLiveFavMap(prev => {
       const next = { ...prev, [key]: !prev[key] };
       try {
-        localStorage.setItem('xuper_live_favs_v1', JSON.stringify(next));
+        localStorage.setItem(pk('xuper_live_favs_v1'), JSON.stringify(next));
       } catch (e) {}
       return next;
     });
@@ -199,7 +200,7 @@ export function useLiveTv() {
     if (foundIdx !== -1 && chs[foundIdx]) {
       setLiveTvFocus(prev => ({ ...prev, channelIndex: foundIdx }));
       setTunedLiveChannel(chs[foundIdx]);
-      try { localStorage.setItem('xuper_last_live_ch', JSON.stringify(chs[foundIdx])); } catch {}
+      try { localStorage.setItem(pk('xuper_last_live_ch'), JSON.stringify(chs[foundIdx])); } catch {}
       triggerOsd();
     }
   }, [numericBuffer, triggerOsd]);

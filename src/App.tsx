@@ -45,6 +45,7 @@ import { handleVodTabsKeys } from './app/keys/vodTabsKeys';
 import { getTrackOffset, setTrackOffset } from './utils/scrollHelper';
 import { updateService } from './services/updateService';
 import { UpdateReady } from './components/common/UpdateReady';
+import { pk } from './lib/localProfiles';
 
 export const App: React.FC = () => {
   // Read initial tab from URL if present (useful for deep-links & testing)
@@ -571,12 +572,12 @@ export const App: React.FC = () => {
     onDrawerResults: (list: LiveChannel[]) => { drawerResultsRef.current = list; },
     onTuneChannel: (ch: LiveChannel) => {
       setTunedLiveChannel(ch);
-      try { localStorage.setItem('xuper_last_live_ch', JSON.stringify(ch)); } catch {}
+      try { localStorage.setItem(pk('xuper_last_live_ch'), JSON.stringify(ch)); } catch {}
     },
     onEnterFullscreen: (ch: LiveChannel) => {
       if (ch) {
         setTunedLiveChannel(ch);
-        try { localStorage.setItem('xuper_last_live_ch', JSON.stringify(ch)); } catch {}
+        try { localStorage.setItem(pk('xuper_last_live_ch'), JSON.stringify(ch)); } catch {}
       }
       setIsFullscreenLive(true);
       triggerOsd();
@@ -593,7 +594,7 @@ export const App: React.FC = () => {
       setLiveChannels(chs);
       if (!tunedLiveChannel && chs.length > 0) {
         setTunedLiveChannel(chs[0]);
-        try { localStorage.setItem('xuper_last_live_ch', JSON.stringify(chs[0])); } catch {}
+        try { localStorage.setItem(pk('xuper_last_live_ch'), JSON.stringify(chs[0])); } catch {}
       }
     },
     onCategoriesLoaded: (cats: LiveCategory[]) => {
@@ -611,7 +612,7 @@ export const App: React.FC = () => {
     onSelectCategory: (idx: number) => {
       guardLiveCat(idx, () => {
         setLiveTvFocus(prev => ({ ...prev, selectedCatIndex: idx, catIndex: idx }));
-        try { localStorage.setItem('xuper_last_live_cat_idx', String(idx)); } catch {}
+        try { localStorage.setItem(pk('xuper_last_live_cat_idx'), String(idx)); } catch {}
       });
     }
   });
@@ -936,9 +937,9 @@ export const App: React.FC = () => {
                 selectedCatIndex: loc.catIndex,
                 channelIndex: loc.channelIndex
               }));
-              try { localStorage.setItem('xuper_last_live_cat_idx', String(loc.catIndex)); } catch {}
+              try { localStorage.setItem(pk('xuper_last_live_cat_idx'), String(loc.catIndex)); } catch {}
             }
-            try { localStorage.setItem('xuper_last_live_ch', JSON.stringify(ch)); } catch {}
+            try { localStorage.setItem(pk('xuper_last_live_ch'), JSON.stringify(ch)); } catch {}
           };
           if (loc) guardLiveCat(loc.catIndex, apply);
           else apply();
