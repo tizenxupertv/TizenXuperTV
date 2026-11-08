@@ -605,6 +605,8 @@
       document.body.style.backgroundColor = 'transparent';
       var appEl = document.getElementById('app');
       if (appEl) appEl.style.backgroundColor = 'transparent';
+      var rootEl = document.getElementById('root');
+      if (rootEl) rootEl.style.backgroundColor = 'transparent';
     },
 
     _applyHeaders: function (headers) {
@@ -720,7 +722,8 @@
 
         self._safeStopAndClose();
 
-        var cleanUrl = String(url).replace(/^https:\/\//i, 'http://');
+        var isSecureRequired = String(url).indexOf(':443') !== -1 || !!(headers && (headers['Referer'] || headers['referer'] || headers['Origin']));
+        var cleanUrl = isSecureRequired ? String(url) : String(url).replace(/^https:\/\//i, 'http://');
         self._lastUrl = cleanUrl;
         webapis.avplay.open(cleanUrl);
         self.syncDisplayRect();
@@ -1067,7 +1070,8 @@
 
         self._safeStopAndClose();
 
-        var cleanUrl = String(url).replace(/^https:\/\//i, 'http://');
+        var isSecureRequired = String(url).indexOf(':443') !== -1 || (typeof headers !== 'undefined' && headers && (headers['Referer'] || headers['referer'] || headers['Origin']));
+        var cleanUrl = isSecureRequired ? String(url) : String(url).replace(/^https:\/\//i, 'http://');
         self._lastPreviewUrl = cleanUrl;
         webapis.avplay.open(cleanUrl);
         self.syncDisplayRect();

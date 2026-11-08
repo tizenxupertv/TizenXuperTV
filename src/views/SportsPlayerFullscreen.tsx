@@ -131,6 +131,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       // player turns transparent while it plays
       try {
         setUsingAvplay(true);
+        document.documentElement.classList.add('xuper-vod-avplay');
         const av = (window as any).XuperAVPlay;
         av._nextKind = 'live';
         video.onplaying = () => setIsBuffering(false);
@@ -143,6 +144,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       } catch (err: any) {
         console.error('[SportsPlayer] AVPlay error:', err);
         setUsingAvplay(false);
+        document.documentElement.classList.remove('xuper-vod-avplay');
         setError('Error iniciando el reproductor');
         setIsBuffering(false);
       }
