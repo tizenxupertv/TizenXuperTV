@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ACCOUNT_API, createAccountService, formatCode, isNewerVersion } from '../src/services/accountService.ts';
+import { ACCOUNT_API, ACCOUNT_APIS, ACCOUNT_API_RELAY, createAccountService, formatCode, isNewerVersion } from '../src/services/accountService.ts';
 
 interface Sent { url: string; init: RequestInit }
 
-function harness(responses: Array<{ status: number; body?: unknown } | Error>) {
+function harness(responses: Array<{ status: number; body?: unknown } | Error>, endpoints?: string[]) {
   const data = new Map<string, string>();
   const sent: Sent[] = [];
   let clock = 1_000_000;
@@ -23,7 +23,8 @@ function harness(responses: Array<{ status: number; body?: unknown } | Error>) {
     },
     now: () => clock,
     device: () => ({ version: '1.8.2', model: 'UN50U8000FKXZL' }),
-    randomBytes: n => new Uint8Array(n).fill(171)
+    randomBytes: n => new Uint8Array(n).fill(171),
+    endpoints
   });
   return { service, data, sent, tick: (ms: number) => { clock += ms; } };
 }
@@ -180,4 +181,18 @@ test('firmware and model code for the report; nothing outside a TV or when a cal
   assert.equal(tvBuildInfo({ getModelCode: () => 'UNKNOWN' }), 'modelo UNKNOWN');
   assert.equal(tvBuildInfo(null), '');
   assert.equal(tvBuildInfo(), '');
+});
+
+test('sign-in reaches the pages.dev relay when both workers.dev addresses are blocked', async () => {
+  const { service, sent } = harness([new Error('blocked'), new Error('blocked'), { status: 200, body: LOGIN }], ACCOUNT_APIS);
+  const login = await service.startLogin();
+  assert.equal(login.code, 'ABCD2345');
+  assert.deepEqual(sent.map(s => new URL(s.url).origin), ACCOUNT_APIS);
+  assert.equal(new URL(sent[2].url).origin, ACCOUNT_API_RELAY);
+});
+
+test('a 502 from the fallback also moves on to the relay', async () => {
+  const { service, sent } = harness([new Error('blocked'), { status: 502 }, { status: 200, body: LOGIN }], ACCOUNT_APIS);
+  await service.startLogin();
+  assert.equal(sent.length, 3);
 });
