@@ -4,6 +4,7 @@ import { sportsService } from '../services/sportsService.ts';
 import { scoreboardService } from '../services/scoreboardService.ts';
 import '../styles/sports.css';
 import { MatchHeader } from '../components/sports/MatchHeader';
+import { setTrackOffset } from '../utils/scrollHelper';
 
 /**
  * Deportes tab: sport chips, a row of live matches with their scores (services/scoreboardService.ts), and the
@@ -64,6 +65,66 @@ const Crest: React.FC<{ src?: string; name: string; big?: boolean }> = ({ src, n
   </span>
 );
 
+interface CardProps { ev: SportsEvent; focused: boolean; score: Score | null; onOpen: (ev: SportsEvent) => void }
+
+/** A live match: re-renders only when its focus or score changes */
+const LiveCard = React.memo<CardProps>(({ ev, focused, score: s, onOpen }) => {
+  const vs = isVersus(ev);
+  return (
+    <div className={`spb-live-card ${focused ? 'spb-focus' : ''}`} onClick={() => onOpen(ev)}>
+      <div className="spb-live-top">
+        <span className="spb-league">{leagueOf(ev)}</span>
+        <span className="spb-live-tag"><span className="spb-dot" />{s && s.state === 'live' && s.periodDetail ? s.periodDetail : 'EN VIVO'}</span>
+      </div>
+      {vs ? (
+        <>
+          <div className="spb-team-line"><Crest src={ev.homeLogo} name={ev.home} big /><span className="spb-team">{ev.home}</span><span className="spb-score">{s ? s.homeScore : ''}</span></div>
+          <div className="spb-team-line"><Crest src={ev.awayLogo} name={ev.away} big /><span className="spb-team">{ev.away}</span><span className="spb-score">{s ? s.awayScore : ''}</span></div>
+        </>
+      ) : (
+        <div className="spb-team-line is-single"><Crest src={ev.homeLogo || ev.leagueLogo} name={ev.home} big /><span className="spb-team">{ev.home}</span></div>
+      )}
+      <div className="spb-meta">{ev.linkNames.length === 1 ? '1 señal' : `${ev.linkNames.length} señales`}</div>
+    </div>
+  );
+});
+
+/** A match of the schedule */
+const GridCard = React.memo<CardProps & { now: number }>(({ ev, focused, score: s, onOpen, now }) => {
+  const vs = isVersus(ev);
+  const done = ev.status === 'finished';
+  return (
+    <div className={`spb-card ${done ? 'is-done' : ''} ${focused ? 'spb-focus' : ''}`} onClick={() => onOpen(ev)}>
+      <div className="spb-card-time">
+        <span className="spb-hour">{hhmm(ev.startMillis)}</span>
+        <span className={`spb-when ${done ? 'is-done' : ''}`}>{done ? 'Final' : untilLabel(ev.startMillis, now)}</span>
+      </div>
+      <div className="spb-card-body">
+        <div className="spb-league is-small">{leagueOf(ev)}</div>
+        {vs ? (
+          <>
+            <div className="spb-team-line is-small"><Crest src={ev.homeLogo} name={ev.home} /><span className="spb-team">{ev.home}</span>{s && <span className="spb-score is-small">{s.homeScore}</span>}</div>
+            <div className="spb-team-line is-small"><Crest src={ev.awayLogo} name={ev.away} /><span className="spb-team">{ev.away}</span>{s && <span className="spb-score is-small">{s.awayScore}</span>}</div>
+          </>
+        ) : (
+          <div className="spb-team-line is-small"><Crest src={ev.homeLogo || ev.leagueLogo} name={ev.home} /><span className="spb-team">{ev.home}</span></div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// Fixed heights (sports.css): the track offset and the rows to render are computed without measuring the DOM
+const CHIPS_H = 76;
+const SECTION_H = 44;
+const LIVE_ROW_H = 202;
+const DAY_H = 74;
+const ROW_H = 136;
+const LIVE_CARD_PITCH = 440;
+/** Rows drawn above and below the visible area; the rest are empty spacers */
+const RENDER_ABOVE = 500;
+const RENDER_BELOW = 1500;
+
 interface Props {
   isFocusActive: boolean;
   onFocusHeader: () => void;
@@ -76,7 +137,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
   const [error, setError] = useState(false);
   const [sport, setSport] = useState<SportCategory>('all');
   const [focus, setFocus] = useState({ line: 0, col: 0 });
-  const [, setScoreTick] = useState(0);
+  const [scoreTick, setScoreTick] = useState(0);
   const [now, setNow] = useState(() => Date.now());
 
   const [selected, setSelected] = useState<SportsEvent | null>(null);
@@ -84,7 +145,8 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
   const [streamsLoading, setStreamsLoading] = useState(false);
   const [streamFocus, setStreamFocus] = useState(0);
 
-  const rootRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const liveTrackRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async (force = false) => {
     setLoading(true);
@@ -108,11 +170,16 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  // A score only once the match has started (ESPN's "scheduled" games carry 0 - 0)
-  const scoreOf = (e: SportsEvent): Score | null => {
-    const s = isVersus(e) ? (scoreboardService.findScore(e.home, e.away) as Score | null) : null;
-    return s && s.state !== 'scheduled' ? s : null;
-  };
+  // Scores of the started matches, worked out once per refresh (not on every key press)
+  const scores = useMemo(() => {
+    const m = new Map<string, Score>();
+    events.forEach(e => {
+      if (e.status === 'scheduled' || !isVersus(e)) return;
+      const sc = scoreboardService.findScore(e.home, e.away) as Score | null;
+      if (sc && sc.state !== 'scheduled') m.set(e.id, sc);
+    });
+    return m;
+  }, [events, scoreTick]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: events.length };
@@ -151,12 +218,26 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
   // The sport changes: back to the first card of the chips line
   useEffect(() => { setFocus(f => ({ line: Math.min(f.line, lines.length - 1), col: f.line === 0 ? f.col : 0 })); }, [lines.length]);
 
-  // Keep the focused card in view
+  // Top of each line in the track and its height
+  const layout = useMemo(() => {
+    let y = 0;
+    return lines.map(l => {
+      const h = l.kind === 'chips' ? CHIPS_H : l.kind === 'live' ? SECTION_H + LIVE_ROW_H : (l.header ? DAY_H : 0) + ROW_H;
+      const top = y;
+      y += h;
+      return { top, h };
+    });
+  }, [lines]);
+
+  // Page offset: the focused row stays in the upper part of the screen (GPU transform, like the other pages)
+  const pageOffset = focus.line <= 1 ? 0 : Math.max(0, layout[focus.line] ? layout[focus.line].top - CHIPS_H - SECTION_H : 0);
   useEffect(() => {
-    if (!isFocusActive || !rootRef.current) return;
-    const el = rootRef.current.querySelector('.spb-focus') as HTMLElement | null;
-    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', inline: 'nearest' });
-  }, [focus, isFocusActive]);
+    if (trackRef.current) setTrackOffset(trackRef.current, 'y', pageOffset);
+  }, [pageOffset]);
+  const liveCol = lines[focus.line] && lines[focus.line].kind === 'live' ? focus.col : 0;
+  useEffect(() => {
+    if (liveTrackRef.current) setTrackOffset(liveTrackRef.current, 'x', liveCol <= 1 ? 0 : (liveCol - 1) * LIVE_CARD_PITCH);
+  }, [liveCol]);
 
   const openEvent = useCallback(async (ev: SportsEvent) => {
     setSelected(ev);
@@ -227,57 +308,11 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
 
   const isF = (line: number, col: number) => isFocusActive && !selected && focus.line === line && focus.col === col;
 
-  const liveCard = (ev: SportsEvent, li: number, ci: number) => {
-    const s = scoreOf(ev);
-    const vs = isVersus(ev);
-    return (
-      <div key={ev.id} className={`spb-live-card ${isF(li, ci) ? 'spb-focus' : ''}`} onClick={() => openEvent(ev)}>
-        <div className="spb-live-top">
-          <span className="spb-league">{leagueOf(ev)}</span>
-          <span className="spb-live-tag"><span className="spb-dot" />{s && s.state === 'live' && s.periodDetail ? s.periodDetail : 'EN VIVO'}</span>
-        </div>
-        {vs ? (
-          <>
-            <div className="spb-team-line"><Crest src={ev.homeLogo} name={ev.home} big /><span className="spb-team">{ev.home}</span><span className="spb-score">{s ? s.homeScore : ''}</span></div>
-            <div className="spb-team-line"><Crest src={ev.awayLogo} name={ev.away} big /><span className="spb-team">{ev.away}</span><span className="spb-score">{s ? s.awayScore : ''}</span></div>
-          </>
-        ) : (
-          <div className="spb-team-line is-single"><Crest src={ev.homeLogo || ev.leagueLogo} name={ev.home} big /><span className="spb-team">{ev.home}</span></div>
-        )}
-        <div className="spb-meta">{ev.linkNames.length === 1 ? '1 señal' : `${ev.linkNames.length} señales`}</div>
-      </div>
-    );
-  };
-
-  const gridCard = (ev: SportsEvent, li: number, ci: number) => {
-    const s = ev.status === 'finished' ? scoreOf(ev) : null;
-    const vs = isVersus(ev);
-    const done = ev.status === 'finished';
-    return (
-      <div key={ev.id} className={`spb-card ${done ? 'is-done' : ''} ${isF(li, ci) ? 'spb-focus' : ''}`} onClick={() => openEvent(ev)}>
-        <div className="spb-card-time">
-          <span className="spb-hour">{hhmm(ev.startMillis)}</span>
-          <span className={`spb-when ${done ? 'is-done' : ''}`}>{done ? 'Final' : untilLabel(ev.startMillis, now)}</span>
-        </div>
-        <div className="spb-card-body">
-          <div className="spb-league is-small">{leagueOf(ev)}</div>
-          {vs ? (
-            <>
-              <div className="spb-team-line is-small"><Crest src={ev.homeLogo} name={ev.home} /><span className="spb-team">{ev.home}</span>{s && <span className="spb-score is-small">{s.homeScore}</span>}</div>
-              <div className="spb-team-line is-small"><Crest src={ev.awayLogo} name={ev.away} /><span className="spb-team">{ev.away}</span>{s && <span className="spb-score is-small">{s.awayScore}</span>}</div>
-            </>
-          ) : (
-            <div className="spb-team-line is-small"><Crest src={ev.homeLogo || ev.leagueLogo} name={ev.home} /><span className="spb-team">{ev.home}</span></div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   const liveLineIdx = lines.findIndex(l => l.kind === 'live');
 
   return (
-    <div className="spb-root" ref={rootRef}>
+    <div className="spb-root">
+      <div className="spb-track" ref={trackRef}>
       <div className="spb-chips">
         {chips.map((c, i) => (
           <div key={c.id} className={`spb-chip ${sport === c.id ? 'is-on' : ''} ${isF(0, i) ? 'spb-focus' : ''}`} onClick={() => setSport(c.id)}>
@@ -309,17 +344,32 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
         <>
           <div className="spb-section"><span className="spb-dot" />En vivo ahora<span className="spb-section-count">{(lines[liveLineIdx] as { events: SportsEvent[] }).events.length}</span></div>
           <div className="spb-live-row">
-            {(lines[liveLineIdx] as { events: SportsEvent[] }).events.map((ev, ci) => liveCard(ev, liveLineIdx, ci))}
+            <div className="spb-live-track" ref={liveTrackRef}>
+              {(lines[liveLineIdx] as { events: SportsEvent[] }).events.map((ev, ci) => (
+                <LiveCard key={ev.id} ev={ev} focused={isF(liveLineIdx, ci)} score={scores.get(ev.id) || null} onOpen={openEvent} />
+              ))}
+            </div>
           </div>
         </>
       )}
 
-      {!loading && !error && lines.map((l, li) => (l.kind === 'grid' ? (
-        <React.Fragment key={`g${li}`}>
-          {l.header && <div className="spb-section is-day">{l.header}</div>}
-          <div className="spb-grid">{l.events.map((ev, ci) => gridCard(ev, li, ci))}</div>
-        </React.Fragment>
-      ) : null))}
+      {!loading && !error && lines.map((l, li) => {
+        if (l.kind !== 'grid') return null;
+        const { top, h } = layout[li];
+        // Far from the screen: an empty spacer of the same height
+        if (top + h < pageOffset - RENDER_ABOVE || top > pageOffset + RENDER_BELOW) return <div key={`g${li}`} style={{ height: h }} />;
+        return (
+          <React.Fragment key={`g${li}`}>
+            {l.header && <div className="spb-section is-day">{l.header}</div>}
+            <div className="spb-grid">
+              {l.events.map((ev, ci) => (
+                <GridCard key={ev.id} ev={ev} focused={isF(li, ci)} score={ev.status === 'finished' ? scores.get(ev.id) || null : null} onOpen={openEvent} now={now} />
+              ))}
+            </div>
+          </React.Fragment>
+        );
+      })}
+      </div>
 
       {selected && (
         <div className="spb-modal">
