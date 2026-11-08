@@ -727,6 +727,7 @@ export const App: React.FC = () => {
         >
           <SportsView
             isFocusActive={focusDomain === 'content' && !activeSportsPlayer && !activeDetailItem && !activeVodPlayer}
+            paused={!!activeSportsPlayer || !!activeDetailItem || !!activeVodPlayer}
             onFocusHeader={returnToHeader}
             onPlayEventStream={(event, streamIndex, streams) => {
               playerService.stop();
