@@ -3,7 +3,6 @@ import { TabId } from '../layout/TopNavbar';
 import { LiveChannel } from '../../types/channel';
 import { VodItem } from '../../types/vod';
 import { catalogService, getPopularSearchPage } from '../../services/catalogService';
-import { MOCK_CHANNELS_BY_CATEGORY } from '../../services/mockLiveChannels';
 import { OnScreenKeyboard, KbState, KB_INITIAL, pressKey, moveCursor, keyAt } from '../live/OnScreenKeyboard';
 import { normalizeText } from '../../utils/normalizeText';
 import { normalizeChannels } from '../../lib/channelKey';
@@ -104,16 +103,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       }
     }
 
-    // 2. Add mock channels for comprehensive offline / dev lookup
-    Object.values(MOCK_CHANNELS_BY_CATEGORY).forEach(chs => {
-      chs.forEach(ch => {
-        const key = String(ch.id || ch.code);
-        if (!seen.has(key)) {
-          seen.add(key);
-          list.push(ch);
-        }
-      });
-    });
 
     return list;
   }, [channels, isOpen]);
@@ -547,7 +536,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                         <span>{ch.name}</span>
                         <span className="sc-badge">EN VIVO</span>
                       </div>
-                      <div className="sc-now">{ch.now || 'Transmisión en directo'}</div>
+                      {ch.now && <div className="sc-now">{ch.now}</div>}
                     </div>
                   </div>
                 );
@@ -576,12 +565,12 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                           (e.target as HTMLImageElement).src = 'assets/placeholder_vertical.png';
                         }}
                       />
-                      <div className="svc-score-badge">★ {item.score || '8.5'}</div>
+                      {item.score && item.score !== '0' && <div className="svc-score-badge">★ {item.score}</div>}
                       <div className="svc-kind-badge">{item.kind === 'serie' ? 'SERIE' : 'PELÍCULA'}</div>
                     </div>
                     <div className="svc-info">
                       <div className="svc-title">{item.title}</div>
-                      <div className="svc-meta">{item.year} • {item.genres?.[0] || 'Contenido'}</div>
+                      <div className="svc-meta">{[item.year, item.genres?.[0]].filter(Boolean).join(' • ')}</div>
                     </div>
                   </div>
                 );
