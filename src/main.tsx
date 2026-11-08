@@ -20,7 +20,11 @@ const Root: React.FC = () => {
   // A newer version announced by the server, shown once per version
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   // The version this launch runs, when the app updated itself to it (shown once)
-  const [updatedTo, setUpdatedTo] = useState<string | null>(() => updateService.updatedNotice());
+  const [updatedTo, setUpdatedTo] = useState<string | null>(() =>
+    // ?test=updated previews the notice in the browser (dev only)
+    import.meta.env.DEV && new URLSearchParams(window.location.search).get('test') === 'updated'
+      ? '1.10.3'
+      : updateService.updatedNotice());
   const [, setTick] = useState(0);
 
   // Self-update checks run in the background, signed in or not (public/js/boot.js, services/updateService.ts)
@@ -63,7 +67,8 @@ const Root: React.FC = () => {
   // Local testing support for WelcomeModal via ?test=welcome or ?test=welcome2
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const testParam = urlParams?.get('test');
-  const isTestingWelcome = testParam === 'welcome' || testParam === 'welcome1' || testParam === 'welcome2';
+  const isTestingWelcome = testParam === 'welcome' || testParam === 'welcome1' || testParam === 'welcome2' ||
+    (import.meta.env.DEV && testParam === 'updated');
 
   if (!signedIn && !isTestingWelcome) return <LoginScreen onSignedIn={() => setSignedIn(true)} />;
   return (

@@ -122,8 +122,10 @@ export const ADULT_TAB: TabItem = {
   )
 };
 
-export function getTabs(adultEnabled: boolean): TabItem[] {
-  return adultEnabled ? [...TABS, ADULT_TAB] : TABS;
+/** The header's tabs: without the ones hidden in Perfil › Pestañas, plus "+18" when enabled */
+export function getTabs(adultEnabled: boolean, hidden: TabId[] = []): TabItem[] {
+  const shown = TABS.filter(t => hidden.indexOf(t.id) < 0);
+  return adultEnabled ? [...shown, ADULT_TAB] : shown;
 }
 
 interface TopNavbarProps {
