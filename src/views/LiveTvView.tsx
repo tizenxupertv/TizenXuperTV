@@ -234,6 +234,21 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   const drawerListRef = useRef<HTMLDivElement>(null);
   const drawerCatsRef = useRef<HTMLDivElement>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const previewBoxRef = useRef<HTMLDivElement>(null);
+  // The hardware player draws the preview in a fixed screen rectangle: when the box changes size or place (the
+  // columns settle, fonts load, fullscreen and back), that rectangle follows it
+  useEffect(() => {
+    const box = previewBoxRef.current;
+    const av = (window as any).XuperAVPlay;
+    if (!box || !av || typeof (window as any).ResizeObserver !== 'function') return;
+    let frame = 0;
+    const ro = new (window as any).ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => { if (av.isPreviewActive) av.syncDisplayRect(); });
+    });
+    ro.observe(box);
+    return () => { cancelAnimationFrame(frame); ro.disconnect(); };
+  }, []);
   const channelMasterCache = useRef<Record<string, LiveChannel>>(globalChannelMasterCache);
 
   // Live Clock updater for InfoBar OSD
@@ -723,6 +738,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       <main className="live-col-preview">
         {/* Persistent Single Video Box (Seamless 16:9 Preview <-> Fullscreen) */}
         <div
+          ref={previewBoxRef}
           className={`live-grand-preview-box ${isFullscreen ? 'is-fullscreen' : ''} ${
             !isFullscreen && isFocusActive && focus.area === 'preview_btns' && focus.btnIndex === 0 ? 'is-focused' : ''
           }`}
