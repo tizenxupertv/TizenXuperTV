@@ -1,0 +1,23 @@
+/* TV en vivo › Pantalla negra (radio and music): above the AVPlay picture and the info bar */
+.screen-off-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60000;
+  background: #000000;
+}
+.screen-off-clock {
+  position: absolute;
+  color: rgba(255, 255, 255, 0.22);
+  text-align: left;
+}
+.screen-off-time {
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.screen-off-sub {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.16);
+}
