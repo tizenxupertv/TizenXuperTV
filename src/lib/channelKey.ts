@@ -57,8 +57,10 @@ export function isSameChannel(a: Partial<LiveChannel> | null | undefined, b: Par
  * `channelCode` / `streamUrl` (no id or code), and without them they cannot be tuned or compared.
  */
 /** Filler texts older versions stored as the programme (still in saved channel lists): they are not data */
-const FILLER_TEXTS = ['Transmisión en directo', 'Continuación de programación', 'Continuación de programación nocturna'];
-export const realText = (v?: string): string => (v && FILLER_TEXTS.indexOf(v.trim()) < 0 ? v : '');
+const FILLER_TEXTS = ['Transmisión en directo', 'Continuación de programación', 'Continuación de programación nocturna', 'Programación deportiva'];
+/** Placeholder "now" texts of the built-in ESPN feeds ("En vivo · ESPN 2"), still in saved channels */
+const FILLER_PATTERN = /^En vivo · ESPN( \d+)?$/;
+export const realText = (v?: string): string => (v && FILLER_TEXTS.indexOf(v.trim()) < 0 && !FILLER_PATTERN.test(v.trim()) ? v : '');
 
 export function normalizeChannel<T extends Partial<LiveChannel>>(c: T): T {
   if (!c) return c;
