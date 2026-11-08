@@ -62,6 +62,7 @@ const SECTIONS = [
 
 
 const DISPLAY_OPTS = ['Ajustar (con bandas)', 'Pantalla completa', 'Automático'];
+const TEXT_SIZE_OPTS = ['Normal', 'Mediano', 'Grande'];
 const AUDIO_OPTS = ['Español (Latino)', 'Español (España)', 'Portugués', 'Inglés'];
 const SIZE_OPTS = ['Normal', 'Grande', 'Pequeño'];
 const STYLE_OPTS = ['Aa', 'Aa', 'Aa'];
@@ -346,8 +347,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         r.push(listItems.slice(i, i + GRID_COLS).map(it => ({ id: 'card-' + it.key, onActivate: editMode ? it.remove : it.open })));
       }
     } else if (id === 'playback') {
-      const radio = (group: string, opts: string[], key: 'display' | 'audio' | 'subLang' | 'size' | 'style') =>
+      const radio = (group: string, opts: string[], key: 'display' | 'audio' | 'subLang' | 'size' | 'style' | 'textSize') =>
         r.push(opts.map((_, i) => ({ id: `${group}-${i}`, onActivate: () => settingsService.set({ [key]: i }) })));
+      radio('textSize', TEXT_SIZE_OPTS, 'textSize');
       radio('display', DISPLAY_OPTS, 'display');
       radio('audio', AUDIO_OPTS, 'audio');
       r.push([{ id: 'subtitle', onActivate: () => settingsService.set({ subtitle: !settings.subtitle }) }]);
@@ -562,8 +564,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     if (id === 'playback') {
       return (
         <div className="pf-playback">
-          <h2 className="pf-title">Configuración global de reproducción</h2>
-          <p className="pf-note">Estas preferencias se aplican automáticamente a todas las películas y series nuevas.</p>
+          <h2 className="pf-title">Configuración global</h2>
+          <p className="pf-note">El tamaño del texto se aplica a toda la app; el resto, a todas las películas y series.</p>
+          {radioRow('Tamaño del texto', 'textSize', TEXT_SIZE_OPTS, settings.textSize || 0)}
           {radioRow('Formato de pantalla', 'display', DISPLAY_OPTS, settings.display)}
           {radioRow('Audio preferido', 'audio', AUDIO_OPTS, settings.audio)}
           <div className="pf-hr" />
