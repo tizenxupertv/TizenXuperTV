@@ -3,6 +3,7 @@ import type { SportCategory, SportsEvent, SportsStream } from '../types/sports.t
 import { sportsService } from '../services/sportsService.ts';
 import { scoreboardService } from '../services/scoreboardService.ts';
 import '../styles/sports.css';
+import { MatchHeader } from '../components/sports/MatchHeader';
 
 /**
  * Deportes tab: sport chips, a row of live matches with their scores (services/scoreboardService.ts), and the
@@ -323,12 +324,11 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
       {selected && (
         <div className="spb-modal">
           <div className="spb-modal-card">
-            <div className="spb-league">{leagueOf(selected)}</div>
-            <h2 className="spb-modal-title">{isVersus(selected) ? `${selected.home} vs ${selected.away}` : selected.home}</h2>
+            <MatchHeader event={{ ...selected, league: leagueOf(selected) }} />
             {streamsLoading ? (
-              <div className="spb-empty-text">Buscando señales…</div>
+              <div className="spp-loading spb-modal-status"><span className="spp-spinner" />Buscando señales…</div>
             ) : streams.length === 0 ? (
-              <div className="spb-empty-text">Todavía no hay señales para este evento.</div>
+              <div className="spb-empty-text spb-modal-status">Todavía no hay señales para este evento.</div>
             ) : (
               <div className="spb-streams">
                 {streams.map((st, i) => (

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../styles/sportsPlayer.css';
+import { MatchHeader } from '../components/sports/MatchHeader';
 import { SportsEvent, SportsStream } from '../types/sports.ts';
 import { sportsService } from '../services/sportsService.ts';
 
@@ -327,14 +328,6 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showServerMenu, serverMenuIdx, currentStreamIdx, streams, triggerOsd, onClose]);
 
-  // Team crest, or its initials when the image is missing or fails
-  const crest = (src: string | undefined, name: string) => (
-    <span className="spp-crest">
-      {src ? <img src={src} alt="" onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }} /> : null}
-      <span className="spp-crest-text">{name.slice(0, 2).toUpperCase()}</span>
-    </span>
-  );
-
   // Signals list, shared by the error card and the side panel
   const signalList = (
     <div className="spp-signals">
@@ -378,52 +371,18 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         }}
       />
 
-      {/* Buffering Indicator */}
+      {/* Connecting: the match and the signal, in the same card as the errors */}
       {isBuffering && !error && (
-        <div style={{
-          position: 'absolute',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 12,
-          padding: '16px 24px',
-          background: 'rgba(0, 0, 0, 0.75)',
-          borderRadius: 12,
-          backdropFilter: 'blur(8px)',
-          color: '#fff'
-        }}>
-          <div style={{
-            width: 38,
-            height: 38,
-            border: '4px solid rgba(255, 255, 255, 0.2)',
-            borderTopColor: '#ff2d55',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite'
-          }} />
-          <span style={{ fontSize: 16, fontWeight: 500, letterSpacing: '0.04em' }}>
-            Conectando a {currentStream?.name || 'señal'}...
-          </span>
+        <div className={`spp-error is-loading ${showServerMenu ? 'is-beside-panel' : ''}`}>
+          <MatchHeader event={event} />
+          <div className="spp-loading"><span className="spp-spinner" />Conectando a {currentStream?.name || 'la señal'}…</div>
         </div>
       )}
 
       {/* The signal failed: what happened and the other signals, in one card */}
       {error && (
         <div className="spp-error">
-          <div className="spp-league">
-            {event.leagueLogo && <img className="spp-league-logo" src={event.leagueLogo} alt="" onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }} />}
-            {event.league}
-          </div>
-          {event.away && event.away.trim().toLowerCase() !== event.home.trim().toLowerCase() ? (
-            <div className="spp-match">
-              <div className="spp-side">{crest(event.homeLogo, event.home)}<span className="spp-side-name">{event.home}</span></div>
-              <span className="spp-vs">vs</span>
-              <div className="spp-side">{crest(event.awayLogo, event.away)}<span className="spp-side-name">{event.away}</span></div>
-            </div>
-          ) : (
-            <div className="spp-match">
-              <div className="spp-side">{crest(event.homeLogo || event.leagueLogo, event.home)}<span className="spp-side-name">{event.home}</span></div>
-            </div>
-          )}
+          <MatchHeader event={event} />
           <div className="spp-error-msg">Esta señal no está disponible</div>
           <div className="spp-error-detail">{error}</div>
           {streams.length > 1 && showServerMenu ? (
