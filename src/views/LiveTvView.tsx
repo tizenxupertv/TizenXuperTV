@@ -776,6 +776,27 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   const focusedChannel = channels[focus.channelIndex] || tunedChannel || channels[0] || null;
   // The info panel always describes the channel that is playing in the preview
   const displayChannel = tunedChannel || focusedChannel;
+
+  // A replay (catch-up programme) in fullscreen: its real position and length on the timeline, refreshed while
+  // the info bar shows (a seek shows its target at once, playerService.replayPosition)
+  const isReplay = !!(tunedChannel && ((tunedChannel.now && tunedChannel.now.startsWith('↺')) || (tunedChannel as { isCatchup?: boolean }).isCatchup));
+  const [replayPos, setReplayPos] = useState<{ t: number; d: number; paused: boolean } | null>(null);
+  useEffect(() => {
+    if (!isFullscreen || !showOsd || !isReplay) {
+      setReplayPos(null);
+      return;
+    }
+    const tick = () => setReplayPos(playerService.replayPosition());
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+  }, [isFullscreen, showOsd, isReplay]);
+  const clock = (sec: number) => {
+    const v = Math.max(0, Math.floor(sec));
+    const h = Math.floor(v / 3600), m = Math.floor((v % 3600) / 60), r = v % 60;
+    const two = (n: number) => (n < 10 ? '0' : '') + n;
+    return h > 0 ? `${h}:${two(m)}:${two(r)}` : `${two(m)}:${two(r)}`;
+  };
   // Progress of the current programme from its "HH:MM - HH:MM" times; null when the channel does not send them
   const programProgress = useMemo(() => {
     const t = displayChannel && displayChannel.time;
@@ -1009,17 +1030,33 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                 {displayChannel.now && !/^en vivo$/i.test(displayChannel.now.trim()) ? displayChannel.now : ''}
               </div>
               {displayChannel.next && <div className="pi-next">{`Siguiente: ${displayChannel.next}`}</div>}
-              <div className="pi-range">{displayChannel.time || 'EN VIVO'}</div>
+              <div className="pi-range">
+                {isReplay && replayPos
+                  ? `${replayPos.paused ? 'En pausa · ' : 'Repetición · '}${clock(replayPos.t)}${replayPos.d > 0 ? ` / ${clock(replayPos.d)}` : ''}`
+                  : displayChannel.time || 'EN VIVO'}
+              </div>
 
               <div className="pi-seek">
-                <div className="bar" />
+                <div
+                  className="bar"
+                  style={isReplay && replayPos && replayPos.d > 0 ? { width: `${Math.min(100, (replayPos.t / replayPos.d) * 100)}%` } : undefined}
+                />
               </div>
 
               <div className="pi-hint-row">
                 <div>
                   <span className="hint-badge">▲ / ▼</span> Canal
-                  <span className="hint-badge" style={{ marginLeft: 16 }}>◀ / ▶</span> Lista de canales
-                  <span className="hint-badge" style={{ marginLeft: 16 }}>OK</span> OSD Info
+                  {isReplay ? (
+                    <>
+                      <span className="hint-badge" style={{ marginLeft: 16 }}>◀ / ▶</span> Retroceder / Adelantar
+                      <span className="hint-badge" style={{ marginLeft: 16 }}>OK</span> Pausa
+                    </>
+                  ) : (
+                    <>
+                      <span className="hint-badge" style={{ marginLeft: 16 }}>◀ / ▶</span> Lista de canales
+                      <span className="hint-badge" style={{ marginLeft: 16 }}>OK</span> OSD Info
+                    </>
+                  )}
                 </div>
                 <div>
                   <span className="hint-badge">BACK</span> Salir de pantalla completa

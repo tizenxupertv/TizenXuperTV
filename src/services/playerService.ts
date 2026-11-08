@@ -293,6 +293,68 @@ class PlayerService {
     window.XuperPlatform?.setScreenSaver?.(true);
   }
 
+  // ---------------------------------------------------------------------------
+  // Replays (catch-up programmes played as a channel): seek and pause like a movie
+  // ---------------------------------------------------------------------------
+  private replayTarget: number | null = null;
+  private replayTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private replayOnAvPlay(): boolean {
+    return !!(window.XuperAVPlay && window.XuperAVPlay.isActive);
+  }
+
+  /** Position and length of the replay playing now, in seconds; a pending seek shows its target */
+  public replayPosition(): { t: number; d: number; paused: boolean } {
+    if (this.replayOnAvPlay()) {
+      const av = window.XuperAVPlay;
+      return { t: this.replayTarget ?? av.currentTimeSec ?? 0, d: av.durationSec || 0, paused: !!av.isPaused };
+    }
+    const v = this.currentVideoEl;
+    if (!v) return { t: 0, d: 0, paused: false };
+    return { t: this.replayTarget ?? v.currentTime ?? 0, d: isFinite(v.duration) ? v.duration : 0, paused: v.paused };
+  }
+
+  /**
+   * Moves the replay by `delta` seconds. Presses add up on screen at once; the player gets a single seek 180 ms
+   * after the last one, like movies.
+   */
+  public replaySeekBy(delta: number): void {
+    const { t, d } = this.replayPosition();
+    const target = Math.max(0, Math.min(d > 0 ? d - 5 : Infinity, t + delta));
+    this.replayTarget = target;
+    if (this.replayTimer) clearTimeout(this.replayTimer);
+    this.replayTimer = setTimeout(() => {
+      this.replayTimer = null;
+      const done = () => { if (this.replayTarget === target) this.replayTarget = null; };
+      if (this.replayOnAvPlay()) {
+        window.XuperAVPlay.seekTo(target, done, (err: any) => {
+          logPlayback({ kind: 'error', player: 'AVPlay', detail: `replay seek ${Math.round(target)} s: ${(err && (err.name || err.message)) || err}` });
+          done();
+        });
+      } else if (this.currentVideoEl) {
+        try { this.currentVideoEl.currentTime = target; } catch (e) {}
+        setTimeout(done, 1500);
+      } else {
+        done();
+      }
+    }, 180);
+  }
+
+  /** Pauses or resumes the replay; `want` forces one of them (the remote's play and pause keys) */
+  public replayTogglePause(want?: 'play' | 'pause'): void {
+    const paused = this.replayPosition().paused;
+    const pause = want ? want === 'pause' : !paused;
+    if (this.replayOnAvPlay()) {
+      if (pause) window.XuperAVPlay.pause();
+      else window.XuperAVPlay.play();
+      return;
+    }
+    const v = this.currentVideoEl;
+    if (!v) return;
+    if (pause) v.pause();
+    else v.play().catch(() => {});
+  }
+
   private doPlayChannel(channel: LiveChannel, videoEl: HTMLVideoElement | null, fullscreen: boolean) {
     if (!videoEl) return;
     window.XuperPlatform?.setScreenSaver?.(false);
