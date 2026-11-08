@@ -215,16 +215,20 @@ class CatalogService {
   }> {
     if (this.cache) return this.cache;
 
-    // 0. Live catalog: a recent saved copy, else fresh from the portal, else any saved copy
+    // 0. Instant startup (Hydra 6.8.1 versioned cache strategy):
+    // If any valid saved catalog exists, show it immediately (< 50ms) instead of blocking
+    // the user on the loading screen for 6 seconds. Stale data is refreshed in the background.
     const saved = await readLiveCatalog();
-    // A copy saved before the Explorar root was downloaded lacks its rows: not fresh
-    const savedComplete = !!saved && saved.items.some((it: any) => String(it.category || '').split(',')[0] === 'explorar');
-    if (saved && savedComplete && saved.v === LIVE_FORMAT && Date.now() - saved.at < LIVE_FRESH_MS) {
+    if (saved && Array.isArray(saved.items) && saved.items.length >= 100) {
+      if (Date.now() - saved.at >= LIVE_REFRESH_AFTER_MS) {
+        setTimeout(() => this.refreshLiveInBackground(), 3000);
+      }
       return this.categorize(saved.items.map((it: any, idx: number) => normalizeItem(it, idx)));
     }
+
     const fresh = await Promise.race([
       fetchLiveCatalog().catch(() => null),
-      new Promise<null>(resolve => setTimeout(() => resolve(null), LIVE_WAIT_MS))
+      new Promise<null>(resolve => setTimeout(() => resolve(null), 3000))
     ]);
     const live = fresh && fresh.length ? fresh : (saved ? saved.items : []);
     if (live.length) return this.categorize(live.map((it: any, idx: number) => normalizeItem(it, idx)));

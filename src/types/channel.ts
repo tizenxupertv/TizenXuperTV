@@ -16,6 +16,7 @@ export interface LiveCategory {
   id: string | number;
   name: string;
   isFav?: boolean;
+  isEspn?: boolean;
   isM3u?: boolean;
   /** Free IPTV list shown as this category (services/iptvService) */
   iptvListId?: string;
