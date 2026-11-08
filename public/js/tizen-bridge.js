@@ -735,16 +735,17 @@
 
         var isLive = self.kind === 'live';
         try {
-          // Buffer before playing and after a stall. Faster tuning (3s live, 2s vod)
-          // with a 20s watchdog to prevent infinite hang when network drops packets.
-          // On buffering complete, buffer dynamically expands to 8s for playback resilience.
+          // Buffer before playing (3 s) and after a stall or a seek (3 s live, 5 s movies and series), with a 20 s
+          // watchdog. 2 s for movies (1.12.0) made older TVs (Tizen 5.5) stall every second and refuse seeks while
+          // refilling; 5 s is what 1.11.0 used. Live grows to 8 s once playing (onbufferingcomplete).
           if (webapis.avplay.setTimeoutForBuffering) webapis.avplay.setTimeoutForBuffering(20);
-          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 3 : 2);
-          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 3 : 2);
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 3);
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 3 : 5);
         } catch (bufErr) {}
 
         webapis.avplay.setListener({
           onbufferingstart: function () {
+            self._buffering = true;
             if (self.isActive) reportPlayback('stall', 'buffering' + (self.kind === 'vod' ? ' (vod)' : ''), self._lastUrl);
             if (self.videoEl && self.videoEl.onwaiting) self.videoEl.onwaiting();
           },
@@ -759,27 +760,28 @@
             if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
               window.XuperPlatform.setScreenSaver(false);
             }
-            // Live: a bigger resume buffer once playing, against network jitter. Movies and series keep 2s (as
-            // CactusTV does): every seek refills this buffer before the picture goes on, and 8s made seeks slow
+            // Live: a bigger resume buffer once playing, against network jitter. Movies and series keep 5 s: every
+            // seek refills this buffer before the picture goes on, and 8 s made seeks slow
             if (self.kind === 'live') {
               try {
                 webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 8);
               } catch (bufExpandErr) {}
             }
-            // If initial seek hasn't completed yet, execute it now that buffering is complete
+            self._buffering = false;
+            // The resume seek the TV refused before playing: once more, now that it has buffered
             if (self._initialSeekSec > 0) {
-              var retryMs = Math.floor(self._initialSeekSec * 1000);
+              var retrySec = self._initialSeekSec;
               self._initialSeekSec = 0;
-              console.log('[XuperAVPlay] onbufferingcomplete: executing initial seek to ' + retryMs + 'ms');
-              try {
-                webapis.avplay.seekTo(retryMs, function () {
-                  console.log('[XuperAVPlay] onbufferingcomplete seekTo success:', retryMs);
-                }, function (err) {
-                  console.warn('[XuperAVPlay] onbufferingcomplete seekTo failed:', err);
-                });
-              } catch (e) {
-                console.warn('[XuperAVPlay] onbufferingcomplete seekTo error:', e);
-              }
+              console.log('[XuperAVPlay] onbufferingcomplete: retrying the resume seek to ' + retrySec + 's');
+              self._isSeeking = false;
+              self.seekTo(retrySec, function () { self._initialSeekDone(true); }, function () { self._initialSeekDone(false); });
+            } else if (self._seekAfterBuffer) {
+              // A seek refused while the TV was buffering
+              var again = self._seekAfterBuffer;
+              self._seekAfterBuffer = null;
+              clearTimeout(self._seekWatchdog);
+              self._isSeeking = false;
+              self.seekTo(again.sec, again.success, again.error);
             }
             if (self.videoEl && self.videoEl.oncanplay) self.videoEl.oncanplay();
             if (self.videoEl && self.videoEl.onplaying) self.videoEl.onplaying();
@@ -824,41 +826,37 @@
           } catch (e) {}
 
           self.syncDisplayRect();
-          webapis.avplay.play();
-          self.isActive = true;
-          self.isPaused = false;
-
-          if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
-            window.XuperPlatform.setScreenSaver(false);
-          }
-          var st = document.getElementById('player-status');
-          if (st) { st.textContent = ''; st.classList.remove('is-active'); }
-          var pf = document.querySelector('#screen-player .player-frame');
-          if (pf) pf.style.display = 'none';
-
-          // Trigger onloadedmetadata after play() and isActive=true
-          if (self.videoEl && self.videoEl.onloadedmetadata) {
-            try { self.videoEl.onloadedmetadata(); } catch (e) {}
-          }
-
-          // If there is an initial resume position, perform seek immediately
+          // Resume: seek in the READY state, before play() (what Samsung recommends). Seeking right after play()
+          // failed on older TVs and the title started from the beginning
           if (self._initialSeekSec > 0) {
-            var initMs = Math.floor(self._initialSeekSec * 1000);
-            console.log('[XuperAVPlay] Executing initial resume seek to ' + self._initialSeekSec + 's (' + initMs + 'ms)');
+            var initSec = self._initialSeekSec;
+            var started = false;
+            var startNow = function () {
+              if (started || (self._gen || 0) !== gen) return;
+              started = true;
+              self._startPrepared(gen);
+            };
+            console.log('[XuperAVPlay] resume seek to ' + initSec + 's before play');
+            var safety = setTimeout(startNow, 8000);
             try {
-              webapis.avplay.seekTo(initMs, function () {
-                console.log('[XuperAVPlay] Initial seekTo success:', initMs);
+              webapis.avplay.seekTo(Math.floor(initSec * 1000), function () {
+                clearTimeout(safety);
                 self._initialSeekSec = 0;
+                startNow();
+                self._initialSeekDone(true);
               }, function (seekErr) {
-                console.log('[XuperAVPlay] Initial seekTo immediate failed, will retry on buffering complete:', seekErr);
+                // Played from the start; onbufferingcomplete tries the seek once more
+                console.log('[XuperAVPlay] resume seek before play failed, retrying after buffering:', seekErr);
+                clearTimeout(safety);
+                startNow();
               });
             } catch (seekEx) {
-              console.log('[XuperAVPlay] Initial seekTo immediate exception, will retry on buffering complete:', seekEx);
+              clearTimeout(safety);
+              startNow();
             }
+            return;
           }
-
-          if (self.videoEl && self.videoEl.onplay) self.videoEl.onplay();
-          if (self.videoEl && self.videoEl.onplaying) self.videoEl.onplaying();
+          self._startPrepared(gen);
         }, function (e) {
           console.error('[XuperAVPlay] prepareAsync error:', e);
           reportPlayback('error', 'prepare ' + ((e && (e.name || e.message)) || e) + (self.kind === 'vod' ? ' (vod)' : ''), self._lastUrl);
@@ -877,6 +875,39 @@
         if (self._tryNextBackup()) return true;
         self.isActive = false;
         return false;
+      }
+    },
+
+    /** Starts a prepared stream (after the resume seek, when there is one) */
+    _startPrepared: function (gen) {
+      var self = this;
+      if ((self._gen || 0) !== gen) return;
+      try { webapis.avplay.play(); } catch (playErr) {}
+      self.isActive = true;
+      self.isPaused = false;
+
+      if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
+        window.XuperPlatform.setScreenSaver(false);
+      }
+      var st = document.getElementById('player-status');
+      if (st) { st.textContent = ''; st.classList.remove('is-active'); }
+      var pf = document.querySelector('#screen-player .player-frame');
+      if (pf) pf.style.display = 'none';
+
+      // Trigger onloadedmetadata after play() and isActive=true
+      if (self.videoEl && self.videoEl.onloadedmetadata) {
+        try { self.videoEl.onloadedmetadata(); } catch (e) {}
+      }
+
+      if (self.videoEl && self.videoEl.onplay) self.videoEl.onplay();
+      if (self.videoEl && self.videoEl.onplaying) self.videoEl.onplaying();
+    },
+
+    /** Tells the player whether the resume seek landed (videoEl.onresumeseek(ok)) */
+    _initialSeekDone: function (ok) {
+      if (!ok) reportPlayback('error', 'resume seek failed' + (this.kind === 'vod' ? ' (vod)' : ''), this._lastUrl);
+      if (this.videoEl && typeof this.videoEl.onresumeseek === 'function') {
+        try { this.videoEl.onresumeseek(ok); } catch (e) {}
       }
     },
 
@@ -960,6 +991,7 @@
         if (self._isSeeking) {
           console.warn('[XuperAVPlay] seekTo watchdog fired after 18s');
           self._isSeeking = false;
+          self._seekAfterBuffer = null;
           if (self._pendingSeekSec !== null) {
             var nextSec = self._pendingSeekSec;
             var nextCbs = self._pendingSeekCallbacks || {};
@@ -1000,10 +1032,25 @@
               }, 120);
               return;
             }
+            // Refused while the TV refills its buffer (older TVs do): try again when it has buffered
+            if (self._buffering && !self._seekAfterBuffer) {
+              console.log('[XuperAVPlay] seek refused while buffering, retrying after buffering');
+              self._seekAfterBuffer = { sec: targetMs / 1000, success: successCb, error: errorCb };
+              return;
+            }
             clearTimeout(self._seekWatchdog);
             self._isSeeking = false;
-            self._pendingSeekSec = null;
-            self._pendingSeekCallbacks = null;
+            self._seekAfterBuffer = null;
+            // A newer target queued meanwhile still runs
+            if (self._pendingSeekSec !== null) {
+              var queuedSec = self._pendingSeekSec;
+              var queuedCbs = self._pendingSeekCallbacks || {};
+              self._pendingSeekSec = null;
+              self._pendingSeekCallbacks = null;
+              if (typeof errorCb === 'function') errorCb(err);
+              self.seekTo(queuedSec, queuedCbs.success, queuedCbs.error);
+              return;
+            }
             if (typeof errorCb === 'function') errorCb(err);
           });
         } catch (e) {
@@ -1033,6 +1080,8 @@
     stop: function () {
       clearTimeout(this._seekWatchdog);
       this._isSeeking = false;
+      this._seekAfterBuffer = null;
+      this._buffering = false;
       this._pendingSeekSec = null;
       this._pendingSeekCallbacks = null;
       if (this.isActive) {
