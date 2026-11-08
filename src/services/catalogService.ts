@@ -45,16 +45,17 @@ function normalizeItem(raw: any, index: number): VodItem {
 
   const id = String(raw.id || raw.vodId || raw.programId || raw.program_id || `item-${index}`);
   const title = String(raw.title || raw.name || raw.programName || raw.programTitle || 'Sin título');
-  const score = raw.score || raw.vote_average || raw.rating || raw.movieRate || raw.programScore || '8.5';
-  const year = String(raw.year || raw.release_year || raw.programYear || (raw.releaseDate || '').slice(0, 4) || '2024');
-  const duration = raw.duration || raw.runtime || raw.runtimeMinutes || 'Película';
+  // Only what the portal sends: no made-up score, year, duration or genre when a field is missing
+  const score = raw.score || raw.vote_average || raw.rating || raw.movieRate || raw.programScore || '';
+  const year = String(raw.year || raw.release_year || raw.programYear || (raw.releaseDate || '').slice(0, 4) || '');
+  const duration = raw.duration || raw.runtime || raw.runtimeMinutes || '';
   
-  let genres: string[] = ['Película'];
+  let genres: string[] = [];
   if (Array.isArray(raw.genres)) genres = raw.genres;
   else if (typeof raw.genres === 'string') genres = raw.genres.split(',');
   else if (typeof raw.genre === 'string') genres = raw.genre.split(',');
 
-  const synopsis = raw.synopsis || raw.overview || raw.description || raw.programUpdateContent || 'Sin sinopsis disponible.';
+  const synopsis = raw.synopsis || raw.overview || raw.description || raw.programUpdateContent || '';
   const poster = raw.posterUrl || raw.poster_url || raw.poster || raw.image || raw.imageUrl || raw.cover || 'assets/placeholder_vertical.png';
   const landscape = raw.landscapeUrl || raw.landscape_url || raw.landscape || raw.wideImage || raw.bannerImage || poster;
   const backdrop = raw.backdropUrl || raw.backdrop_url || raw.backdrop || landscape;
@@ -979,51 +980,11 @@ class CatalogService {
       }
     }
 
-    // 2. Demo data only when there is no portal client (offline development)
+    // 2. No portal client (offline development): the title as it is, with no made-up episodes or seasons
     const isSeriesItem = Boolean(item.isSeries || item.kind === 'serie' || (item as any).type === 'teleplay');
-    return {
-      item: { ...item, isSeries: isSeriesItem },
-      episodes: isSeriesItem ? this.getMockEpisodes(item) : [],
-      seasons: isSeriesItem ? [
-        { id: '1', name: 'Temporada 1', number: 1, episodes: [] },
-        { id: '2', name: 'Temporada 2', number: 2, episodes: [] }
-      ] : []
-    };
+    return { item: { ...item, isSeries: isSeriesItem }, episodes: [], seasons: [] };
   }
 
-  private getMockEpisodes(item: VodItem): VodEpisode[] {
-    const eps: VodEpisode[] = [];
-    const count = 10;
-    for (let i = 1; i <= count; i++) {
-      eps.push({
-        id: `${item.id}-ep-${i}`,
-        number: i,
-        title: `Capítulo ${i}: ${this.getEpisodeTitle(i)}`,
-        name: `Capítulo ${i}`,
-        duration: `${42 + (i % 8)} min`,
-        quality: '4K HDR',
-        picture: item.landscape || item.backdrop || item.poster || '',
-        description: `Tras los sucesos del capítulo anterior, el equipo debe tomar una decisión crítica que cambiará el destino de todos.`
-      });
-    }
-    return eps;
-  }
-
-  private getEpisodeTitle(num: number): string {
-    const titles = [
-      'El Comienzo',
-      'Secretos Ocultos',
-      'La Revelación',
-      'Punto de Inflexión',
-      'Sin Retorno',
-      'Venganza',
-      'La Caída',
-      'El Resurgir',
-      'La Batalla Final',
-      'El Desenlace'
-    ];
-    return titles[(num - 1) % titles.length];
-  }
 }
 
 export const catalogService = new CatalogService();

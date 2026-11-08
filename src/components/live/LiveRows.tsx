@@ -43,7 +43,7 @@ export const ChannelRow = React.memo<ChannelRowProps>(({ ch, idx, focused, tuned
           {tuned && <span className="live-playing-badge">▶ EN VIVO</span>}
           {fav && <span className="live-fav-icon">★</span>}
         </div>
-        <div className="live-ch-now">{ch.now || 'Transmisión en directo'}</div>
+        {ch.now && <div className="live-ch-now">{ch.now}</div>}
       </div>
     </div>
   );

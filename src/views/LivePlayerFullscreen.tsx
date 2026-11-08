@@ -112,7 +112,7 @@ export const LivePlayerFullscreen: React.FC<LivePlayerFullscreenProps> = ({
                       <span>{ch.name}</span>
                       {isPlaying && <span className="live-playing-badge">▶ EN VIVO</span>}
                     </div>
-                    <div className="live-ch-now">{ch.now || 'Transmisión en directo'}</div>
+                    {ch.now && <div className="live-ch-now">{ch.now}</div>}
                   </div>
                 </div>
               );
@@ -149,7 +149,7 @@ export const LivePlayerFullscreen: React.FC<LivePlayerFullscreenProps> = ({
               <span>{channel.name}</span>
               {isFavorite && <span className="osd-fav-badge">★</span>}
             </div>
-            <div className="osd-program-name">{channel.now || 'Transmisión en directo'}</div>
+            {channel.now && <div className="osd-program-name">{channel.now}</div>}
           </div>
           <div className="osd-live-tag">
             <span className="live-pulse-dot" /> EN VIVO
