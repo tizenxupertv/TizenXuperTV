@@ -1078,7 +1078,8 @@
         self._lastPreviewUrl = cleanUrl;
         webapis.avplay.open(cleanUrl);
         self.syncDisplayRect();
-        webapis.avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
+        // Never stretch the preview: a channel that is not 16:9 gets bars instead
+        webapis.avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX');
 
         var meta = window.__xuperCurrentStreamMeta || {};
         self._applyHeaders(meta.headers);
