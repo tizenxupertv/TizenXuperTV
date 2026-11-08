@@ -657,29 +657,58 @@
       return false;
     },
 
-    _recoverLive: function () {
+    /**
+     * A stream that dropped (Wi-Fi hiccup, DHCP renewal, a CDN blip): up to 3 quiet retries after 0.5 s, 1.5 s and
+     * 3 s, with the spinner showing, before the player reports the error. Live asks the portal for a fresh link;
+     * movies and series reopen the same link at the position they were at. The count starts again once the stream
+     * plays, so a long session survives several hiccups.
+     */
+    _recoverStream: function () {
       var self = this;
-      if (self.kind !== 'live' || self._recoveringLive || (self._liveRecoveryAttempts || 0) >= 2) return false;
-      self._recoveringLive = true;
-      self._liveRecoveryAttempts = (self._liveRecoveryAttempts || 0) + 1;
-      console.log('[XuperAVPlay] Auto-recovering live stream, attempt #' + self._liveRecoveryAttempts);
-      var meta = window.__xuperCurrentStreamMeta;
-      var code = meta && (meta.code || meta.id || meta.channelCode);
-      if (code && window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
-        window.MagisClient.resolveLive(code, function (err, newMeta) {
-          self._recoveringLive = false;
-          if (!err && newMeta && newMeta.url && self.videoEl) {
-            window.__xuperCurrentStreamMeta = newMeta;
-            self._openAndPrepareStream(newMeta.url, newMeta.headers, self.videoEl);
-            return;
-          }
-          self.isActive = false;
-          if (self.videoEl && self.videoEl.onerror) self.videoEl.onerror();
-        });
-        return true;
-      }
-      self._recoveringLive = false;
-      return false;
+      var delays = [500, 1500, 3000];
+      // Played fine for a while since the last drop: a new drop starts the count again
+      if (self._playingSince && Date.now() - self._playingSince > 15000) self._recoveryAttempts = 0;
+      self._playingSince = 0;
+      var attempt = self._recoveryAttempts || 0;
+      if (self._recovering || attempt >= delays.length || !self.videoEl || !self._lastUrl) return false;
+      self._recovering = true;
+      self._recoveryAttempts = attempt + 1;
+      var gen = self._gen || 0;
+      var resumeAt = self.kind === 'vod' ? (self.currentTimeSec || 0) : 0;
+      console.log('[XuperAVPlay] stream dropped, retry #' + self._recoveryAttempts + ' in ' + delays[attempt] + 'ms');
+      if (self.videoEl.onwaiting) { try { self.videoEl.onwaiting(); } catch (e) {} }
+
+      var giveUp = function () {
+        self._recovering = false;
+        self.isActive = false;
+        if (self.videoEl && self.videoEl.onerror) self.videoEl.onerror();
+      };
+      var reopen = function (url, headers) {
+        self._recovering = false;
+        if (resumeAt > 5) self._initialSeekSec = resumeAt;
+        if (!self._openAndPrepareStream(url, headers, self.videoEl)) giveUp();
+      };
+
+      setTimeout(function () {
+        // Stopped or replaced meanwhile (the viewer left or picked another title)
+        if ((self._gen || 0) !== gen || !self.videoEl) { self._recovering = false; return; }
+        var meta = window.__xuperCurrentStreamMeta;
+        var code = self.kind === 'live' && meta && (meta.code || meta.id || meta.channelCode);
+        if (code && window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
+          window.MagisClient.resolveLive(code, function (err, newMeta) {
+            if ((self._gen || 0) !== gen) { self._recovering = false; return; }
+            if (!err && newMeta && newMeta.url) {
+              window.__xuperCurrentStreamMeta = newMeta;
+              reopen(newMeta.url, newMeta.headers);
+            } else {
+              reopen(self._lastUrl, self._lastHeaders);
+            }
+          });
+          return;
+        }
+        reopen(self._lastUrl, self._lastHeaders);
+      }, delays[attempt]);
+      return true;
     },
 
     _safeStopAndClose: function () {
@@ -702,7 +731,9 @@
       var self = this;
       if (!isTizen || !window.webapis || !webapis.avplay) return false;
       self._backupIdx = 0;
-      self._liveRecoveryAttempts = 0;
+      self._recoveryAttempts = 0;
+      self._recovering = false;
+      self._playingSince = 0;
       self.isPreviewActive = false;
       self.kind = self._nextKind || 'vod';
       self._nextKind = null;
@@ -728,6 +759,7 @@
 
         var cleanUrl = String(url);
         self._lastUrl = cleanUrl;
+        self._lastHeaders = headers;
         webapis.avplay.open(cleanUrl);
         self.syncDisplayRect();
         webapis.avplay.setDisplayMethod(self._displayMethod());
@@ -768,6 +800,7 @@
               } catch (bufExpandErr) {}
             }
             self._buffering = false;
+            self._playingSince = Date.now();
             // The resume seek the TV refused before playing: once more, now that it has buffered
             if (self._initialSeekSec > 0) {
               var retrySec = self._initialSeekSec;
@@ -803,7 +836,7 @@
               window.XuperPlatform.setScreenSaver(true);
             }
             if (self._tryNextBackup()) return;
-            if (self.kind === 'live' && self._recoverLive()) return;
+            if (self._recoverStream()) return;
             self.isActive = false;
             if (self.videoEl && self.videoEl.onerror) self.videoEl.onerror();
           },
@@ -867,6 +900,7 @@
             window.XuperPlatform.setScreenSaver(true);
           }
           if (self._tryNextBackup()) return;
+          if (self._recoverStream()) return;
           self.isActive = false;
           if (self.videoEl && self.videoEl.onerror) self.videoEl.onerror();
         });
@@ -1063,6 +1097,9 @@
     },
 
     stop: function () {
+      // Also cancels a quiet retry still waiting (_recoverStream) and a prepare in flight
+      this._gen = (this._gen || 0) + 1;
+      this._recovering = false;
       clearTimeout(this._seekWatchdog);
       this._seekTicket = (this._seekTicket || 0) + 1;
       this._isSeeking = false;
