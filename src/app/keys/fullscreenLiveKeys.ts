@@ -3,6 +3,10 @@ import { playerService } from '../../services/playerService';
 import { pressKey, moveCursor, keyAt } from '../../components/live/OnScreenKeyboard';
 import { LiveTvState } from '../useLiveTv';
 import { pk } from '../../lib/localProfiles';
+import { createSeekHold } from '../../lib/seekAccel';
+
+/** Holding ◄ ► in a replay makes the jumps grow, as in movies (lib/seekAccel.ts) */
+const replayHold = createSeekHold();
 
 export type FullscreenLiveKeysCtx = LiveTvState & {
   guardLiveCat: (catIndex: number, apply: () => void) => void;
@@ -277,6 +281,25 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
       return true;
     }
     return true;
+  }
+
+  // A replay (catch-up programme): ◄ ► ⏪ ⏩ move in time and OK / play / pause pause it, like a movie,
+  // instead of opening the channel list
+  const tuned = ctx.tunedLiveChannel as (typeof ctx.tunedLiveChannel & { isCatchup?: boolean }) | null;
+  const isReplay = !!(tuned && ((tuned.now && tuned.now.startsWith('↺')) || tuned.isCatchup));
+  if (isReplay) {
+    if (key === 'left' || key === 'right' || key === 'rewind' || key === 'fastForward') {
+      const dir = key === 'right' || key === 'fastForward' ? 1 : -1;
+      const delta = replayHold.press(dir, !!(ev && ev.repeat), Date.now());
+      if (delta) playerService.replaySeekBy(delta);
+      triggerOsd();
+      return true;
+    }
+    if (key === 'enter' || key === 'playPause' || key === 'play' || key === 'pause') {
+      playerService.replayTogglePause(key === 'play' ? 'play' : key === 'pause' ? 'pause' : undefined);
+      triggerOsd();
+      return true;
+    }
   }
 
   // InfoBar buttons entry from normal viewing while OSD is visible:

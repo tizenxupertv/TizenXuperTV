@@ -780,6 +780,7 @@
               var again = self._seekAfterBuffer;
               self._seekAfterBuffer = null;
               clearTimeout(self._seekWatchdog);
+              self._seekTicket = (self._seekTicket || 0) + 1;
               self._isSeeking = false;
               self.seekTo(again.sec, again.success, again.error);
             }
@@ -787,6 +788,8 @@
             if (self.videoEl && self.videoEl.onplaying) self.videoEl.onplaying();
           },
           oncurrentplaytime: function (ms) {
+            // While a seek runs the TV still reports the old position: passing it on made the timeline jump back
+            if (self._isSeeking) return;
             self.currentTimeSec = ms / 1000;
             if (self.videoEl) {
               self.videoEl._avCurrentTime = self.currentTimeSec;
@@ -839,7 +842,7 @@
             console.log('[XuperAVPlay] resume seek to ' + initSec + 's before play');
             var safety = setTimeout(startNow, 8000);
             try {
-              webapis.avplay.seekTo(Math.floor(initSec * 1000), function () {
+              webapis.avplay.seekTo(self._safeSeekMs(initSec), function () {
                 clearTimeout(safety);
                 self._initialSeekSec = 0;
                 startNow();
@@ -958,26 +961,31 @@
       return null;
     },
 
+    /** A seek position AVPlay accepts: never 0 ms nor the exact end (GStreamer crashes on Tizen 3/4) */
+    _safeSeekMs: function (sec) {
+      var durSec = (this.videoEl && this.videoEl._avDuration) || this.durationSec || 0;
+      var maxMs = durSec > 1 ? Math.max(100, Math.floor((durSec - 0.5) * 1000)) : Infinity;
+      return Math.round(Math.min(Math.max(100, Math.floor((Number(sec) || 0) * 1000)), maxMs));
+    },
+
+    /**
+     * One native seek at a time. A newer target while one runs waits in a single slot (the latest wins) and starts
+     * as soon as the running one ends. Each seek has a ticket: a late answer from the TV for an older seek (after
+     * the 15 s watchdog, or after stop) is ignored, so it cannot move the timeline back.
+     */
     seekTo: function (sec, successCb, errorCb) {
       var self = this;
-      var ms = Math.floor(sec * 1000);
-      if (ms < 100) ms = 100;
-      var durSec = (self.videoEl && self.videoEl._avDuration) || self.durationSec || 0;
-      if (durSec > 1) {
-        var maxMs = Math.max(100, Math.floor((durSec - 0.25) * 1000));
-        if (ms > maxMs) ms = maxMs;
-      }
+      var ms = self._safeSeekMs(sec);
       var state = '';
       try { state = webapis.avplay.getState(); } catch (e) {}
 
-      // If the player is not yet fully active, queue as initial seek
+      // Not playing yet: the resume seek runs before play() (_openAndPrepareStream)
       if (!this.isActive || state === 'NONE' || state === 'IDLE' || state === 'READY') {
         console.log('[XuperAVPlay] Player not yet active, queuing initial seek to ' + sec + 's');
         this._initialSeekSec = sec;
         return;
       }
 
-      // If already seeking, queue the latest target so we don't bombard AVPlay with concurrent seeks
       if (this._isSeeking) {
         console.log('[XuperAVPlay] Seek already in progress, queuing target ' + sec + 's');
         this._pendingSeekSec = sec;
@@ -986,91 +994,68 @@
       }
 
       this._isSeeking = true;
+      var ticket = this._seekTicket = (this._seekTicket || 0) + 1;
+      var isCurrent = function () { return ticket === self._seekTicket; };
+
+      // Ends this seek, then starts the queued target. A seek replaced by a newer one does not report its failure
+      var finish = function (ok, err) {
+        clearTimeout(self._seekWatchdog);
+        self._isSeeking = false;
+        self._seekAfterBuffer = null;
+        var hasNext = self._pendingSeekSec !== null && self._pendingSeekSec !== undefined;
+        var nextSec = self._pendingSeekSec;
+        var nextCbs = self._pendingSeekCallbacks || {};
+        self._pendingSeekSec = null;
+        self._pendingSeekCallbacks = null;
+        if (ok) {
+          if (typeof successCb === 'function') successCb();
+        } else if (!hasNext && typeof errorCb === 'function') {
+          errorCb(err);
+        }
+        if (hasNext) self.seekTo(nextSec, nextCbs.success, nextCbs.error);
+      };
+
+      // The TV sometimes never answers a seek (damaged segments): give up after 15 s
       clearTimeout(this._seekWatchdog);
       this._seekWatchdog = setTimeout(function () {
-        if (self._isSeeking) {
-          console.warn('[XuperAVPlay] seekTo watchdog fired after 18s');
-          self._isSeeking = false;
-          self._seekAfterBuffer = null;
-          if (self._pendingSeekSec !== null) {
-            var nextSec = self._pendingSeekSec;
-            var nextCbs = self._pendingSeekCallbacks || {};
-            self._pendingSeekSec = null;
-            self._pendingSeekCallbacks = null;
-            self.seekTo(nextSec, nextCbs.success, nextCbs.error);
-          } else if (typeof errorCb === 'function') {
-            errorCb(new Error('seek_timeout'));
-          }
+        if (!isCurrent() || !self._isSeeking) return;
+        console.warn('[XuperAVPlay] seekTo watchdog fired after 15s');
+        self._seekTicket++;
+        finish(false, new Error('seek_timeout'));
+      }, 15000);
+
+      var failed = function (targetMs, retriesLeft, err) {
+        if (!isCurrent()) return;
+        console.warn('[XuperAVPlay] seekTo ' + targetMs + 'ms attempt failed:', err);
+        // A transient state change: once more after 120 ms
+        if (retriesLeft > 0) {
+          setTimeout(function () {
+            if (!isCurrent()) return;
+            if (self.isActive) executeSeek(targetMs, retriesLeft - 1);
+            else finish(false, err);
+          }, 120);
+          return;
         }
-      }, 18000);
+        // Refused while the TV refills its buffer (older TVs do): onbufferingcomplete tries it again
+        if (self._buffering && !self._seekAfterBuffer) {
+          console.log('[XuperAVPlay] seek refused while buffering, retrying after buffering');
+          self._seekAfterBuffer = { sec: targetMs / 1000, success: successCb, error: errorCb };
+          return;
+        }
+        finish(false, err);
+      };
 
       var executeSeek = function (targetMs, retriesLeft) {
         try {
           webapis.avplay.seekTo(targetMs, function () {
+            if (!isCurrent()) return;
             console.log('[XuperAVPlay] seekTo ' + targetMs + 'ms succeeded');
-            clearTimeout(self._seekWatchdog);
-            self._isSeeking = false;
-            if (typeof successCb === 'function') successCb();
-            if (self._pendingSeekSec !== null) {
-              var nextSec = self._pendingSeekSec;
-              var nextCbs = self._pendingSeekCallbacks || {};
-              self._pendingSeekSec = null;
-              self._pendingSeekCallbacks = null;
-              self.seekTo(nextSec, nextCbs.success, nextCbs.error);
-            }
+            finish(true);
           }, function (err) {
-            console.warn('[XuperAVPlay] seekTo ' + targetMs + 'ms attempt failed:', err);
-            // If AVPlay failed due to transient state transition, retry once after 120ms
-            if (retriesLeft > 0) {
-              setTimeout(function () {
-                if (self.isActive) {
-                  executeSeek(targetMs, retriesLeft - 1);
-                } else {
-                  clearTimeout(self._seekWatchdog);
-                  self._isSeeking = false;
-                }
-              }, 120);
-              return;
-            }
-            // Refused while the TV refills its buffer (older TVs do): try again when it has buffered
-            if (self._buffering && !self._seekAfterBuffer) {
-              console.log('[XuperAVPlay] seek refused while buffering, retrying after buffering');
-              self._seekAfterBuffer = { sec: targetMs / 1000, success: successCb, error: errorCb };
-              return;
-            }
-            clearTimeout(self._seekWatchdog);
-            self._isSeeking = false;
-            self._seekAfterBuffer = null;
-            // A newer target queued meanwhile still runs
-            if (self._pendingSeekSec !== null) {
-              var queuedSec = self._pendingSeekSec;
-              var queuedCbs = self._pendingSeekCallbacks || {};
-              self._pendingSeekSec = null;
-              self._pendingSeekCallbacks = null;
-              if (typeof errorCb === 'function') errorCb(err);
-              self.seekTo(queuedSec, queuedCbs.success, queuedCbs.error);
-              return;
-            }
-            if (typeof errorCb === 'function') errorCb(err);
+            failed(targetMs, retriesLeft, err);
           });
         } catch (e) {
-          console.warn('[XuperAVPlay] seekTo exception:', e);
-          if (retriesLeft > 0) {
-            setTimeout(function () {
-              if (self.isActive) {
-                executeSeek(targetMs, retriesLeft - 1);
-              } else {
-                clearTimeout(self._seekWatchdog);
-                self._isSeeking = false;
-              }
-            }, 120);
-            return;
-          }
-          clearTimeout(self._seekWatchdog);
-          self._isSeeking = false;
-          self._pendingSeekSec = null;
-          self._pendingSeekCallbacks = null;
-          if (typeof errorCb === 'function') errorCb(e);
+          failed(targetMs, retriesLeft, e);
         }
       };
 
@@ -1079,6 +1064,7 @@
 
     stop: function () {
       clearTimeout(this._seekWatchdog);
+      this._seekTicket = (this._seekTicket || 0) + 1;
       this._isSeeking = false;
       this._seekAfterBuffer = null;
       this._buffering = false;
