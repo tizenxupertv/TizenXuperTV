@@ -3,6 +3,30 @@ import { pk } from '../lib/localProfiles';
 
 const PROFILE_KEY = pk('xuper_local_profile_v1');
 
+export interface FavoriteInfo {
+  title: string;
+  poster: string;
+  series: boolean;
+}
+
+/** What a favorite keeps from the title (a VodItem or the portal's detail) */
+export interface FavoriteSource {
+  title?: string;
+  poster?: string;
+  landscape?: string;
+  backdrop?: string;
+  isSeries?: boolean;
+  kind?: string;
+}
+
+function infoOf(item: FavoriteSource): FavoriteInfo {
+  return {
+    title: item.title || '',
+    poster: item.poster || item.landscape || item.backdrop || '',
+    series: !!(item.isSeries || item.kind === 'serie')
+  };
+}
+
 class FavoritesService {
   private listeners: Array<() => void> = [];
 
@@ -41,13 +65,17 @@ class FavoritesService {
     return !!(profile.favs && profile.favs[String(id)]);
   }
 
-  public toggleFavorite(id: string | number): boolean {
+  /**
+   * Adds or removes a title from Mi lista. With the item, its title and poster are kept with it, so Mi lista can show
+   * titles that are not in the loaded catalog (older favorites saved only `true`)
+   */
+  public toggleFavorite(id: string | number, item?: FavoriteSource): boolean {
     const profile = this.getProfile();
     if (!profile.favs) profile.favs = {};
     const key = String(id);
     const newState = !profile.favs[key];
     if (newState) {
-      profile.favs[key] = true;
+      profile.favs[key] = item ? infoOf(item) : true;
     } else {
       delete profile.favs[key];
     }
@@ -67,6 +95,24 @@ class FavoritesService {
     }
     this.notify();
     return true;
+  }
+
+  /** Title, poster and kind saved with a favorite, when known */
+  public getFavoriteInfo(id: string | number): FavoriteInfo | null {
+    const v = this.getProfile().favs?.[String(id)];
+    return v && typeof v === 'object' && v.title ? (v as FavoriteInfo) : null;
+  }
+
+  /** Saves what is known about a favorite that was stored without it */
+  public setFavoriteInfo(id: string | number, item: FavoriteSource): void {
+    const profile = this.getProfile();
+    const key = String(id);
+    if (!profile.favs || !profile.favs[key]) return;
+    profile.favs[key] = infoOf(item);
+    try {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    } catch (e) {}
+    this.notify();
   }
 
   public getFavoriteIds(): string[] {

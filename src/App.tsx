@@ -539,7 +539,7 @@ export const App: React.FC = () => {
         return true;
       }
       if (activeDetailItem) {
-        favoritesService.toggleFavorite(activeDetailItem.id);
+        favoritesService.toggleFavorite(activeDetailItem.id, activeDetailItem);
         return true;
       }
     }
@@ -895,7 +895,7 @@ export const App: React.FC = () => {
           isFocusActive={focusDomain === 'content'}
           isFavorite={isHeroFav}
           onPlayHero={it => handleOpenDetail(it)}
-          onToggleFavHero={it => favoritesService.toggleFavorite(it.id)}
+          onToggleFavHero={it => favoritesService.toggleFavorite(it.id, it)}
           onActivateHistory={it => {
             const vod = findVod(it);
             handleOpenDetail(vod);
@@ -917,7 +917,7 @@ export const App: React.FC = () => {
           onBack={detail.handleBackDetail}
           onPlay={(it, ep, isTrailer) => playFromDetail(it, ep, isTrailer)}
           onEpisodesChange={data => setDetailEpisodes(data)}
-          onToggleFavorite={it => favoritesService.toggleFavorite(it.id)}
+          onToggleFavorite={it => favoritesService.toggleFavorite(it.id, it)}
           onSelectSeason={sIdx => setDetailFocus(prev => ({
             ...prev,
             // Picking from the open season list closes it

@@ -149,7 +149,8 @@ class HistoryService {
       if (typeof window === 'undefined' || !window.localStorage) return;
       const ls = window.localStorage;
       const allHistories: Record<string, HistoryItem> = {};
-      const allFavs: Record<string, boolean> = {};
+      // A favorite is `true` or the title's info (favoritesService): keep the info when any copy has it
+      const allFavs: Record<string, unknown> = {};
 
       // 1. Scan all storage keys containing profile or history data
       for (let i = 0; i < ls.length; i++) {
@@ -186,7 +187,7 @@ class HistoryService {
 
             if (data.favs && typeof data.favs === 'object') {
               for (const fid of Object.keys(data.favs)) {
-                if (data.favs[fid]) allFavs[fid] = true;
+                if (data.favs[fid] && (typeof data.favs[fid] === 'object' || !allFavs[fid])) allFavs[fid] = data.favs[fid];
               }
             }
           } catch (e) {}
@@ -220,7 +221,7 @@ class HistoryService {
       }
       if (current.favs) {
         for (const fid of Object.keys(current.favs)) {
-          if (current.favs[fid]) allFavs[fid] = true;
+          if (current.favs[fid] && (typeof current.favs[fid] === 'object' || !allFavs[fid])) allFavs[fid] = current.favs[fid];
         }
       }
 

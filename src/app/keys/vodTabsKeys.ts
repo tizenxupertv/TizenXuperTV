@@ -84,7 +84,7 @@ export function handleVodTabsKeys(key: TvKey, ctx: VodTabsKeysCtx): boolean {
         if (destacadosFocus.heroBtn === 'play') {
           handleOpenDetail(item);
         } else {
-          favoritesService.toggleFavorite(item.id);
+          favoritesService.toggleFavorite(item.id, item);
         }
       }
       return true;
