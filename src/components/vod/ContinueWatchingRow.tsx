@@ -8,12 +8,14 @@ interface ContinueWatchingRowProps {
   items: HistoryItem[];
   focusedIndex: number | null;
   onActivate: (item: HistoryItem) => void;
+  onOptions?: (item: HistoryItem) => void;
 }
 
 const ContinueWatchingRowComponent: React.FC<ContinueWatchingRowProps> = ({
   items,
   focusedIndex,
-  onActivate
+  onActivate,
+  onOptions
 }) => {
   const sliderRef = useRef<HTMLDivElement>(null);
 
@@ -33,6 +35,11 @@ const ContinueWatchingRowComponent: React.FC<ContinueWatchingRowProps> = ({
         <div className="section-title">
           Seguir viendo <span className="section-chevron">›</span>
         </div>
+        {focusedIndex !== null && (
+          <div className="cw-section-hint">
+            Mantén OK para opciones
+          </div>
+        )}
       </div>
       <div className="content-slider" ref={sliderRef}>
         {items.map((item, idx) => (
@@ -41,6 +48,7 @@ const ContinueWatchingRowComponent: React.FC<ContinueWatchingRowProps> = ({
             item={item}
             isFocused={focusedIndex === idx}
             onActivate={onActivate}
+            onOptions={onOptions}
           />
         ))}
       </div>

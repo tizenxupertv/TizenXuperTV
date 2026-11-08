@@ -763,7 +763,21 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     }
   };
   const settingRows: SettingRow[] = [
-    // 1. Formato de pantalla (Siempre aplica a cualquier video)
+    // 1. Nitidez / Resolución
+    ...QUALITY_OPTIONS.map((opt, i) => {
+      const qLabel = i === 0 ? 'Auto' : opt.toUpperCase();
+      return {
+        group: 'Nitidez',
+        label: qLabel,
+        selected: (settings.quality || 0) === i,
+        apply: () => {
+          settingsService.set({ quality: i });
+          flash(`Nitidez: ${qLabel}`);
+        }
+      };
+    }),
+
+    // 2. Formato de pantalla (Siempre aplica a cualquier video)
     ...DISPLAY_LABELS.map((label, i) => ({
       group: 'Formato de pantalla',
       label,

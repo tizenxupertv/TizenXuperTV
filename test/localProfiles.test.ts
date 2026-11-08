@@ -16,7 +16,7 @@ test('a TV without profiles has only "Principal", which keeps the original keys'
   const store = createProfileStore(memory(), memory());
   assert.deepEqual(store.list().map(p => p.name), ['Principal']);
   assert.equal(store.key('xuper_local_profile_v1'), 'xuper_local_profile_v1');
-  assert.equal(store.needsPicker(), false);
+  assert.equal(store.needsPicker(), true, 'always prompts to select profile on startup');
 });
 
 test('other profiles keep their data under their own keys', () => {

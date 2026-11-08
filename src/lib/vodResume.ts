@@ -1,10 +1,12 @@
-import { VodItem, VodEpisode } from '../types/vod';
-import { HistoryItem } from '../types/history';
+import type { VodItem, VodEpisode } from '../types/vod';
+import type { HistoryItem } from '../types/history';
 
 export interface ResumeTarget {
   episode?: VodEpisode;
   startAt: number;
   label: string;
+  remainingText?: string;
+  progressPercent?: number;
 }
 
 /** A title counts as watched once 90% of it has been played (unknown duration: never) */
@@ -26,9 +28,67 @@ function episodeLabel(ep: VodEpisode, index: number, seasonNumber?: number): str
   return seasonNumber ? `T${seasonNumber}:${e}` : e;
 }
 
-function remaining(position: number, duration: number): string {
-  if (!(duration > 0)) return '';
-  return ` · ${Math.max(1, Math.round((duration - position) / 60))} min`;
+/**
+ * Formats duration into standard streaming format "X h Y min" or "Y min" (e.g. Netflix, Disney+, Apple TV+).
+ * Handles:
+ *  - "02:18:00" / "01:45:30" (HH:MM:SS) -> "2 h 18 min"
+ *  - 8280 / "8280" (seconds > 600) -> "2 h 18 min"
+ *  - 138 / "138" / "138 min" (minutes <= 600) -> "2 h 18 min"
+ *  - 45 / "45 min" -> "45 min"
+ *  - "2 h" / "120 min" -> "2 h"
+ */
+export function formatDuration(raw: any): string {
+  if (!raw) return '';
+  const s = String(raw).trim();
+  if (!s || s === '—') return '';
+
+  if (/^\d+\s*h(?:\s*\d+\s*min)?$/i.test(s)) return s;
+
+  let totalMinutes = 0;
+  if (/^\d{1,2}:\d{2}(?::\d{2})?$/.test(s)) {
+    const parts = s.split(':').map(n => parseInt(n, 10));
+    if (parts.length === 3) {
+      totalMinutes = parts[0] * 60 + parts[1] + Math.round(parts[2] / 60);
+    } else if (parts.length === 2) {
+      totalMinutes = parts[0] * 60 + parts[1];
+    }
+  } else {
+    const m = s.match(/^(\d+(?:\.\d+)?)/);
+    if (!m) return s;
+    const num = Math.round(parseFloat(m[1]));
+    if (s.toLowerCase().includes('min')) {
+      totalMinutes = num;
+    } else if (num > 600) {
+      totalMinutes = Math.round(num / 60);
+    } else {
+      totalMinutes = num;
+    }
+  }
+
+  if (totalMinutes <= 0) return '';
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (hours > 0 && mins > 0) return `${hours} h ${mins} min`;
+  if (hours > 0) return `${hours} h`;
+  return `${mins} min`;
+}
+
+/**
+ * Formats remaining playback time: e.g. "Quedan 2 h 18 min" or "Quedan 42 min"
+ */
+export function formatRemaining(position: number, duration: number): string {
+  if (!(duration > 0) || position <= 0) return '';
+  const remainingSec = Math.max(0, duration - position);
+  const remainingMin = Math.round(remainingSec / 60);
+  if (remainingMin <= 0) return '';
+  const hours = Math.floor(remainingMin / 60);
+  const mins = remainingMin % 60;
+  if (hours > 0 && mins > 0) {
+    return `Quedan ${hours} h ${mins} min`;
+  } else if (hours > 0) {
+    return `Quedan ${hours} h`;
+  }
+  return `Quedan ${mins} min`;
 }
 
 /**
@@ -44,6 +104,12 @@ export function getResumeTarget(
   seasonNumber?: number,
   seasonId?: string
 ): ResumeTarget {
+  const isSeries = Boolean(
+    item.isSeries ||
+    item.kind === 'serie' ||
+    (item.kind !== 'película' && item.kind !== 'pelicula' && episodes.length > 0)
+  );
+
   if (entry && String(entry.id) === String(item.id)) {
     const seasonMatches = (entry.seasonNumber === undefined || seasonNumber === undefined) ||
                           (parseInt(String(entry.seasonNumber), 10) === parseInt(String(seasonNumber), 10));
@@ -56,10 +122,13 @@ export function getResumeTarget(
       }
       if (idx !== -1) {
         if (!isFinished(entry.position, entry.duration)) {
+          const progressPercent = entry.duration > 0 ? Math.min(100, Math.max(0, Math.round((entry.position / entry.duration) * 100))) : undefined;
           return {
             episode: episodes[idx],
             startAt: Math.max(0, entry.position),
-            label: `Continuar ${episodeLabel(episodes[idx], idx, seasonNumber)}${remaining(entry.position, entry.duration)}`
+            label: `Continuar ${episodeLabel(episodes[idx], idx, seasonNumber)}`,
+            remainingText: formatRemaining(entry.position, entry.duration),
+            progressPercent
           };
         }
         if (idx + 1 < episodes.length) {
@@ -70,15 +139,21 @@ export function getResumeTarget(
           };
         }
       }
-    } else if (!entry.series && !isFinished(entry.position, entry.duration) && entry.position > 0) {
-      return { startAt: Math.max(0, entry.position), label: `Continuar${remaining(entry.position, entry.duration)}` };
+    } else if (!isSeries && !isFinished(entry.position, entry.duration) && entry.position > 0) {
+      const progressPercent = entry.duration > 0 ? Math.min(100, Math.max(0, Math.round((entry.position / entry.duration) * 100))) : undefined;
+      return {
+        startAt: Math.max(0, entry.position),
+        label: 'Continuar película',
+        remainingText: formatRemaining(entry.position, entry.duration),
+        progressPercent
+      };
     }
   }
 
   if (episodes.length > 0) {
     return { episode: episodes[0], startAt: 0, label: `Reproducir ${episodeLabel(episodes[0], 0, seasonNumber)}` };
   }
-  return { startAt: 0, label: 'Reproducir' };
+  return { startAt: 0, label: isSeries ? 'Reproducir' : 'Reproducir película' };
 }
 
 /** Start position for a specific episode chosen from the list */

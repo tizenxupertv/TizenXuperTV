@@ -18,6 +18,7 @@ import { BrowseRoot, FilterRoot } from './lib/screenStack';
 import { PerfHud } from './components/common/PerfHud';
 import { PinDialog } from './screens/PinDialog';
 import { WelcomeModal } from './components/common/WelcomeModal';
+import { ContinueWatchingOptionsModal } from './components/vod/ContinueWatchingOptionsModal';
 import { playerService } from './services/playerService';
 import { favoritesService } from './services/favoritesService';
 import { useTvRemote, TvKey } from './hooks/useTvRemote';
@@ -29,6 +30,7 @@ import { catalogService } from './services/catalogService';
 import { VodItem, VodEpisode } from './types/vod';
 import { LiveChannel, LiveCategory } from './types/channel';
 import { historyService } from './services/historyService';
+import type { HistoryItem } from './types/history';
 import { settingsService, subtitleChoiceIndex, applySettingChoice, SETTINGS_ROW } from './services/settingsService';
 import { getResumeTarget, startAtForEpisode } from './lib/vodResume';
 import { FocusDomain, VodPlayerState } from './app/types';
@@ -124,6 +126,33 @@ export const App: React.FC = () => {
   const [showExitToast, setShowExitToast] = useState(false);
   const lastBackPressRef = useRef(0);
   const exitToastTimerRef = useRef<any>(null);
+
+  // Continue Watching options modal & toast
+  const [historyOptionsItem, setHistoryOptionsItem] = useState<HistoryItem | null>(null);
+  const [historyOptionsIdx, setHistoryOptionsIdx] = useState<number>(0);
+  const [toastNotice, setToastNotice] = useState<string | null>(null);
+  const toastNoticeTimerRef = useRef<any>(null);
+
+  const enterLongPressTimerRef = useRef<any>(null);
+  const enterLongPressFiredRef = useRef<boolean>(false);
+  const pendingHistoryActivateRef = useRef<HistoryItem | null>(null);
+
+  const openHistoryOptions = useCallback((item: HistoryItem) => {
+    setHistoryOptionsItem(item);
+    setHistoryOptionsIdx(0);
+  }, []);
+
+  const closeHistoryOptions = useCallback(() => {
+    setHistoryOptionsItem(null);
+  }, []);
+
+  const removeHistoryItem = useCallback((item: HistoryItem) => {
+    historyService.removeEntry(item.id);
+    setHistoryOptionsItem(null);
+    setToastNotice(`«${item.title || 'Título'}» eliminado de Seguir viendo`);
+    if (toastNoticeTimerRef.current) clearTimeout(toastNoticeTimerRef.current);
+    toastNoticeTimerRef.current = setTimeout(() => setToastNotice(null), 2500);
+  }, []);
 
   // Inactivity screensaver for OLED/QLED panels (5 minutes without remote input)
   const screensaverTimerRef = useRef<any>(null);
@@ -443,6 +472,35 @@ export const App: React.FC = () => {
   // Kept in a ref so the window listener never runs with stale state.
   const handleKeyRef = useRef<(key: TvKey, ev?: KeyboardEvent) => boolean>(() => true);
   handleKeyRef.current = (key: TvKey, ev?: KeyboardEvent): boolean => {
+    // Continue Watching Options Modal owns remote keys while open
+    if (historyOptionsItem) {
+      if (key === 'up') {
+        setHistoryOptionsIdx(i => Math.max(0, i - 1));
+        return true;
+      }
+      if (key === 'down') {
+        setHistoryOptionsIdx(i => Math.min(2, i + 1));
+        return true;
+      }
+      if (key === 'back') {
+        closeHistoryOptions();
+        return true;
+      }
+      if (key === 'enter') {
+        if (historyOptionsIdx === 0) {
+          removeHistoryItem(historyOptionsItem);
+        } else if (historyOptionsIdx === 1) {
+          const vod = findVod(historyOptionsItem);
+          closeHistoryOptions();
+          handleOpenDetail(vod);
+        } else {
+          closeHistoryOptions();
+        }
+        return true;
+      }
+      return true;
+    }
+
     // Search modal owns the keyboard while open (typing, arrows, Enter, Back); a detail or the
     // player opened from it sits on top and takes the keys (the search waits hidden underneath)
     if (isSearchOpen && !activeDetailItem && !activeVodPlayer) return false;
@@ -559,6 +617,39 @@ export const App: React.FC = () => {
       return true;
     }
 
+    // Cancel long-press timer if another key is pressed
+    if (enterLongPressTimerRef.current && key !== 'enter') {
+      clearTimeout(enterLongPressTimerRef.current);
+      enterLongPressTimerRef.current = null;
+      pendingHistoryActivateRef.current = null;
+    }
+
+    // Intercept Enter / Info on Seguir viendo cards for long-press options
+    const curRowDef = currentRows[destacadosFocus.rowIndex];
+    const isHistoryRow = focusDomain === 'content' && destacadosFocus.area === 'row' && curRowDef?.type === 'history';
+    const focusedHistoryItem = isHistoryRow ? (curRowDef.items[destacadosFocus.cardIndex] as HistoryItem) : null;
+
+    if (focusedHistoryItem) {
+      if (key === 'info') {
+        openHistoryOptions(focusedHistoryItem);
+        return true;
+      }
+      if (key === 'enter') {
+        if (ev?.repeat) {
+          return true;
+        }
+        if (enterLongPressTimerRef.current) clearTimeout(enterLongPressTimerRef.current);
+        enterLongPressFiredRef.current = false;
+        pendingHistoryActivateRef.current = focusedHistoryItem;
+        enterLongPressTimerRef.current = window.setTimeout(() => {
+          enterLongPressFiredRef.current = true;
+          pendingHistoryActivateRef.current = null;
+          openHistoryOptions(focusedHistoryItem);
+        }, 450);
+        return true;
+      }
+    }
+
     return handleVodTabsKeys(key, {
       activeHeroIndex,
       setActiveHeroIndex,
@@ -574,9 +665,30 @@ export const App: React.FC = () => {
       openSeeAll
     });
   };
-  const handleKey = useCallback((key: TvKey, ev?: KeyboardEvent) => handleKeyRef.current(key, ev), []);
 
-  useTvRemote({ onKey: handleKey });
+  const handleKeyUpRef = useRef<(key: TvKey, ev?: KeyboardEvent) => boolean | void>(() => {});
+  handleKeyUpRef.current = (key: TvKey) => {
+    if (key === 'enter') {
+      if (enterLongPressTimerRef.current) {
+        clearTimeout(enterLongPressTimerRef.current);
+        enterLongPressTimerRef.current = null;
+      }
+      if (enterLongPressFiredRef.current) {
+        enterLongPressFiredRef.current = false;
+        return true;
+      }
+      if (pendingHistoryActivateRef.current) {
+        const item = pendingHistoryActivateRef.current;
+        pendingHistoryActivateRef.current = null;
+        handleOpenDetail(findVod(item));
+        return true;
+      }
+    }
+  };
+  const handleKey = useCallback((key: TvKey, ev?: KeyboardEvent) => handleKeyRef.current(key, ev), []);
+  const handleKeyUp = useCallback((key: TvKey, ev?: KeyboardEvent) => handleKeyUpRef.current(key, ev), []);
+
+  useTvRemote({ onKey: handleKey, onKeyUp: handleKeyUp });
 
   // Live TV callbacks with a stable identity, so the memoized LiveTvView skips renders
   // caused by keys handled elsewhere (VOD tabs, header, detail)
@@ -783,6 +895,7 @@ export const App: React.FC = () => {
             const vod = findVod(it);
             handleOpenDetail(vod);
           }}
+          onOptionsHistory={openHistoryOptions}
           onActivateVod={openVodCard}
           onSeeAll={openSeeAll}
         />
@@ -974,6 +1087,29 @@ export const App: React.FC = () => {
 
       {/* First-Run Welcome & Remote Control Guide */}
       <WelcomeModal />
+
+      {/* Continue Watching Options Modal (Long Press OK / Info / Dots) */}
+      {historyOptionsItem && (
+        <ContinueWatchingOptionsModal
+          item={historyOptionsItem}
+          focusIndex={historyOptionsIdx}
+          onSelectIndex={setHistoryOptionsIdx}
+          onRemove={() => removeHistoryItem(historyOptionsItem)}
+          onDetails={() => {
+            const vod = findVod(historyOptionsItem);
+            closeHistoryOptions();
+            handleOpenDetail(vod);
+          }}
+          onClose={closeHistoryOptions}
+        />
+      )}
+
+      {/* Temporary Toast Notice */}
+      {toastNotice && (
+        <div className="pf-toast">
+          {toastNotice}
+        </div>
+      )}
 
       {/* Double-Back Exit Toast */}
       {showExitToast && (

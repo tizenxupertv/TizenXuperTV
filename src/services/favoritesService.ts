@@ -8,7 +8,29 @@ class FavoritesService {
 
   private getProfile(): any {
     try {
-      const raw = localStorage.getItem(PROFILE_KEY);
+      let raw = localStorage.getItem(PROFILE_KEY);
+      if (PROFILE_KEY !== 'xuper_local_profile_v1') {
+        const mainRaw = localStorage.getItem('xuper_local_profile_v1');
+        if (mainRaw) {
+          try {
+            const mainParsed = JSON.parse(mainRaw);
+            if (mainParsed && mainParsed.favs && Object.keys(mainParsed.favs).length > 0) {
+              const currentParsed = raw ? JSON.parse(raw) : null;
+              const favMigrationFlag = `${PROFILE_KEY}_migrated_favs_v1`;
+              if (!localStorage.getItem(favMigrationFlag)) {
+                localStorage.setItem(favMigrationFlag, '1');
+                const mergedProfile = {
+                  ...currentParsed,
+                  favs: { ...mainParsed.favs, ...((currentParsed && currentParsed.favs) || {}) }
+                };
+                localStorage.setItem(PROFILE_KEY, JSON.stringify(mergedProfile));
+                return mergedProfile;
+              }
+            }
+          } catch (mErr) {}
+        }
+      }
+
       if (raw) return JSON.parse(raw);
     } catch (e) {}
     return { favs: {} };
