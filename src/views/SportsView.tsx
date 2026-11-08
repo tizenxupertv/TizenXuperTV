@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SportCategory, SportsEvent, SportsStream } from '../types/sports.ts';
-import { sportsService } from '../services/sportsService.ts';
+import { isPlayableStream, sportsService } from '../services/sportsService.ts';
 import { scoreboardService } from '../services/scoreboardService.ts';
 import '../styles/sports.css';
 import { MatchHeader } from '../components/sports/MatchHeader';
@@ -245,7 +245,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
     setStreamFocus(0);
     setStreamsLoading(true);
     try {
-      const list = await sportsService.getStreams(ev.linksPath);
+      const list = (await sportsService.getStreams(ev.linksPath)).filter(isPlayableStream);
       if (list.length === 1) {
         setSelected(null);
         onPlayEventStream(ev, 0, list);
@@ -378,7 +378,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
             {streamsLoading ? (
               <div className="spp-loading spb-modal-status"><span className="spp-spinner" />Buscando señales…</div>
             ) : streams.length === 0 ? (
-              <div className="spb-empty-text spb-modal-status">Todavía no hay señales para este evento.</div>
+              <div className="spb-empty-text spb-modal-status">Este evento no tiene señales que se puedan ver en la app por ahora.</div>
             ) : (
               <div className="spb-streams">
                 {streams.map((st, i) => (

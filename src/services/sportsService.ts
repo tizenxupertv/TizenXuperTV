@@ -5,6 +5,14 @@ const DEFAULT_BASE_URL = 'https://hello-how.pages.dev/';
 const CACHE_TTL_MS = 120_000; // 2 minutes
 const STREAMS_CACHE_TTL_MS = 300_000; // 5 minutes
 
+/**
+ * Signals the app plays: a direct URL that needs no extra request headers. Signals resolved through third-party
+ * web players (tokenApi) or that only answer to another site's Referer / User-Agent are left out.
+ */
+export function isPlayableStream(s: SportsStream): boolean {
+  return !!s.url && Object.keys(s.headers || {}).length === 0;
+}
+
 export class SportsService {
   private baseUrl: string = DEFAULT_BASE_URL;
   private cachedEvents: SportsEvent[] = [];
