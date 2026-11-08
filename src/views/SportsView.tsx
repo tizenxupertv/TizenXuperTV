@@ -31,6 +31,8 @@ const RELOAD_EVERY_MS = 5 * 60_000;
 /** …once the remote has been still this long */
 const RELOAD_IDLE_MS = 3_000;
 const RELOAD_CHECK_MS = 15_000;
+/** Scores are worked out this long after the list paints */
+const SCORES_DELAY_MS = 120;
 
 type Line =
   | { kind: 'chips' }
@@ -65,7 +67,7 @@ const leagueOf = (e: SportsEvent) => (e.league.trim().toLowerCase() === e.home.t
 
 const Crest: React.FC<{ src?: string; name: string; big?: boolean }> = ({ src, name, big }) => (
   <span className={`spb-crest ${big ? 'is-big' : ''}`}>
-    {src ? <img src={src} alt="" onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }} /> : null}
+    {src ? <img src={src} alt="" decoding="async" loading="lazy" onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }} /> : null}
     <span className="spb-crest-text">{name.slice(0, 2).toUpperCase()}</span>
   </span>
 );
@@ -139,8 +141,9 @@ interface Props {
 }
 
 export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onFocusHeader, onPlayEventStream }) => {
-  const [events, setEvents] = useState<SportsEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Back to the tab: the last list shows at once (no skeleton) while a fresh one loads
+  const [events, setEvents] = useState<SportsEvent[]>(() => sportsService.peekEvents());
+  const [loading, setLoading] = useState(() => sportsService.peekEvents().length === 0);
   const [error, setError] = useState(false);
   const [sport, setSport] = useState<SportCategory>('all');
   const [focus, setFocus] = useState({ line: 0, col: 0 });
@@ -159,13 +162,14 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
   const lastKeyAtRef = useRef(0);
 
   const load = useCallback(async (force = false) => {
-    setLoading(true);
+    const shown = force ? [] : sportsService.peekEvents();
     setError(false);
+    if (!shown.length) setLoading(true);
     try {
       setEvents(await sportsService.getEvents(force));
       loadedAtRef.current = Date.now();
     } catch (e) {
-      setError(true);
+      if (!shown.length) setError(true);
     } finally {
       setLoading(false);
     }
@@ -187,24 +191,34 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     return () => clearInterval(t);
   }, []);
 
-  // Scores and "En N min" stay fresh while the tab is open
+  // Scores and "En N min" stay fresh while the tab is on screen
   useEffect(() => {
     let alive = true;
     const refresh = () => scoreboardService.fetchScores().then(() => { if (alive) setScoreTick(t => t + 1); }, () => {});
     refresh();
-    const t = setInterval(() => { refresh(); setNow(Date.now()); }, SCORE_REFRESH_MS);
+    // Not while a match plays or the app is in the background: back on the list nothing heavy runs at once
+    const t = setInterval(() => {
+      if (pausedRef.current || document.hidden) return;
+      refresh();
+      setNow(Date.now());
+    }, SCORE_REFRESH_MS);
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  // ESPN's view of every match, worked out once per refresh (not on every key press)
-  const scores = useMemo(() => {
-    const m = new Map<string, Score>();
-    events.forEach(e => {
-      if (!isVersus(e)) return;
-      const sc = scoreboardService.findScore(e.home, e.away) as Score | null;
-      if (sc) m.set(e.id, sc);
-    });
-    return m;
+  // ESPN's view of every match, worked out once per refresh and after the list has painted, so entering the tab
+  // never waits for it (the matching is indexed and cached in scoreboardService)
+  const [scores, setScores] = useState<Map<string, Score>>(() => new Map());
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const m = new Map<string, Score>();
+      events.forEach(e => {
+        if (!isVersus(e)) return;
+        const sc = scoreboardService.findScore(e.home, e.away) as Score | null;
+        if (sc) m.set(e.id, sc);
+      });
+      setScores(m);
+    }, SCORES_DELAY_MS);
+    return () => clearTimeout(t);
   }, [events, scoreTick]);
 
   // Status: ESPN's when it knows the match (it ends when the match ends, not at an estimated time); otherwise the
