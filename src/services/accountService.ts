@@ -8,6 +8,10 @@
  */
 export const ACCOUNT_API = 'https://tizenxuper-bot.tizenxupertv.workers.dev';
 export const ACCOUNT_API_FALLBACK = 'https://tizenxuper-bot.juliochemoreno.workers.dev';
+/** Same API on pages.dev (TizenXuper Bot/pages-relay), for internet providers that block *.workers.dev */
+export const ACCOUNT_API_RELAY = 'https://tizenxuper-tv.pages.dev';
+/** Addresses of the TV API, tried in this order */
+export const ACCOUNT_APIS = [ACCOUNT_API, ACCOUNT_API_FALLBACK, ACCOUNT_API_RELAY];
 
 const SESSION_KEY = 'xuper_tg_session_v1';
 const DEVICE_KEY = 'xuper_device_id_v1';
@@ -72,7 +76,7 @@ export interface AccountDeps {
   /** App version and TV model sent to the server */
   device: () => { version: string; model: string };
   randomBytes: (n: number) => Uint8Array;
-  /** Custom endpoint list; defaults to [ACCOUNT_API, ACCOUNT_API_FALLBACK] in browsers */
+  /** Custom endpoint list; defaults to ACCOUNT_APIS in browsers */
   endpoints?: string[];
 }
 
@@ -87,7 +91,7 @@ export function createAccountService(deps: AccountDeps) {
     try { cb(); } catch (e) {}
   });
 
-  const endpoints = deps.endpoints || (typeof window !== 'undefined' ? [ACCOUNT_API, ACCOUNT_API_FALLBACK] : [ACCOUNT_API]);
+  const endpoints = deps.endpoints || (typeof window !== 'undefined' ? ACCOUNT_APIS : [ACCOUNT_API]);
 
   function read(key: string): string | null {
     try { return deps.storage().getItem(key); } catch (e) { return null; }
@@ -123,8 +127,8 @@ export function createAccountService(deps: AccountDeps) {
           body: JSON.stringify(body),
           signal: ctrl ? ctrl.signal : undefined
         });
-        // If primary returns transient 5xx, try fallback endpoint if one exists
-        if (i === 0 && endpoints.length > 1 && (res.status === 502 || res.status === 503 || res.status === 504)) {
+        // A transient 5xx: try the next address, when there is one
+        if (i < endpoints.length - 1 && (res.status === 502 || res.status === 503 || res.status === 504)) {
           console.warn(`[account] ${endpoint}${path} returned ${res.status}, trying fallback...`);
           continue;
         }
