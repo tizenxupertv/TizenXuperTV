@@ -23,6 +23,10 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   const [serverMenuIdx, setServerMenuIdx] = useState<number>(initialStreamIndex);
   const [isBuffering, setIsBuffering] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  // AVPlay draws below the page: the player background must be transparent while it plays
+  const [usingAvplay, setUsingAvplay] = useState(false);
+  // The OK that opened the player must not also open the signal panel
+  const openedAtRef = useRef(Date.now());
   // Signals that failed in this session, marked in the list
   const [failed, setFailed] = useState<Set<number>>(() => new Set());
 
@@ -65,11 +69,11 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       } catch {}
       hlsRef.current = null;
     }
-    if ((window as any).XuperAVPlay && typeof (window as any).XuperAVPlay.stopLive === 'function') {
-      try {
-        (window as any).XuperAVPlay.stopLive();
-      } catch {}
+    const av = (window as any).XuperAVPlay;
+    if (av && av.isActive) {
+      try { if (typeof av.stopLive === 'function') av.stopLive(); else av.stop(); } catch {}
     }
+    setUsingAvplay(false);
     const video = videoRef.current;
     if (video) {
       try {
@@ -107,28 +111,24 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
 
     console.log('[SportsPlayer] Starting stream:', currentStream.name, streamUrl, 'isDash:', isDash, 'drmApi:', currentStream.drmApi);
 
-    if (isAvPlayAvailable) {
-      // Use Tizen Hardware AVPlay
+    if (isAvPlayAvailable && !isDash) {
+      // TV, HLS without DRM: hardware AVPlay (the same path as live TV). It draws below the page, so the
+      // player turns transparent while it plays
       try {
-        document.documentElement.classList.add('xuper-live-avplay');
-        (window as any).XuperAVPlay.playLive(
-          {
-            url: streamUrl,
-            headers: currentStream.headers || {},
-            drm: currentStream.drmApi ? { key: currentStream.drmApi } : undefined
-          },
-          video
-        );
-
+        setUsingAvplay(true);
+        const av = (window as any).XuperAVPlay;
+        av._nextKind = 'live';
         video.onplaying = () => setIsBuffering(false);
         video.onwaiting = () => setIsBuffering(true);
         video.onerror = () => {
           setIsBuffering(false);
-          setError(`Error al reproducir ${currentStream.name}`);
+          setError(`No se pudo cargar la señal (${currentStream.name})`);
         };
+        if (av.playStream(streamUrl, {}, video) === false) throw new Error('AVPlay did not start');
       } catch (err: any) {
         console.error('[SportsPlayer] AVPlay error:', err);
-        setError('Error inicializando reproductor AVPlay');
+        setUsingAvplay(false);
+        setError('Error iniciando el reproductor');
         setIsBuffering(false);
       }
     } else if (isDash && shaka && shaka.Player && shaka.Player.isBrowserSupported()) {
@@ -152,15 +152,6 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
               }
             });
           }
-        }
-
-        // Register custom headers if present
-        if (currentStream.headers && Object.keys(currentStream.headers).length > 0) {
-          player.getNetworkingEngine().registerRequestFilter((_type: any, request: any) => {
-            for (const [k, v] of Object.entries(currentStream.headers!)) {
-              request.headers[k] = v;
-            }
-          });
         }
 
         player.addEventListener('error', (event: any) => {
@@ -195,16 +186,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       // Browser / Hls.js fallback
       const hls = new Hls({
         enableWorker: true,
-        lowLatencyMode: true,
-        xhrSetup: (xhr: XMLHttpRequest) => {
-          if (currentStream.headers) {
-            for (const [k, v] of Object.entries(currentStream.headers)) {
-              try {
-                xhr.setRequestHeader(k, v);
-              } catch {}
-            }
-          }
-        }
+        lowLatencyMode: false
       });
       hlsRef.current = hls;
       hls.loadSource(streamUrl);
@@ -257,6 +239,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   // Key navigation in player
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (Date.now() - openedAtRef.current < 600 && (e.key === 'Enter' || e.key === 'ArrowUp')) return;
       triggerOsd();
 
       if (showServerMenu) {
@@ -354,7 +337,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     <div style={{
       position: 'fixed',
       inset: 0,
-      backgroundColor: '#000',
+      backgroundColor: usingAvplay ? 'transparent' : '#000',
       zIndex: 9999,
       display: 'flex',
       alignItems: 'center',
