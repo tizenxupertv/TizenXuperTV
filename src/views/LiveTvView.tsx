@@ -10,6 +10,7 @@ import { ChannelRow, CategoryRow } from '../components/live/LiveRows';
 import { OnScreenKeyboard, KbState, KB_INITIAL } from '../components/live/OnScreenKeyboard';
 import { normalizeText } from '../utils/normalizeText';
 import { getChannelEntry, setChannelEntry } from '../lib/channelCache';
+import { pk } from '../lib/localProfiles';
 
 declare global {
   interface Window {
@@ -21,6 +22,7 @@ declare global {
 
 export const DEFAULT_LIVE_CATEGORIES: LiveCategory[] = [
   { id: 'favs', name: '★ Favoritos', isFav: true },
+  { id: 'espn', name: 'ESPN', isEspn: true },
   { id: 76182, name: 'Todos los canales' },
   { id: 76206, name: 'Deportes en Vivo' },
   { id: 76205, name: 'Cine & Series 24/7' },
@@ -206,7 +208,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   }, [isFullscreen, showOsd, tunedChannel]);
   const savedCatIdx = useMemo(() => {
     try {
-      const v = localStorage.getItem('xuper_last_live_cat_idx');
+      const v = localStorage.getItem(pk('xuper_last_live_cat_idx'));
       if (v !== null) {
         const parsed = parseInt(v, 10);
         if (!isNaN(parsed)) return parsed;
@@ -361,7 +363,11 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             .map(c => ({ id: c.id || c.columnId, name: c.name || c.title }))
             // The adult category ("18+") exists only while the +18 section is on
             .filter(c => adultOn || !parentalService.isAdultCategory(c.name));
-          const allCats = withIptvCategories([{ id: 'favs', name: '★ Favoritos', isFav: true }, ...formatted]);
+          const allCats = withIptvCategories([
+            { id: 'favs', name: '★ Favoritos', isFav: true },
+            { id: 'espn', name: 'ESPN', isEspn: true },
+            ...formatted
+          ]);
           setCategories(allCats);
           if (onCategoriesLoaded) onCategoriesLoaded(allCats);
         } else {
@@ -401,7 +407,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       }
       const cat = categories[idx++];
 
-      if (!cat || cat.id === 'favs') {
+      if (!cat || cat.id === 'favs' || cat.id === 'espn') {
         setTimeout(prefetchStep, 40);
         return;
       }
@@ -490,6 +496,92 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       setChannels(favChannels);
       setIsLoadingChannels(false);
       if (onChannelsLoaded) onChannelsLoaded(favChannels);
+      return;
+    }
+
+    // ESPN category: curated aggregation of all ESPN feeds (analogous to Cactus TV live-view)
+    if (activeCategory.id === 'espn' || activeCategory.isEspn) {
+      const isEspnChannel = (name: string) => /\bespn\b/i.test(name) || /^espn/i.test(name.trim());
+      const sortEspn = (a: LiveChannel, b: LiveChannel) => {
+        const numA = (a.name.match(/\d+/) || [])[0];
+        const numB = (b.name.match(/\d+/) || [])[0];
+        if (numA && numB) return parseInt(numA, 10) - parseInt(numB, 10);
+        if (numA) return 1;
+        if (numB) return -1;
+        return a.name.localeCompare(b.name);
+      };
+
+      if (categoryChannelsCache.has('espn')) {
+        const cached = filterLockedChannels(categoryChannelsCache.get('espn')!, categories, 'espn');
+        setChannels(cached);
+        setIsLoadingChannels(false);
+        if (onChannelsLoaded) onChannelsLoaded(cached);
+        return;
+      }
+
+      try {
+        const parsed = getChannelEntry('espn');
+        if (parsed && Array.isArray(parsed.channels) && parsed.channels.length) {
+          const cachedList = normalizeChannels<LiveChannel>(parsed.channels);
+          categoryChannelsCache.set('espn', cachedList);
+          const visible = filterLockedChannels(cachedList, categories, 'espn');
+          setChannels(visible);
+          cachedList.forEach((c: LiveChannel) => {
+            channelMasterCache.current[String(c.id || c.code)] = c;
+          });
+          setIsLoadingChannels(false);
+          if (onChannelsLoaded) onChannelsLoaded(visible);
+          return;
+        }
+      } catch (e) {}
+
+      const fromMaster = Object.values(channelMasterCache.current).filter(c => isEspnChannel(c.name));
+      if (fromMaster.length >= 3) {
+        fromMaster.sort(sortEspn);
+        categoryChannelsCache.set('espn', fromMaster);
+        setChannelEntry('espn', fromMaster);
+        const visible = filterLockedChannels(fromMaster, categories, 'espn');
+        setChannels(visible);
+        setIsLoadingChannels(false);
+        if (onChannelsLoaded) onChannelsLoaded(visible);
+        return;
+      }
+
+      setIsLoadingChannels(true);
+      if (window.MagisClient && typeof window.MagisClient.getLiveChannels === 'function') {
+        window.MagisClient.getLiveChannels('76206', 1, 50, (err: any, list: any[]) => {
+          if (!err && Array.isArray(list) && list.length) {
+            const chs: LiveChannel[] = list.map((c, idx) => ({
+              id: c.channelCode || c.id || idx,
+              name: c.name || c.channelName || 'Canal',
+              code: c.channelCode || String(c.id || ''),
+              url: c.streamUrl || '',
+              logo: c.logo || c.channelLogo || '',
+              now: realText(c.now || c.currentProgram),
+              next: realText(c.next || c.nextProgram),
+              time: c.time || 'EN VIVO',
+              isFav: !!favMap[channelKey(c)]
+            }));
+            chs.forEach(c => {
+              channelMasterCache.current[String(c.id || c.code)] = c;
+            });
+            const espnOnly = chs.filter(c => isEspnChannel(c.name)).sort(sortEspn);
+            categoryChannelsCache.set('espn', espnOnly);
+            setChannelEntry('espn', espnOnly);
+            const visible = filterLockedChannels(espnOnly, categories, 'espn');
+            setChannels(visible);
+            if (onChannelsLoaded) onChannelsLoaded(visible);
+          } else {
+            setChannels(fromMaster);
+            if (onChannelsLoaded) onChannelsLoaded(fromMaster);
+          }
+          setIsLoadingChannels(false);
+        });
+      } else {
+        setChannels(fromMaster);
+        if (onChannelsLoaded) onChannelsLoaded(fromMaster);
+        setIsLoadingChannels(false);
+      }
       return;
     }
 
@@ -597,7 +689,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     if (channels.length === 0 || tunedChannel) return;
     let saved: LiveChannel | null = null;
     try {
-      const raw = localStorage.getItem('xuper_last_live_ch');
+      const raw = localStorage.getItem(pk('xuper_last_live_ch'));
       if (raw) saved = JSON.parse(raw);
       // Older versions saved filler texts as the programme: they are not data
       if (saved) { saved.now = realText(saved.now); saved.next = realText(saved.next); }

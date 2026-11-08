@@ -722,6 +722,26 @@
         }
       }
     }
+    // v15 fallback: accept any signed VOD CDN
+    if (!result.length) {
+      for (var f = 0; f < list.length; f++) {
+        var c3 = list[f];
+        if (c3 && trim(c3.tag) === 'vod') {
+          var list3 = c3.url_list || [];
+          for (var q = 0; q < list3.length; q++) {
+            var u3 = list3[q];
+            var url3 = trim(u3 && u3.url);
+            if (isCfl(url3) || trim(u3 && u3.sign_type) === 'cfl') {
+              var b3 = [withScheme(c3.main_addr)];
+              var sp3 = trim(c3.spared_addr);
+              if (sp3 && b3.indexOf(withScheme(sp3)) === -1) b3.push(withScheme(sp3));
+              result.push({ bases: b3, auth: url3 });
+              break;
+            }
+          }
+        }
+      }
+    }
     return result;
   }
 
@@ -1186,7 +1206,7 @@
       ensureSession(function (err) {
         if (err) return callback(err);
         enqueue(function (release) {
-          postHttp('v6/getLiveData', {
+          var livePayload = {
             userToken: session.userToken,
             userId: session.userId,
             portalCode: PORTAL_CODE,
@@ -1195,7 +1215,9 @@
             pageSize: pSize,
             pageNum: pNum,
             expireTimeStr: ''
-          }, function (lErr, lRes) {
+          };
+
+          function handleLiveResponse(lErr, lRes) {
             release();
             if (lErr) {
               if (!retried && (lErr.portalCode === 'aaa100028' || lErr.portalCode === 'aaa100027' || /aaa10002[0-9]|未登录|sesi[oó]n|login|token/i.test((lErr.portalCode || '') + ' ' + (lErr.message || '')))) {
@@ -1246,6 +1268,14 @@
               } catch (e) {}
             }
             callback(null, channels, hasMore);
+          }
+
+          // Try modern v7/getLiveData first (Hydra 6.8.1), fallback to v6/getLiveData
+          postHttp('v7/getLiveData', livePayload, function (err7, res7) {
+            if (!err7 && res7 && res7.channelList) {
+              return handleLiveResponse(null, res7);
+            }
+            postHttp('v6/getLiveData', livePayload, handleLiveResponse);
           });
         });
       });
@@ -1293,6 +1323,23 @@
         }
       }
     }
+    // Fallback: accept any live CDN with CFL sign_type (v15/getSlbInfo)
+    if (!cdns.length) {
+      for (var k = 0; k < list.length; k++) {
+        var anyCdn = list[k];
+        if (anyCdn && anyCdn.tag === 'live') {
+          var aList = anyCdn.url_list || [];
+          for (var m = 0; m < aList.length; m++) {
+            var au = aList[m];
+            var aStr = au && au.url || '';
+            if (au.sign_type === 'cfl' || aStr.indexOf('sign_type=cfl') !== -1) {
+              addCdn(anyCdn.main_addr, aStr);
+              if (anyCdn.spared_addr) addCdn(anyCdn.spared_addr, aStr);
+            }
+          }
+        }
+      }
+    }
     return cdns;
   }
 
@@ -1310,6 +1357,7 @@
       if (err) return callback(err);
 
       var attempts = [
+        { path: 'v5/startPlayLive', bean: { channelCode: code, type: '1' } },
         { path: 'v4/startPlayLive', bean: { channelCode: code, type: '1' } },
         { path: 'v4/startPlayLive', bean: { channelCode: code, columnId: '76182', type: '1' } },
         { path: 'v4/startPlayLive', bean: { channelCode: code, columnId: 0, type: '1' } }
@@ -1812,6 +1860,48 @@
     });
   }
 
+  function getHome(callback) {
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      call('getHome', { homePageCode: 'home' }, function (pErr, pRes) {
+        if (pErr) return callback(pErr);
+        callback(null, pRes);
+      });
+    });
+  }
+
+  function getShelveData(shelveId, pageNum, pageSize, callback) {
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      var pNum = Math.max(1, parseInt(pageNum, 10) || 1);
+      var pSize = Math.max(1, Math.min(50, parseInt(pageSize, 10) || 20));
+      call('v3/getShelveData', {
+        shelveId: String(shelveId || ''),
+        pageNum: pNum,
+        pageSize: pSize
+      }, function (sErr, sRes) {
+        if (sErr) return callback(sErr);
+        callback(null, sRes);
+      });
+    });
+  }
+
+  function getShortVideo(pageNum, pageSize, callback) {
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      var pNum = Math.max(1, parseInt(pageNum, 10) || 1);
+      var pSize = Math.max(1, Math.min(50, parseInt(pageSize, 10) || 20));
+      call('getShortVideo', {
+        homePageCode: 'home',
+        pageNum: pNum,
+        pageSize: pSize
+      }, function (vErr, vRes) {
+        if (vErr) return callback(vErr);
+        callback(null, vRes);
+      });
+    });
+  }
+
   window.MagisClient = {
     ensureSession: ensureSession,
     resolve: resolve,
@@ -1819,6 +1909,9 @@
     mediaOptions: mediaOptions,
     detail: detail,
     home: home,
+    getHome: getHome,
+    getShelveData: getShelveData,
+    getShortVideo: getShortVideo,
     browse: browse,
     browseFilters: browseFilters,
     columns: columns,

@@ -635,7 +635,7 @@
     _displayMethod: function () {
       var modes = ['PLAYER_DISPLAY_MODE_LETTER_BOX', 'PLAYER_DISPLAY_MODE_FULL_SCREEN', 'PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO'];
       try {
-        var cfg = JSON.parse(localStorage.getItem('xuper_global_playback_v1') || '{}');
+        var cfg = JSON.parse(localStorage.getItem(window.__xuperProfileKey ? window.__xuperProfileKey('xuper_global_playback_v1') : 'xuper_global_playback_v1') || '{}');
         if (typeof cfg.display === 'number' && modes[cfg.display]) return modes[cfg.display];
       } catch (e) {}
       return modes[0];

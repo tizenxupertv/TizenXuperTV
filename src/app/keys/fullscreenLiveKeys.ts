@@ -2,6 +2,7 @@ import { TvKey } from '../../hooks/useTvRemote';
 import { playerService } from '../../services/playerService';
 import { pressKey, moveCursor, keyAt } from '../../components/live/OnScreenKeyboard';
 import { LiveTvState } from '../useLiveTv';
+import { pk } from '../../lib/localProfiles';
 
 export type FullscreenLiveKeysCtx = LiveTvState & {
   guardLiveCat: (catIndex: number, apply: () => void) => void;
@@ -168,10 +169,10 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
                 selectedCatIndex: loc.catIndex,
                 channelIndex: loc.channelIndex
               }));
-              try { localStorage.setItem('xuper_last_live_cat_idx', String(loc.catIndex)); } catch {}
+              try { localStorage.setItem(pk('xuper_last_live_cat_idx'), String(loc.catIndex)); } catch {}
             }
             setTunedLiveChannel(selected);
-            try { localStorage.setItem('xuper_last_live_ch', JSON.stringify(selected)); } catch {}
+            try { localStorage.setItem(pk('xuper_last_live_ch'), JSON.stringify(selected)); } catch {}
             closeDrawer();
             triggerOsd();
           };

@@ -1,6 +1,7 @@
 import { withoutFavorite } from '../lib/profileHistory';
+import { pk } from '../lib/localProfiles';
 
-const PROFILE_KEY = 'xuper_local_profile_v1';
+const PROFILE_KEY = pk('xuper_local_profile_v1');
 
 class FavoritesService {
   private listeners: Array<() => void> = [];
