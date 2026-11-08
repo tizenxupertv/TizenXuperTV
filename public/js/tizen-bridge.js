@@ -609,14 +609,18 @@
 
     _applyHeaders: function (headers) {
       if (!headers) return;
-      if (headers['User-Agent']) {
-        try { webapis.avplay.setStreamingProperty('USER_AGENT', headers['User-Agent']); } catch (e) {}
-      }
       var custom = [];
-      if (headers['Content-Auth']) custom.push('Content-Auth: ' + headers['Content-Auth']);
-      if (headers['Content-License']) custom.push('Content-License: ' + headers['Content-License']);
-      if (headers['App']) custom.push('App: ' + headers['App']);
-      if (headers['App-Version']) custom.push('App-Version: ' + headers['App-Version']);
+      for (var key in headers) {
+        if (Object.prototype.hasOwnProperty.call(headers, key)) {
+          var val = headers[key];
+          if (!val) continue;
+          if (key.toLowerCase() === 'user-agent') {
+            try { webapis.avplay.setStreamingProperty('USER_AGENT', val); } catch (e) {}
+          } else {
+            custom.push(key + ': ' + val);
+          }
+        }
+      }
       if (custom.length) {
         try { webapis.avplay.setStreamingProperty('CUSTOM_MESSAGE', custom.join('\r\n')); } catch (e) {}
       }

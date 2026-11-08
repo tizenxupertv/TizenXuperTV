@@ -8134,8 +8134,6 @@ html.xuper-vod-avplay .app-root,
   color: #00e5ff;
 }
 
-||||||| c51bbc8
-=======
 /* A downloaded update is ready: a blocking dialog over a dimmed screen, the only action is restarting */
 .upd-ready {
   position: fixed;

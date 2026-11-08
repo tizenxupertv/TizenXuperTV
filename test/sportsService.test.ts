@@ -96,11 +96,11 @@ test('parseStreams parses streams and headers correctly', () => {
 });
 
 
-test('only direct signals without extra headers are playable', async () => {
+test('only signals with valid resolved URLs are playable', async () => {
   const { isPlayableStream } = await import('../src/services/sportsService.ts');
   const base = { name: 'x', scheme: 0, headers: {} as Record<string, string> };
   assert.equal(isPlayableStream({ ...base, url: 'https://cdn/a.m3u8' }), true);
   assert.equal(isPlayableStream({ ...base, url: 'https://cdn/a.mpd', drmApi: 'k:v' }), true);
   assert.equal(isPlayableStream({ ...base, url: '', tokenApi: '{"type":"embed"}' }), false);
-  assert.equal(isPlayableStream({ ...base, url: 'https://cdn/a.m3u8', headers: { Referer: 'https://other/' } }), false);
+  assert.equal(isPlayableStream({ ...base, url: 'invalid-scheme' }), false);
 });
