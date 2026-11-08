@@ -1287,9 +1287,13 @@ html, body {
 
 /* Widescreen 16:9 Video Box */
 .live-grand-preview-box {
-  width: 100%;
+  /* 16:9 like the channels: the height sets it, the width follows (a full-width box was 2.1:1 and the TV
+     stretched the picture into it) */
+  width: auto;
   height: min(530px, 48vh);
   aspect-ratio: 16 / 9;
+  max-width: 100%;
+  align-self: flex-start;
   max-height: 52vh;
   border-radius: 16px;
   background: #000000;
