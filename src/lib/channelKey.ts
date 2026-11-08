@@ -56,8 +56,15 @@ export function isSameChannel(a: Partial<LiveChannel> | null | undefined, b: Par
  * Gives a cached channel the fields the app needs. Channels saved by other versions can carry only
  * `channelCode` / `streamUrl` (no id or code), and without them they cannot be tuned or compared.
  */
+/** Filler texts older versions stored as the programme (still in saved channel lists): they are not data */
+const FILLER_TEXTS = ['Transmisión en directo', 'Continuación de programación', 'Continuación de programación nocturna'];
+export const realText = (v?: string): string => (v && FILLER_TEXTS.indexOf(v.trim()) < 0 ? v : '');
+
 export function normalizeChannel<T extends Partial<LiveChannel>>(c: T): T {
   if (!c) return c;
+  if ((c.now && !realText(c.now)) || (c.next && !realText(c.next))) {
+    c = { ...c, now: realText(c.now), next: realText(c.next) };
+  }
   const raw = c as any;
   const hasId = c.id !== undefined && c.id !== null && String(c.id) !== '';
   const hasCode = !!c.code;

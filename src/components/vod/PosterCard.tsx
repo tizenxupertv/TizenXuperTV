@@ -55,15 +55,15 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
   };
 
   const categoryName = item.isSeries ? 'Programa de TV' : 'Película';
-  const genresStr = item.genres && item.genres.length ? item.genres.slice(0, 2).join(' · ') : (item.category || 'Cine');
-  const wideSubtitle = `${categoryName} · ${genresStr}`;
-  const wideTagline = item.score && parseFloat(item.score) >= 8.5
-    ? `★ ${item.score} · Aclamada por la crítica`
-    : `Top 10 en TizenXuper TV`;
+  // Only what the catalog knows: score, year, genres, category
+  const genresStr = item.genres && item.genres.length ? item.genres.slice(0, 2).join(' · ') : (item.category || '');
+  const wideSubtitle = [categoryName, genresStr].filter(Boolean).join(' · ');
+  const knownScore = item.score && item.score !== '0' ? item.score : '';
+  const knownYear = item.year && item.year !== '—' ? item.year : '';
+  const wideTagline = [knownScore && `★ ${knownScore}`, knownYear].filter(Boolean).join(' · ');
 
-  const metaSubtitle = item.score && item.score !== '0'
-    ? `★ ${item.score} · ${item.year && item.year !== '—' ? item.year : '2024'}`
-    : ((item.genres && item.genres[0]) || (item.category ? item.category.toUpperCase() : 'CINE'));
+  const metaSubtitle = [knownScore && `★ ${knownScore}`, knownYear].filter(Boolean).join(' · ')
+    || (item.genres && item.genres[0]) || (item.category ? item.category.toUpperCase() : '');
 
   return (
     <div
@@ -93,19 +93,7 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
           <div className="poster-rank-badge">{rank}</div>
         )}
 
-        {/* Wide Card "Nueva temporada" Pill Tag (Apple TV style) */}
-        {isWide && (
-          <div className="wide-season-pill">
-            {item.isSeries ? 'Nueva temporada' : 'Exclusivo'}
-          </div>
-        )}
 
-        {/* Brand mark top-right corner */}
-        {!isWide && (
-          <div className="poster-brand-badge">
-            <span>tv</span>
-          </div>
-        )}
 
         {/* Wide Card top-right translucent action circle */}
         {isWide && (
