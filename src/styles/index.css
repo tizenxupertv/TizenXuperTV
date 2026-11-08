@@ -7579,6 +7579,16 @@ html.xuper-vod-avplay .app-root,
   border-color: #38bdf8;
   box-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
 }
+.tg-login-btn-diag {
+  border: 2px solid rgba(168, 85, 247, 0.45);
+  color: #c084fc;
+}
+.tg-login-btn-diag.is-focused {
+  background: #a855f7;
+  color: #080b11;
+  border-color: #a855f7;
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.55);
+}
 
 /* Keyframe Animations */
 @keyframes tg-shimmer {
@@ -7687,6 +7697,174 @@ html.xuper-vod-avplay .app-root,
 }
 .tg-login-help-close {
   min-width: 220px;
+}
+
+/* ==========================================================================
+   Modal de diagnóstico de conexión para el login
+   ========================================================================== */
+.tg-login-diag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100010;
+  background: rgba(4, 7, 13, 0.9);
+  backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tg-login-diag-card {
+  max-width: 940px;
+  width: 90%;
+  background: #0f1422;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 28px;
+  padding: 34px 44px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.8);
+  box-sizing: border-box;
+}
+.tg-login-diag-header {
+  margin-bottom: 20px;
+}
+.tg-login-diag-badge {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: rgba(168, 85, 247, 0.16);
+  color: #c084fc;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+.tg-login-diag-title {
+  font-size: 26px;
+  font-weight: 900;
+  color: #fff;
+  margin: 0 0 6px;
+  letter-spacing: -0.4px;
+}
+.tg-login-diag-desc {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 0;
+}
+.tg-login-diag-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.tg-login-diag-check-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 12px 18px;
+}
+.tg-login-diag-check-status {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.tg-login-diag-check-status.is-ok {
+  background: rgba(74, 222, 128, 0.16);
+  color: #4ade80;
+}
+.tg-login-diag-check-status.is-warn {
+  background: rgba(251, 146, 60, 0.16);
+  color: #fb923c;
+}
+.tg-login-diag-check-status.is-error {
+  background: rgba(251, 113, 133, 0.16);
+  color: #fb7185;
+}
+.tg-login-diag-check-status.is-loading {
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+}
+.tg-login-diag-check-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.tg-login-diag-check-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tg-login-diag-check-name {
+  font-size: 15.5px;
+  font-weight: 800;
+  color: #f1f5f9;
+}
+.tg-login-diag-check-latency {
+  font-size: 13px;
+  font-weight: 700;
+  color: #38bdf8;
+  font-family: monospace;
+  background: rgba(56, 189, 248, 0.1);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.tg-login-diag-check-detail {
+  font-size: 13.5px;
+  color: #94a3b8;
+}
+.tg-login-diag-verdict-box {
+  border-radius: 16px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tg-login-diag-verdict-box.is-ok {
+  background: rgba(74, 222, 128, 0.08);
+  border-color: rgba(74, 222, 128, 0.28);
+}
+.tg-login-diag-verdict-box.is-warn {
+  background: rgba(251, 146, 60, 0.08);
+  border-color: rgba(251, 146, 60, 0.28);
+}
+.tg-login-diag-verdict-box.is-error {
+  background: rgba(251, 113, 133, 0.08);
+  border-color: rgba(251, 113, 133, 0.28);
+}
+.tg-login-diag-verdict-title {
+  font-size: 16px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tg-login-diag-verdict-box.is-ok .tg-login-diag-verdict-title { color: #4ade80; }
+.tg-login-diag-verdict-box.is-warn .tg-login-diag-verdict-title { color: #fb923c; }
+.tg-login-diag-verdict-box.is-error .tg-login-diag-verdict-title { color: #fb7185; }
+.tg-login-diag-verdict-desc {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #cbd5e1;
+}
+.tg-login-diag-verdict-desc b {
+  color: #38bdf8;
+}
+.tg-login-diag-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+.tg-login-diag-btn {
+  min-width: 180px;
 }
 .pf-logout { margin-left: auto; white-space: nowrap; }
 .pf-diag-report { margin: 14px 0 6px; font-size: 14px; line-height: 1.5; color: var(--text-muted); max-width: 880px; }
