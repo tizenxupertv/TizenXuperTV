@@ -28,66 +28,93 @@ function streamProxyPlugin() {
 
       const auth = reqUrl.searchParams.get('auth') || '';
       const license = reqUrl.searchParams.get('license') || '';
+      const referer = reqUrl.searchParams.get('referer') || '';
+      const ua = reqUrl.searchParams.get('ua') || '';
 
-      const headers: Record<string, string> = {
-        'User-Agent': 'Ranger/4.9.4-17294ac0',
-        'App': 'com.android.msandroid',
-        'App-Version': '49902',
-        'X-Buffer': '0'
-      };
-      if (auth) headers['Content-Auth'] = auth;
-      if (license) headers['Content-License'] = license;
+      const headers: Record<string, string> = {};
+      if (auth || license) {
+        headers['User-Agent'] = 'Ranger/4.9.4-17294ac0';
+        headers['App'] = 'com.android.msandroid';
+        headers['App-Version'] = '49902';
+        headers['X-Buffer'] = '0';
+        if (auth) headers['Content-Auth'] = auth;
+        if (license) headers['Content-License'] = license;
+      } else {
+        headers['User-Agent'] = ua || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+        if (referer) headers['Referer'] = referer;
+      }
       if (req.headers.range) headers['Range'] = req.headers.range;
 
-      const isHttps = targetUrl.startsWith('https:');
-      const mod = isHttps ? https : http;
-
-      const targetReq = mod.request(targetUrl, { method: req.method || 'GET', headers }, (targetRes) => {
-        const status = targetRes.statusCode || 200;
-        const contentType = targetRes.headers['content-type'] || '';
-        const isM3u8 = targetUrl.includes('.m3u8') || contentType.includes('mpegurl');
-
-        if (isM3u8 && status === 200 && req.method !== 'HEAD') {
-          const chunks: Buffer[] = [];
-          targetRes.on('data', (c) => chunks.push(c));
-          targetRes.on('end', () => {
-            const text = Buffer.concat(chunks).toString('utf8');
-            const lines = text.split('\n');
-            const rewritten = lines.map((line) => {
-              const trimmed = line.trim();
-              if (!trimmed || trimmed.startsWith('#')) return line;
-              const absoluteUrl = new URL(trimmed, targetUrl).toString();
-              return `/stream-proxy?url=${encodeURIComponent(absoluteUrl)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}`;
-            }).join('\n');
-
-            res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-            res.setHeader('Content-Length', Buffer.byteLength(rewritten));
-            res.statusCode = 200;
-            res.end(rewritten);
-          });
-        } else {
-          res.statusCode = status;
-          if (contentType) res.setHeader('Content-Type', contentType);
-          if (targetRes.headers['content-length']) res.setHeader('Content-Length', targetRes.headers['content-length']);
-          if (targetRes.headers['content-range']) res.setHeader('Content-Range', targetRes.headers['content-range']);
-          if (targetRes.headers['accept-ranges']) res.setHeader('Accept-Ranges', targetRes.headers['accept-ranges']);
-          targetRes.pipe(res);
-        }
-      });
-
-      req.on('close', () => {
-        targetReq.destroy();
-      });
-
-      targetReq.on('error', (err) => {
-        console.error('[StreamProxy] Error fetching:', targetUrl, err.message);
-        if (!res.headersSent) {
+      const fetchWithRedirects = (currentUrl: string, redirectCount = 0) => {
+        if (redirectCount > 5) {
           res.statusCode = 502;
-          res.end(err.message);
+          return res.end('Too many redirects');
         }
-      });
 
-      targetReq.end();
+        const isHttps = currentUrl.startsWith('https:');
+        const mod = isHttps ? https : http;
+
+        const targetReq = mod.request(currentUrl, { method: req.method || 'GET', headers }, (targetRes) => {
+          const status = targetRes.statusCode || 200;
+
+          // Follow redirects automatically
+          if ([301, 302, 303, 307, 308].includes(status) && targetRes.headers.location) {
+            const nextUrl = new URL(targetRes.headers.location, currentUrl).toString();
+            targetRes.resume();
+            return fetchWithRedirects(nextUrl, redirectCount + 1);
+          }
+
+          const contentType = targetRes.headers['content-type'] || '';
+          const isM3u8 = currentUrl.includes('.m3u8') || contentType.includes('mpegurl');
+
+          if (isM3u8 && status === 200 && req.method !== 'HEAD') {
+            const chunks: Buffer[] = [];
+            targetRes.on('data', (c) => chunks.push(c));
+            targetRes.on('end', () => {
+              const text = Buffer.concat(chunks).toString('utf8');
+              const lines = text.split('\n');
+              const rewritten = lines.map((line) => {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith('#')) return line;
+                const absoluteUrl = new URL(trimmed, currentUrl).toString();
+                let proxyUri = `/stream-proxy?url=${encodeURIComponent(absoluteUrl)}`;
+                if (auth) proxyUri += `&auth=${encodeURIComponent(auth)}`;
+                if (license) proxyUri += `&license=${encodeURIComponent(license)}`;
+                if (referer) proxyUri += `&referer=${encodeURIComponent(referer)}`;
+                return proxyUri;
+              }).join('\n');
+
+              res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+              res.setHeader('Content-Length', Buffer.byteLength(rewritten));
+              res.statusCode = 200;
+              res.end(rewritten);
+            });
+          } else {
+            res.statusCode = status;
+            if (contentType) res.setHeader('Content-Type', contentType);
+            if (targetRes.headers['content-length']) res.setHeader('Content-Length', targetRes.headers['content-length']);
+            if (targetRes.headers['content-range']) res.setHeader('Content-Range', targetRes.headers['content-range']);
+            if (targetRes.headers['accept-ranges']) res.setHeader('Accept-Ranges', targetRes.headers['accept-ranges']);
+            targetRes.pipe(res);
+          }
+        });
+
+        req.on('close', () => {
+          targetReq.destroy();
+        });
+
+        targetReq.on('error', (err) => {
+          console.error('[StreamProxy] Error fetching:', currentUrl, err.message);
+          if (!res.headersSent) {
+            res.statusCode = 502;
+            res.end(err.message);
+          }
+        });
+
+        targetReq.end();
+      };
+
+      fetchWithRedirects(targetUrl);
     } catch (err: any) {
       console.error('[StreamProxy] Request error:', err);
       res.statusCode = 500;
