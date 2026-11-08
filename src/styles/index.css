@@ -2172,7 +2172,7 @@ html, body {
   left: 0;
   top: 0;
   height: 6px;
-  width: 45%;
+  width: 0%;
   border-radius: 3px;
   background: linear-gradient(90deg, #00e5ff 0%, #a855f7 100%);
 }

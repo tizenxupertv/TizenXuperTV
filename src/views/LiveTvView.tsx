@@ -267,7 +267,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
 }) => {
   useRenderCount('LiveTvView');
   useViewProfiler('TV en Vivo');
-  const [streamQuality, setStreamQuality] = useState<string>('FHD 1080p');
+  const [streamQuality, setStreamQuality] = useState<string>('');
   const [internalCatchup, setInternalCatchup] = useState<LiveChannel | null>(null);
 
   const activeCatchupChannel = catchupChannel !== undefined ? catchupChannel : internalCatchup;
@@ -279,6 +279,11 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     if (setCatchupChannel) setCatchupChannel(null);
     else setInternalCatchup(null);
   };
+
+  // Reset quality when changing channel
+  useEffect(() => {
+    setStreamQuality('');
+  }, [tunedChannel]);
 
   // Query AVPlay hardware stream quality when OSD is visible
   useEffect(() => {
@@ -954,7 +959,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             <span className="live-stream-badge">
               <span className="live-pulse-dot" /> EN VIVO
             </span>
-            <span className="live-quality-tag">FHD 1080p</span>
+            {streamQuality && <span className="live-quality-tag">{streamQuality}</span>}
             {tunedChannel && (
               <span className="live-quality-tag" style={{ background: 'rgba(0, 229, 255, 0.25)', borderColor: '#00e5ff' }}>
                 {tunedChannel.name}
@@ -1004,7 +1009,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
 
               <div className="pi-namerow">
                 <span className="pi-name">{displayChannel.name}</span>
-                <span className="pi-quality-badge">{streamQuality || 'FHD 1080p'}</span>
+                {streamQuality && <span className="pi-quality-badge">{streamQuality}</span>}
               </div>
 
               <div className="pi-btn-group">
@@ -1036,10 +1041,19 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                   : displayChannel.time || 'EN VIVO'}
               </div>
 
-              <div className="pi-seek">
+              <div
+                className="pi-seek"
+                style={{ visibility: isReplay || programProgress !== null ? 'visible' : 'hidden' }}
+              >
                 <div
                   className="bar"
-                  style={isReplay && replayPos && replayPos.d > 0 ? { width: `${Math.min(100, (replayPos.t / replayPos.d) * 100)}%` } : undefined}
+                  style={{
+                    width: isReplay && replayPos && replayPos.d > 0
+                      ? `${Math.min(100, (replayPos.t / replayPos.d) * 100)}%`
+                      : programProgress !== null
+                        ? `${programProgress}%`
+                        : '0%'
+                  }}
                 />
               </div>
 
