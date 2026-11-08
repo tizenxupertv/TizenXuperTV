@@ -586,7 +586,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         <div className="pf-parental">
           <h2 className="pf-title">Pestañas</h2>
           <p className="pf-note">
-            Elige qué pestañas se muestran arriba. Lo que ocultes sigue disponible en Buscar y en Explorar.
+            Elige qué pestañas se muestran arriba. Los títulos de Kids y Anime siguen disponibles en Buscar y en Explorar aunque ocultes su pestaña.
           </p>
           <div className="pf-iptv-grid" style={{ gridTemplateColumns: `repeat(${IPTV_COLUMNS}, 1fr)` }}>
             {HIDEABLE_TABS.map(t => {

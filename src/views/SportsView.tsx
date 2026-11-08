@@ -170,25 +170,35 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  // Scores of the started matches, worked out once per refresh (not on every key press)
+  // ESPN's view of every match, worked out once per refresh (not on every key press)
   const scores = useMemo(() => {
     const m = new Map<string, Score>();
     events.forEach(e => {
-      if (e.status === 'scheduled' || !isVersus(e)) return;
+      if (!isVersus(e)) return;
       const sc = scoreboardService.findScore(e.home, e.away) as Score | null;
-      if (sc && sc.state !== 'scheduled') m.set(e.id, sc);
+      if (sc) m.set(e.id, sc);
     });
     return m;
   }, [events, scoreTick]);
 
+  // Status: ESPN's when it knows the match (it ends when the match ends, not at an estimated time); otherwise the
+  // listing's start and end times, recomputed on every refresh so a match does not stay "live" for hours
+  const liveEvents = useMemo(() => events.map(e => {
+    const sc = scores.get(e.id);
+    const status: SportsEvent['status'] = sc && (sc.state === 'live' || sc.state === 'finished')
+      ? (sc.state as SportsEvent['status'])
+      : now < e.startMillis ? 'scheduled' : now <= e.endMillis ? 'live' : 'finished';
+    return status === e.status ? e : { ...e, status };
+  }), [events, scores, now]);
+
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: events.length };
-    events.forEach(e => { c[e.sport] = (c[e.sport] || 0) + 1; });
+    const c: Record<string, number> = { all: liveEvents.length };
+    liveEvents.forEach(e => { c[e.sport] = (c[e.sport] || 0) + 1; });
     return c;
-  }, [events]);
+  }, [liveEvents]);
   const chips = useMemo(() => SPORTS.filter(s => s.id === 'all' || counts[s.id]), [counts]);
 
-  const filtered = useMemo(() => (sport === 'all' ? events : events.filter(e => e.sport === sport)), [events, sport]);
+  const filtered = useMemo(() => (sport === 'all' ? liveEvents : liveEvents.filter(e => e.sport === sport)), [liveEvents, sport]);
 
   const lines: Line[] = useMemo(() => {
     const live = filtered.filter(e => e.status === 'live');
@@ -363,7 +373,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, onFocusHeader, onPl
             {l.header && <div className="spb-section is-day">{l.header}</div>}
             <div className="spb-grid">
               {l.events.map((ev, ci) => (
-                <GridCard key={ev.id} ev={ev} focused={isF(li, ci)} score={ev.status === 'finished' ? scores.get(ev.id) || null : null} onOpen={openEvent} now={now} />
+                <GridCard key={ev.id} ev={ev} focused={isF(li, ci)} score={ev.status === 'finished' ? (scores.get(ev.id) || null) : null} onOpen={openEvent} now={now} />
               ))}
             </div>
           </React.Fragment>
