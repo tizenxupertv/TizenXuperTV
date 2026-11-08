@@ -154,6 +154,14 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         const player = new shaka.Player(video);
         shakaRef.current = player;
 
+        // Configure resilient buffer goals (5s rebuffering / 12s goal)
+        player.configure({
+          streaming: {
+            bufferingGoal: 12,
+            rebufferingGoal: 5
+          }
+        });
+
         // Configure ClearKey DRM if key is provided
         if (currentStream.drmApi) {
           const parts = currentStream.drmApi.split(':');
@@ -212,7 +220,11 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
 
       const hls = new Hls({
         enableWorker: true,
-        lowLatencyMode: false
+        lowLatencyMode: false,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 6
       });
       hlsRef.current = hls;
       hls.loadSource(effectiveHlsUrl);

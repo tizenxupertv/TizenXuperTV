@@ -733,10 +733,10 @@
         var isLive = self.kind === 'live';
         try {
           // Buffer before playing and after a stall. AVPlay only applies these in the IDLE state (before
-          // prepare), so they are the values in effect for the whole session. Live uses 3s / 6s: a little
-          // slower to tune in, but network hiccups of a few seconds no longer freeze the picture.
-          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 3 : 2);
-          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 6 : 4);
+          // prepare), so they are the values in effect for the whole session. Live uses 5s / 7s: a little
+          // slower to tune in, but network hiccups no longer freeze the picture.
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 5 : 3);
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 7 : 5);
         } catch (bufErr) {}
 
         webapis.avplay.setListener({
