@@ -8,6 +8,7 @@ export interface PlaybackSettings {
   subLang: number;
   size: number;      // 0 = Normal, 1 = Grande, 2 = Pequeño
   style: number;
+  textSize?: number; // 0 = Normal, 1 = Grande (styles/textSize.css)
   quality: number;   // index in QUALITY_OPTIONS (0 = Automática)
 }
 
@@ -40,6 +41,7 @@ class SettingsService {
     try {
       localStorage.setItem(KEY, JSON.stringify(next));
     } catch (e) {}
+    applyTextSize(next);
     this.listeners.forEach(cb => {
       try { cb(); } catch (e) {}
     });
@@ -55,6 +57,13 @@ class SettingsService {
 }
 
 export const settingsService = new SettingsService();
+
+/** "Tamaño del texto": the class on <html> that styles/textSize.css reads */
+function applyTextSize(st: PlaybackSettings): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.classList.toggle('text-lg', st.textSize === 1);
+}
+applyTextSize(settingsService.get());
 
 /** Row of each setting in the detail's settings list (Audio, Subtítulos, Resolución) */
 export const SETTINGS_ROW: Record<'audio' | 'subs' | 'quality', number> = { audio: 0, subs: 1, quality: 2 };
