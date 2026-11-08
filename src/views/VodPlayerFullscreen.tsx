@@ -139,6 +139,11 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const pendingSeekRef = useRef<{ target: number; until: number } | null>(null);
   const seekTimerRef = useRef<any>(null);
   const acceptTimeRef = useRef<(t: number) => boolean>(() => true);
+  // Resuming at the saved position: until the TV confirms that seek, its time (0:00, 0:10…) is not the
+  // viewer's and must never be saved over the saved position
+  const resumePendingRef = useRef(false);
+  /** How long a seek may take before the timeline shows the TV's time again (the bridge gives up at 18 s) */
+  const SEEK_SAFETY_MS = 25000;
   const toastTimerRef = useRef<any>(null);
   const [, setSettingsTick] = useState(0); // re-render after a setting changes
   const settings = settingsService.get();
@@ -250,7 +255,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const saveProgress = useCallback(() => {
     if (isTrailer) return;
     const { t, d } = timeRef.current;
-    if (t < 1) return;
+    if (t < 1 || resumePendingRef.current) return;
     historyService.savePlayback(item, t, d, episode, false, { id: seriesId, number: seasonNumber });
   }, [isTrailer, item, episode, seriesId, seasonNumber]);
 
@@ -333,10 +338,21 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       // AVPlay draws below the page: everything above it must be transparent
       document.documentElement.classList.add('xuper-vod-avplay');
       console.log('[VodPlayer] AVPlay open', res.mime, String(res.url).slice(0, 60), 'startAt=' + startedAtRef.current);
-      // If resuming at an offset, ignore initial 0s updates until seek settles
-      if (startedAtRef.current > 5) {
-        pendingSeekRef.current = { target: startedAtRef.current, until: Date.now() + 6000 };
+      // Resuming at an offset: ignore the TV's time until it confirms the seek (video.onresumeseek below)
+      resumePendingRef.current = startedAtRef.current > 5;
+      if (resumePendingRef.current) {
+        pendingSeekRef.current = { target: startedAtRef.current, until: Date.now() + SEEK_SAFETY_MS };
       }
+      (video as any).onresumeseek = (ok: boolean) => {
+        if (!isCurrent()) return;
+        resumePendingRef.current = false;
+        if (ok) {
+          if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + 2000;
+        } else {
+          pendingSeekRef.current = null;
+          flash('No se pudo continuar donde lo dejaste');
+        }
+      };
       // tizen-bridge reads backup CDNs from here when a stream fails
       window.__xuperCurrentStreamMeta = res;
       video.onloadedmetadata = () => {
@@ -345,7 +361,6 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         const d = window.XuperAVPlay.durationSec || res.duration || 0;
         timeRef.current.d = d;
         setDuration(d);
-        if (startedAtRef.current > 5) window.XuperAVPlay.seekTo(startedAtRef.current);
         // Several audio languages inside the same stream: switch them without reloading
         try {
           const info = window.webapis.avplay.getTotalTrackInfo() || [];
@@ -586,6 +601,13 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     return () => { alive = false; };
   }, [subIndex, subtitles]);
 
+  // Home or the TV's apps button hides the app without closing the player: save the position then too
+  useEffect(() => {
+    const onHide = () => { if (document.hidden) saveProgressRef.current(); };
+    document.addEventListener('visibilitychange', onHide);
+    return () => document.removeEventListener('visibilitychange', onHide);
+  }, []);
+
   // Leaving the player: save the position and release the TV player
   useEffect(() => {
     const video = videoRef.current;
@@ -652,6 +674,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     const base = pending ? pending.target : timeRef.current.t;
     const target = Math.max(0, Math.min(d > 0 ? d - 5 : Infinity, base + delta));
     pendingSeekRef.current = { target, until: 0 };
+    // The viewer moved on their own: their position counts from here, resumed or not
+    resumePendingRef.current = false;
     timeRef.current.t = target;
     setCurrentTime(target);
 
@@ -688,17 +712,22 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       };
 
       if (useAvPlayRef.current && window.XuperAVPlay) {
-        window.XuperAVPlay.seekTo(target, onSeekDone, (err: any) => {
+        // The timeline keeps the target until the TV confirms the seek (it can take several seconds on older
+        // TVs); with a fixed 2.5 s it jumped back to the old position while the TV was still seeking
+        if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + SEEK_SAFETY_MS;
+        window.XuperAVPlay.seekTo(target, () => {
+          if (pendingSeekRef.current && pendingSeekRef.current.target === target) pendingSeekRef.current.until = Date.now() + 2000;
+          onSeekDone();
+        }, (err: any) => {
           logPlayback({ kind: 'error', player: 'AVPlay', detail: `seek ${Math.round(target)} s: ${(err && (err.name || err.message)) || err}` });
-          if (!shouldResume) {
-            flash('No se pudo mover el video a ese punto');
-          }
+          if (pendingSeekRef.current && pendingSeekRef.current.target === target) pendingSeekRef.current = null;
+          flash('No se pudo mover el video a ese punto');
         });
       } else if (videoRef.current) {
         videoRef.current.currentTime = target;
         onSeekDone();
+        if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + 2500;
       }
-      if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + 2500;
     }, 180);
   };
 
