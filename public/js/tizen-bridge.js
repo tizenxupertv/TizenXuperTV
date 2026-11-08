@@ -604,6 +604,7 @@
         obj.tabIndex = -1;
         document.body.insertBefore(obj, document.body.firstChild);
       }
+      obj.style.display = 'block';
       document.documentElement.style.backgroundColor = 'transparent';
       document.body.style.backgroundColor = 'transparent';
       var appEl = document.getElementById('app');
@@ -735,11 +736,12 @@
 
         var isLive = self.kind === 'live';
         try {
-          // Buffer before playing and after a stall. AVPlay only applies these in the IDLE state (before
-          // prepare), so they are the values in effect for the whole session. Live uses 5s / 7s: a little
-          // slower to tune in, but network hiccups no longer freeze the picture.
-          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 5 : 3);
-          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 7 : 5);
+          // Buffer before playing and after a stall. Faster tuning (3s live, 2s vod)
+          // with a 20s watchdog to prevent infinite hang when network drops packets.
+          // On buffering complete, buffer dynamically expands to 8s for playback resilience.
+          if (webapis.avplay.setTimeoutForBuffering) webapis.avplay.setTimeoutForBuffering(20);
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 3 : 2);
+          webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", isLive ? 3 : 2);
         } catch (bufErr) {}
 
         webapis.avplay.setListener({
@@ -758,10 +760,13 @@
             if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
               window.XuperPlatform.setScreenSaver(false);
             }
-            // Expand buffer dynamically after playback starts for resilience against network jitter
-            try {
-              webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 8);
-            } catch (bufExpandErr) {}
+            // Live: a bigger resume buffer once playing, against network jitter. Movies and series keep 2s (as
+            // CactusTV does): every seek refills this buffer before the picture goes on, and 8s made seeks slow
+            if (self.kind === 'live') {
+              try {
+                webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 8);
+              } catch (bufExpandErr) {}
+            }
             // If initial seek hasn't completed yet, execute it now that buffering is complete
             if (self._initialSeekSec > 0) {
               var retryMs = Math.floor(self._initialSeekSec * 1000);
@@ -927,6 +932,11 @@
       var self = this;
       var ms = Math.floor(sec * 1000);
       if (ms < 100) ms = 100;
+      var durSec = (self.videoEl && self.videoEl._avDuration) || self.durationSec || 0;
+      if (durSec > 1) {
+        var maxMs = Math.max(100, Math.floor((durSec - 0.25) * 1000));
+        if (ms > maxMs) ms = maxMs;
+      }
       var state = '';
       try { state = webapis.avplay.getState(); } catch (e) {}
 
@@ -946,11 +956,28 @@
       }
 
       this._isSeeking = true;
+      clearTimeout(this._seekWatchdog);
+      this._seekWatchdog = setTimeout(function () {
+        if (self._isSeeking) {
+          console.warn('[XuperAVPlay] seekTo watchdog fired after 18s');
+          self._isSeeking = false;
+          if (self._pendingSeekSec !== null) {
+            var nextSec = self._pendingSeekSec;
+            var nextCbs = self._pendingSeekCallbacks || {};
+            self._pendingSeekSec = null;
+            self._pendingSeekCallbacks = null;
+            self.seekTo(nextSec, nextCbs.success, nextCbs.error);
+          } else if (typeof errorCb === 'function') {
+            errorCb(new Error('seek_timeout'));
+          }
+        }
+      }, 18000);
 
       var executeSeek = function (targetMs, retriesLeft) {
         try {
           webapis.avplay.seekTo(targetMs, function () {
             console.log('[XuperAVPlay] seekTo ' + targetMs + 'ms succeeded');
+            clearTimeout(self._seekWatchdog);
             self._isSeeking = false;
             if (typeof successCb === 'function') successCb();
             if (self._pendingSeekSec !== null) {
@@ -968,11 +995,13 @@
                 if (self.isActive) {
                   executeSeek(targetMs, retriesLeft - 1);
                 } else {
+                  clearTimeout(self._seekWatchdog);
                   self._isSeeking = false;
                 }
               }, 120);
               return;
             }
+            clearTimeout(self._seekWatchdog);
             self._isSeeking = false;
             self._pendingSeekSec = null;
             self._pendingSeekCallbacks = null;
@@ -985,11 +1014,13 @@
               if (self.isActive) {
                 executeSeek(targetMs, retriesLeft - 1);
               } else {
+                clearTimeout(self._seekWatchdog);
                 self._isSeeking = false;
               }
             }, 120);
             return;
           }
+          clearTimeout(self._seekWatchdog);
           self._isSeeking = false;
           self._pendingSeekSec = null;
           self._pendingSeekCallbacks = null;
@@ -1001,6 +1032,7 @@
     },
 
     stop: function () {
+      clearTimeout(this._seekWatchdog);
       this._isSeeking = false;
       this._pendingSeekSec = null;
       this._pendingSeekCallbacks = null;
@@ -1013,7 +1045,7 @@
         window.XuperPlatform.setScreenSaver(true);
       }
       var obj = document.getElementById('avplay-object');
-      if (obj) obj.remove();
+      if (obj) obj.style.display = 'none';
       document.documentElement.style.backgroundColor = '#000000';
       document.body.style.backgroundColor = '#000000';
     },
@@ -1043,6 +1075,40 @@
         return true;
       } catch (e) {
         console.error('[XuperAVPlay] selectAudioTrack error:', e);
+        return false;
+      }
+    },
+
+    getSubtitleTracks: function () {
+      if (!isTizen || !window.webapis || !webapis.avplay || !webapis.avplay.getTotalTrackInfo) return [];
+      try {
+        var all = webapis.avplay.getTotalTrackInfo() || [];
+        return all.filter(function (entry) { return entry && entry.type === 'TEXT'; })
+          .map(function (entry, index) {
+            var extra = {};
+            try { extra = JSON.parse(entry.extra_info || '{}'); } catch (e) {}
+            return {
+              index: index,
+              nativeIndex: entry.index,
+              language: extra.language || extra.lang || ('Subtítulo ' + (index + 1)),
+              code: extra.language || extra.lang || ''
+            };
+          });
+      } catch (e) { return []; }
+    },
+
+    selectSubtitleTrack: function (nativeIndex) {
+      if (!isTizen || !window.webapis || !webapis.avplay) return false;
+      try {
+        if (nativeIndex === -1 || nativeIndex === null || nativeIndex === undefined) {
+          if (webapis.avplay.setSilentSubtitle) webapis.avplay.setSilentSubtitle(true);
+          return true;
+        }
+        if (webapis.avplay.setSilentSubtitle) webapis.avplay.setSilentSubtitle(false);
+        if (webapis.avplay.setSelectTrack) webapis.avplay.setSelectTrack('TEXT', nativeIndex);
+        return true;
+      } catch (e) {
+        console.error('[XuperAVPlay] selectSubtitleTrack error:', e);
         return false;
       }
     },
@@ -1085,6 +1151,7 @@
         self._applyHeaders(meta.headers);
 
         try {
+          if (webapis.avplay.setTimeoutForBuffering) webapis.avplay.setTimeoutForBuffering(15);
           webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 2);
           webapis.avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 2);
         } catch (bufErr) {}
