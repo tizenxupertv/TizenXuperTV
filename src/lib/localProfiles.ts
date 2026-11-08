@@ -110,9 +110,8 @@ export function createProfileStore(store: KeyStore | null, session: KeyStore | n
     active: (): LocalProfile => ({ ...(find(state.active) || state.profiles[0]) }),
     /** This launch's key for a per-profile setting */
     key: (key: string): string => keyFor(key, state.active),
-    /** "¿Quién está viendo?" at startup: only with two or more profiles, once per launch */
+    /** "¿Quién está viendo?" at startup: once per launch (and upon sign-in) */
     needsPicker: (): boolean => {
-      if (state.profiles.length < 2) return false;
       try {
         return !(session && session.getItem(CHOSEN_KEY));
       } catch (e) {
@@ -121,6 +120,9 @@ export function createProfileStore(store: KeyStore | null, session: KeyStore | n
     },
     markChosen: (): void => {
       try { if (session) session.setItem(CHOSEN_KEY, '1'); } catch (e) {}
+    },
+    unmarkChosen: (): void => {
+      try { if (session) session.removeItem(CHOSEN_KEY); } catch (e) {}
     },
     /** Makes a profile the active one; the caller reloads the app when it changed */
     select: (id: string): boolean => {

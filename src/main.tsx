@@ -75,7 +75,17 @@ const Root: React.FC = () => {
   const isTestingWelcome = testParam === 'welcome' || testParam === 'welcome1' || testParam === 'welcome2' ||
     (import.meta.env.DEV && testParam === 'updated');
 
-  if (!signedIn && !isTestingWelcome) return <LoginScreen onSignedIn={() => setSignedIn(true)} />;
+  if (!signedIn && !isTestingWelcome) {
+    return (
+      <LoginScreen
+        onSignedIn={() => {
+          localProfiles.unmarkChosen();
+          setSignedIn(true);
+          setPicking(true);
+        }}
+      />
+    );
+  }
   if (picking) return <ProfilePickerScreen onDone={() => setPicking(false)} />;
   return (
     <>

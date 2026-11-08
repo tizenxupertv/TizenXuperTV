@@ -6,12 +6,14 @@ interface ContinueWatchingCardProps {
   item: HistoryItem;
   isFocused: boolean;
   onActivate: (item: HistoryItem) => void;
+  onOptions?: (item: HistoryItem) => void;
 }
 
 const ContinueWatchingCardComponent: React.FC<ContinueWatchingCardProps> = ({
   item,
   isFocused,
-  onActivate
+  onActivate,
+  onOptions
 }) => {
   const posterUrl = item.poster || 'assets/placeholder_landscape.png';
   const cardSrc = useCardImage(posterUrl, 392, 221);
@@ -77,7 +79,16 @@ const ContinueWatchingCardComponent: React.FC<ContinueWatchingCardProps> = ({
               <span className="cw-mini-play">▶</span>
               <span className="cw-info-text">{infoText}</span>
             </div>
-            <div className="cw-more-dots">···</div>
+            <div
+              className="cw-more-dots"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onOptions) onOptions(item);
+              }}
+              title="Opciones"
+            >
+              ···
+            </div>
           </div>
           <div className="cw-progress-track">
             <div className="cw-progress-fill" style={{ width: `${pct}%` }} />

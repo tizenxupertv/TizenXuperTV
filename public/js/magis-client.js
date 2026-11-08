@@ -873,7 +873,7 @@
       if (err) return callback(err);
       var audios = [], qualities = [], subs = [], i;
       for (i = 0; i < res.tracks.length; i++) {
-        var a = trim(res.tracks[i].audioInfo), q = trim(res.tracks[i].quality);
+        var a = trim(res.tracks[i].audioInfo), q = trim(res.tracks[i].quality).toLowerCase();
         if (a && audios.indexOf(a) === -1) audios.push(a);
         if (q && qualities.indexOf(q) === -1) qualities.push(q);
       }
@@ -881,6 +881,44 @@
       for (i = 0; i < list.length; i++) {
         if (list[i].lang && subs.indexOf(list[i].lang) === -1) subs.push(list[i].lang);
       }
+
+      var qOrder = ['4k', '2160p', '1080p', '720p', '480p', '360p'];
+      function sortQualities(arr) {
+        arr.sort(function (x, y) {
+          var ix = qOrder.indexOf(x.toLowerCase());
+          var iy = qOrder.indexOf(y.toLowerCase());
+          if (ix === -1) ix = 99;
+          if (iy === -1) iy = 99;
+          return ix - iy;
+        });
+      }
+
+      var cid = trim(contentId);
+      var cachedItem = itemCache[cid] || (seriesContentId && itemCache[trim(seriesContentId)]);
+      var declared = (cachedItem && cachedItem.qualities) || [];
+      if (!declared.length && cachedItem && cachedItem.quality) {
+        declared = String(cachedItem.quality).split(',');
+      }
+
+      if ((!declared || !declared.length) && cid) {
+        detail(cid, function (dErr, dData) {
+          if (!dErr && dData && dData.item && dData.item.qualities) {
+            for (var k = 0; k < dData.item.qualities.length; k++) {
+              var qk = trim(dData.item.qualities[k]).toLowerCase();
+              if (qk && qualities.indexOf(qk) === -1) qualities.push(qk);
+            }
+            sortQualities(qualities);
+          }
+          callback(null, { audios: audios, qualities: qualities, subtitles: subs });
+        });
+        return;
+      }
+
+      for (var d = 0; d < declared.length; d++) {
+        var dq = trim(declared[d]).toLowerCase();
+        if (dq && qualities.indexOf(dq) === -1) qualities.push(dq);
+      }
+      sortQualities(qualities);
       callback(null, { audios: audios, qualities: qualities, subtitles: subs });
     });
   }
@@ -1548,14 +1586,28 @@
     if (!cid) return callback(new Error('Missing contentId'));
     ensureSession(function (err) {
       if (err) return callback(err);
-      call('v4/getItemData', {
-        contentId: cid,
-        type: '0',
-        sortType: '0',
-        language: 'en',
-        macAddr: deviceIdentity(false).etheMac
-      }, function (dErr, dRes) {
-        var local = findItemInLocalCatalogs(cid);
+      var local = findItemInLocalCatalogs(cid) || itemCache[cid];
+      var initialType = (local && (local.kind === 'película' || local.type === 'movie' || local.programType === 'movie')) ? '1' : '0';
+
+      function requestItem(reqType, onDone) {
+        call('v4/getItemData', {
+          contentId: cid,
+          type: reqType,
+          sortType: '0',
+          language: 'en',
+          macAddr: deviceIdentity(false).etheMac
+        }, function (dErr, dRes) {
+          if (dErr && dErr.portalCode === 'portal100006' && reqType !== '1') {
+            return requestItem('1', onDone);
+          }
+          if (dErr && dErr.portalCode === 'portal100006' && reqType === '1' && initialType === '1') {
+            return requestItem('0', onDone);
+          }
+          onDone(dErr, dRes);
+        });
+      }
+
+      requestItem(initialType, function (dErr, dRes) {
         if (dErr) {
           if (dErr.portalCode === 'portal100006' && local) {
             return callback(null, { item: local, episodes: [], seasons: [] });
@@ -1572,36 +1624,71 @@
           item.row = local.row;
           item.category = local.category;
         }
-        remember(item);
 
+        var isSeriesAsset = item.kind === 'serie' || item.type === 'teleplay' || (asset.volumnCount && parseInt(asset.volumnCount, 10) > 1);
         var episodes = [];
         var progList = asset.simpleProgramList || [];
+        var allQualities = [];
         for (var i = 0; i < progList.length; i++) {
           var p = progList[i];
           if (p) {
-            episodes.push({
-              id: trim(p.contentId),
-              title: text(p.name),
-              name: text(p.name),
-              number: p.seriesNumber === undefined || p.seriesNumber === null ? i + 1 : p.seriesNumber,
-              duration: text(p.duration),
-              quality: text(p.quality),
-              picture: text(p.picture || p.pic || p.image || p.cover || p.posterUrl || p.poster),
-              description: text(p.description || p.desc || p.synopsis || p.shortDescription || p.introduce)
-            });
+            var qStr = text(p.quality);
+            if (qStr) {
+              var qParts = qStr.split(',');
+              for (var k = 0; k < qParts.length; k++) {
+                var qClean = trim(qParts[k]).toLowerCase();
+                if (qClean && allQualities.indexOf(qClean) === -1) allQualities.push(qClean);
+              }
+            }
+            if (isSeriesAsset) {
+              var epObj = {
+                id: trim(p.contentId),
+                title: text(p.name),
+                name: text(p.name),
+                number: p.seriesNumber === undefined || p.seriesNumber === null ? i + 1 : p.seriesNumber,
+                duration: text(p.duration),
+                quality: qStr,
+                qualities: qStr ? qStr.split(',').map(function (s) { return trim(s).toLowerCase(); }) : allQualities,
+                picture: text(p.picture || p.pic || p.image || p.cover || p.posterUrl || p.poster),
+                description: text(p.description || p.desc || p.synopsis || p.shortDescription || p.introduce)
+              };
+              episodes.push(epObj);
+              if (epObj.id) {
+                itemCache[epObj.id] = {
+                  id: epObj.id,
+                  quality: qStr,
+                  qualities: epObj.qualities
+                };
+              }
+            } else if (p.contentId) {
+              itemCache[trim(p.contentId)] = {
+                id: trim(p.contentId),
+                quality: qStr,
+                qualities: allQualities
+              };
+            }
           }
         }
+
+        item.qualities = allQualities;
+        if (allQualities.length && !item.quality) {
+          item.quality = allQualities.join(',');
+        }
+        remember(item);
+
         var seasons = [];
-        var sList = asset.sameSeasonSeriesList || [];
-        for (var m = 0; m < sList.length; m++) {
-          if (sList[m] && trim(sList[m].contentId)) {
-            var sNum = sList[m].seasonNumber;
-            var sName = text(sList[m].name || sList[m].title || sList[m].seriesName || sList[m].alias);
-            seasons.push({
-              id: trim(sList[m].contentId),
-              name: sName,
-              number: sNum !== undefined && sNum !== null && !isNaN(Number(sNum)) ? Number(sNum) : undefined
-            });
+        if (isSeriesAsset) {
+          var sList = asset.sameSeasonSeriesList || [];
+          for (var m = 0; m < sList.length; m++) {
+            if (sList[m] && trim(sList[m].contentId)) {
+              var sNum = sList[m].seasonNumber;
+              var sName = text(sList[m].name || sList[m].title || sList[m].seriesName || sList[m].alias);
+              seasons.push({
+                id: trim(sList[m].contentId),
+                name: sName,
+                number: sNum !== undefined && sNum !== null && !isNaN(Number(sNum)) ? Number(sNum) : undefined
+              });
+            }
           }
         }
         callback(null, { item: item, episodes: episodes, seasons: seasons });

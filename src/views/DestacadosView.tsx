@@ -45,6 +45,7 @@ interface DestacadosViewProps {
   onPlayHero: (item: VodItem) => void;
   onToggleFavHero: (item: VodItem) => void;
   onActivateHistory: (item: HistoryItem) => void;
+  onOptionsHistory?: (item: HistoryItem) => void;
   onActivateVod: (item: VodItem) => void;
   onSeeAll?: (row: ContentRowDef) => void;
 }
@@ -63,6 +64,7 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
   onPlayHero,
   onToggleFavHero,
   onActivateHistory,
+  onOptionsHistory,
   onActivateVod,
   onSeeAll
 }) => {
@@ -167,6 +169,7 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
               items={row.items as HistoryItem[]}
               focusedIndex={focusedIndex}
               onActivate={onActivateHistory}
+              onOptions={onOptionsHistory}
             />
           );
         }

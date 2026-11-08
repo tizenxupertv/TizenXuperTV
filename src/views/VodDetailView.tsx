@@ -9,7 +9,7 @@ import { ScreenHeader, BackIcon } from '../components/layout/Header';
 import { settingsService, PREFERRED_LANGUAGES, SUBTITLE_CHOICES, subtitleChoiceIndex, QUALITY_OPTIONS } from '../services/settingsService';
 import { effectiveChoice, ownAudioName, titleChoices, type LanguageRules, type TitleChoices, type TitleMedia } from '../lib/titleOptions';
 import { PREF_LANG_CODES, languageName, sameLanguage } from '../lib/subtitles';
-import { getResumeTarget, getEpisodeStatus, EpisodeStatus } from '../lib/vodResume';
+import { getResumeTarget, getEpisodeStatus, EpisodeStatus, formatDuration } from '../lib/vodResume';
 import { useViewProfiler } from '../lib/perfMonitor';
 
 export type SettingsCol = 'menu' | 'audio' | 'subs' | 'quality';
@@ -260,7 +260,11 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
 
   const resume = getResumeTarget(item, episodes, historyEntry, currentSeasonNumber, currentSeasonId);
   void historyTick;
-  const isSeries = Boolean(currentItem.isSeries || currentItem.kind === 'serie' || seasons.length > 0 || episodes.length > 0);
+  const isSeries = Boolean(
+    currentItem.isSeries ||
+    currentItem.kind === 'serie' ||
+    (currentItem.kind !== 'película' && currentItem.kind !== 'pelicula' && (seasons.length > 0 || episodes.length > 1))
+  );
 
   // What the title offers (audio languages, qualities, subtitles): the settings list shows only that. The portal answer is
   // the one the player asks for next (shared cache), so playing right after is not slower. All options while it loads.
@@ -291,7 +295,13 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
       value: audioIdx >= 0 ? AUDIO_OPTIONS[audioIdx] : (ownAudioName(media, LANGUAGE_RULES) || 'Original')
     },
     { col: 'subs', label: 'Subtítulos', indices: choices.subs, options: choices.subs.map(i => SUB_OPTIONS[i]), value: SUB_OPTIONS[subIdx] || SUB_OPTIONS[0] },
-    { col: 'quality', label: 'Resolución', indices: choices.quality, options: choices.quality.map(i => QUALITY_OPTIONS[i]), value: QUALITY_OPTIONS[qualityIdx] || QUALITY_OPTIONS[0] }
+    {
+      col: 'quality',
+      label: 'Nitidez',
+      indices: choices.quality,
+      options: choices.quality.map(i => i === 0 ? 'Auto' : QUALITY_OPTIONS[i].toUpperCase()),
+      value: qualityIdx === 0 ? 'Auto' : (QUALITY_OPTIONS[qualityIdx] || QUALITY_OPTIONS[0]).toUpperCase()
+    }
   ];
   const hasTrailer = Boolean(currentItem.trailerUrl || (currentItem as any).trailer);
   // Round buttons after Reproducir, in the same row
@@ -419,7 +429,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
             {year && <span className="badge-meta">{year}</span>}
             {isSeries
               ? seasons.length > 0 && <span className="badge-meta">{`${seasons.length} Temporada${seasons.length > 1 ? 's' : ''}`}</span>
-              : currentItem.duration && <span className="badge-meta">{currentItem.duration}</span>}
+              : currentItem.duration && <span className="badge-meta">{formatDuration(currentItem.duration) || currentItem.duration}</span>}
           </div>
 
           {/* Genre Chips */}
@@ -447,13 +457,23 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         {/* One row (as streaming apps): Reproducir / Continuar, then round buttons (Mi lista, Ajustes,
             Tráiler) whose label shows under the focused one */}
         <div className="vod-detail-actions-row vod-actions-main">
-          <button
-            className={`vod-main-btn is-primary ${focus.area === 'actions' ? 'is-focused' : ''}`}
-            onClick={() => onPlay(currentItem, resume.episode)}
-          >
-            <span className="vod-main-icon">▶</span>
-            <span className="vod-main-label">{resume.label}</span>
-          </button>
+          <div className="vod-main-btn-container">
+            <button
+              className={`vod-main-btn is-primary ${focus.area === 'actions' ? 'is-focused' : ''}`}
+              onClick={() => onPlay(currentItem, resume.episode)}
+            >
+              <span className="vod-main-icon">▶</span>
+              <span className="vod-main-label">{resume.label}</span>
+            </button>
+            {resume.remainingText && (
+              <div className="vod-resume-meta">
+                <div className="vod-resume-track">
+                  <div className="vod-resume-fill" style={{ width: `${resume.progressPercent ?? 0}%` }} />
+                </div>
+                <span className="vod-resume-text">{resume.remainingText}</span>
+              </div>
+            )}
+          </div>
           {quickItems.map((q, i) => {
             const focused = (focus.area === 'quick' && focus.quickIndex === i) || (q === 'settings' && focus.area === 'audioModal');
             if (q === 'settings') {

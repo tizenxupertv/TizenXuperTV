@@ -25,14 +25,57 @@ export type TvKey =
 
 interface UseTvRemoteOptions {
   onKey: (key: TvKey, event: KeyboardEvent) => boolean | void;
+  onKeyUp?: (key: TvKey, event: KeyboardEvent) => boolean | void;
 }
 
 // Minimum interval between repeated keydown events (ms) to prevent event-queue saturation on Tizen
 const REPEAT_MIN_INTERVAL_MS = 65;
 
-export function useTvRemote({ onKey }: UseTvRemoteOptions) {
+export function mapKeyCode(code: number): TvKey {
+  switch (code) {
+    case 38: return 'up';
+    case 40: return 'down';
+    case 37: return 'left';
+    case 39: return 'right';
+    case 13: return 'enter';
+    case 10009:
+    case 27:
+    case 461:
+    case 8: return 'back';
+    case 415: return 'play';
+    case 19: return 'pause';
+    case 10252: return 'playPause';
+    case 413: return 'stop';
+    case 417: return 'fastForward';
+    case 412: return 'rewind';
+    case 427:
+    case 33: return 'channelUp';
+    case 428:
+    case 34: return 'channelDown';
+    case 457: return 'info';
+    case 48:
+    case 49:
+    case 50:
+    case 51:
+    case 52:
+    case 53:
+    case 54:
+    case 55:
+    case 56:
+    case 57: return 'digit';
+    case 403: return 'colorRed';
+    case 404: return 'colorGreen';
+    case 405: return 'colorYellow';
+    case 406: return 'colorBlue';
+    default: return 'other';
+  }
+}
+
+export function useTvRemote({ onKey, onKeyUp }: UseTvRemoteOptions) {
   const onKeyRef = useRef(onKey);
   onKeyRef.current = onKey;
+  const onKeyUpRef = useRef(onKeyUp);
+  onKeyUpRef.current = onKeyUp;
 
   useEffect(() => {
     let lastRepeatTime = 0;
@@ -53,87 +96,7 @@ export function useTvRemote({ onKey }: UseTvRemoteOptions) {
         lastRepeatTime = performance.now();
       }
 
-      let key: TvKey = 'other';
-
-      switch (e.keyCode) {
-        case 38: // ArrowUp
-          key = 'up';
-          break;
-        case 40: // ArrowDown
-          key = 'down';
-          break;
-        case 37: // ArrowLeft
-          key = 'left';
-          break;
-        case 39: // ArrowRight
-          key = 'right';
-          break;
-        case 13: // Enter
-          key = 'enter';
-          break;
-        case 10009: // Tizen Back
-        case 27:    // Escape
-        case 461:   // LG Back
-        case 8:     // Backspace
-          key = 'back';
-          break;
-        case 415:   // Samsung MediaPlay
-          key = 'play';
-          break;
-        case 19:    // Samsung MediaPause
-          key = 'pause';
-          break;
-        case 10252: // Samsung MediaPlayPause
-          key = 'playPause';
-          break;
-        case 413:   // Samsung MediaStop
-          key = 'stop';
-          break;
-        case 417:   // Samsung MediaFastForward
-          key = 'fastForward';
-          break;
-        case 412:   // Samsung MediaRewind
-          key = 'rewind';
-          break;
-        case 427:   // Samsung ChannelUp
-        case 33:    // PageUp
-          key = 'channelUp';
-          break;
-        case 428:   // Samsung ChannelDown
-        case 34:    // PageDown
-          key = 'channelDown';
-          break;
-        case 457:   // Samsung Info
-          key = 'info';
-          break;
-        case 48: // 0
-        case 49: // 1
-        case 50: // 2
-        case 51: // 3
-        case 52: // 4
-        case 53: // 5
-        case 54: // 6
-        case 55: // 7
-        case 56: // 8
-        case 57: // 9
-          key = 'digit';
-          break;
-        case 403: // Samsung ColorF0Red
-          key = 'colorRed';
-          break;
-        case 404: // Samsung ColorF1Green
-          key = 'colorGreen';
-          break;
-        case 405: // Samsung ColorF2Yellow
-          key = 'colorYellow';
-          break;
-        case 406: // Samsung ColorF3Blue
-          key = 'colorBlue';
-          break;
-        default:
-          return;
-      }
-
+      const key = mapKeyCode(e.keyCode);
       const consumed = onKeyRef.current(key, e);
       if (consumed !== false) {
         e.preventDefault();
@@ -141,7 +104,21 @@ export function useTvRemote({ onKey }: UseTvRemoteOptions) {
       }
     }
 
+    function handleKeyUp(e: KeyboardEvent) {
+      if (!onKeyUpRef.current) return;
+      const key = mapKeyCode(e.keyCode);
+      const consumed = onKeyUpRef.current(key, e);
+      if (consumed !== false) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, []);
 }

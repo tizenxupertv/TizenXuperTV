@@ -1,6 +1,7 @@
 import { kvGet, kvSet } from '../lib/kvStore';
 import { VodItem, VodEpisode, VodSeason } from '../types/vod';
 import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../lib/catalogOrganizer';
+import { formatDuration } from '../lib/vodResume';
 
 declare global {
   interface Window {
@@ -76,7 +77,7 @@ function normalizeItem(raw: any, index: number): VodItem {
     kind: isSeries ? 'serie' : (raw.kind || 'pelicula'),
     score: String(score),
     year: String(year),
-    duration: typeof duration === 'number' ? `${Math.floor(duration/60)} h ${duration%60} min` : String(duration),
+    duration: formatDuration(duration) || (typeof duration === 'number' ? `${Math.floor(duration/60)} h ${duration%60} min` : String(duration)),
     genres,
     director: raw.director || '—',
     actors: raw.actors || raw.actorDisplay || raw.cast || '—',
@@ -904,6 +905,9 @@ class CatalogService {
           if (!detailItem.landscape && item.landscape) detailItem.landscape = item.landscape;
           const rawTrailer = res.item?.trailerUrl || res.item?.trailer_url || res.item?.trailer || res.trailerUrl || res.trailer || res.trailer_url || res.previewUrl || '';
           if (rawTrailer) detailItem.trailerUrl = String(rawTrailer);
+          if (res.item?.duration) detailItem.duration = formatDuration(res.item.duration) || detailItem.duration;
+          if (res.item?.qualities) detailItem.qualities = res.item.qualities;
+          if (res.item?.quality) detailItem.quality = res.item.quality;
 
           const episodes: VodEpisode[] = (res.episodes || []).map((ep: any, idx: number) => ({
             id: String(ep.id || ep.contentId || idx + 1),
@@ -912,6 +916,7 @@ class CatalogService {
             number: ep.number || idx + 1,
             duration: formatEpisodeDuration(ep.duration),
             quality: ep.quality || 'HD',
+            qualities: ep.qualities,
             streamUrl: ep.streamUrl || '',
             picture: ep.picture || ep.pic || ep.image || ep.cover || item.landscape || item.backdrop || item.poster || '',
             description: ep.description || ep.desc || ep.synopsis || 'Sin descripción disponible para este episodio.'

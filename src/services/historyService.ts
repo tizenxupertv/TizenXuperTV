@@ -8,8 +8,14 @@ const PROFILE_KEY = pk('xuper_local_profile_v1');
 
 class HistoryService {
   private listeners: Array<() => void> = [];
+  private hasMergedAll = false;
 
   private getProfile(): any {
+    if (!this.hasMergedAll) {
+      this.hasMergedAll = true;
+      this.mergeAllHistories();
+    }
+
     try {
       const raw = localStorage.getItem(PROFILE_KEY);
       if (raw) return JSON.parse(raw);
@@ -130,6 +136,108 @@ class HistoryService {
     } catch (e) {
       return false;
     }
+    this.notify();
+    return true;
+  }
+
+  /**
+   * Scans all profiles and history backups in localStorage and merges them into the active profile.
+   * Ensures new history and previous history are preserved together without duplicate entries.
+   */
+  public mergeAllHistories(): void {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return;
+      const ls = window.localStorage;
+      const allHistories: Record<string, HistoryItem> = {};
+      const allFavs: Record<string, boolean> = {};
+
+      // 1. Scan all storage keys containing profile or history data
+      for (let i = 0; i < ls.length; i++) {
+        const key = ls.key(i);
+        if (!key) continue;
+
+        if (
+          key === 'xuper_local_profile_v1' ||
+          key.startsWith('xuper_local_profile_v1@') ||
+          key.startsWith('xuper_history')
+        ) {
+          try {
+            const raw = ls.getItem(key);
+            if (!raw) continue;
+            const data = JSON.parse(raw);
+            if (!data || typeof data !== 'object') continue;
+
+            if (Array.isArray(data.history)) {
+              for (const item of data.history) {
+                if (!item || !item.id) continue;
+                const id = String(item.id);
+                const existing = allHistories[id];
+                if (!existing) {
+                  allHistories[id] = item;
+                } else {
+                  const itemTime = item.updatedAt || 0;
+                  const existTime = existing.updatedAt || 0;
+                  if (itemTime > existTime || (itemTime === existTime && (item.position || 0) > (existing.position || 0))) {
+                    allHistories[id] = { ...existing, ...item };
+                  }
+                }
+              }
+            }
+
+            if (data.favs && typeof data.favs === 'object') {
+              for (const fid of Object.keys(data.favs)) {
+                if (data.favs[fid]) allFavs[fid] = true;
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      // 2. Read active profile
+      let current: any = null;
+      try {
+        const curRaw = ls.getItem(PROFILE_KEY);
+        if (curRaw) current = JSON.parse(curRaw);
+      } catch (e) {}
+      if (!current || typeof current !== 'object') {
+        current = {
+          id: 'TV-' + String(Date.now()).slice(-8),
+          createdAt: Date.now(),
+          history: [],
+          favs: {}
+        };
+      }
+
+      if (Array.isArray(current.history)) {
+        for (const item of current.history) {
+          if (!item || !item.id) continue;
+          const id = String(item.id);
+          const existing = allHistories[id];
+          if (!existing || (item.updatedAt || 0) >= (existing.updatedAt || 0)) {
+            allHistories[id] = item;
+          }
+        }
+      }
+      if (current.favs) {
+        for (const fid of Object.keys(current.favs)) {
+          if (current.favs[fid]) allFavs[fid] = true;
+        }
+      }
+
+      const mergedList = Object.values(allHistories).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+      if (mergedList.length > 0) {
+        current.history = mergedList.slice(0, 50);
+        current.favs = allFavs;
+        ls.setItem(PROFILE_KEY, JSON.stringify(current));
+        ls.setItem('xuper_history_master_backup', JSON.stringify(current));
+      }
+    } catch (e) {}
+  }
+
+  /** Restores or merges history from all sources into the active profile */
+  public restoreFromMainProfile(): boolean {
+    this.mergeAllHistories();
     this.notify();
     return true;
   }

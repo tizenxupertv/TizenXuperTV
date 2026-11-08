@@ -7,6 +7,7 @@ export interface VodEpisode {
   streamUrl?: string;
   duration?: number | string;
   quality?: string;
+  qualities?: string[];
   picture?: string;
   description?: string;
 }
@@ -35,6 +36,8 @@ export interface VodItem {
   backdrop?: string;
   streamUrl?: string;
   trailerUrl?: string;
+  quality?: string;
+  qualities?: string[];
   isSeries?: boolean;
   seasons?: VodSeason[];
   episodes?: VodEpisode[];
