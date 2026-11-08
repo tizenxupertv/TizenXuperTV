@@ -467,7 +467,7 @@ class PlayerService {
         const pLoader = sequenceFixingLoader(window.Hls);
         const hls = window.__xuperCreateHls
           ? window.__xuperCreateHls({ pLoader })
-          : new window.Hls({ enableWorker: false, lowLatencyMode: false, pLoader });
+          : new window.Hls({ enableWorker: false, lowLatencyMode: false, backBufferLength: 15, pLoader });
         window.__xuperPreviewHls = hls;
 
         let backupIdx = 0;
