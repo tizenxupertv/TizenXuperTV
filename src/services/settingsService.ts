@@ -8,7 +8,7 @@ export interface PlaybackSettings {
   subLang: number;
   size: number;      // 0 = Normal, 1 = Grande, 2 = Pequeño
   style: number;
-  textSize?: number; // 0 = Normal, 1 = Grande (styles/textSize.css)
+  textSize?: number; // 0 = Normal, 1 = Mediano, 2 = Grande (styles/textSize.css)
   quality: number;   // index in QUALITY_OPTIONS (0 = Automática)
 }
 
@@ -61,7 +61,8 @@ export const settingsService = new SettingsService();
 /** "Tamaño del texto": the class on <html> that styles/textSize.css reads */
 function applyTextSize(st: PlaybackSettings): void {
   if (typeof document === 'undefined') return;
-  document.documentElement.classList.toggle('text-lg', st.textSize === 1);
+  document.documentElement.classList.toggle('text-md', st.textSize === 1);
+  document.documentElement.classList.toggle('text-lg', st.textSize === 2);
 }
 applyTextSize(settingsService.get());
 

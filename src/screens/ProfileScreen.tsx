@@ -62,7 +62,7 @@ const SECTIONS = [
 
 
 const DISPLAY_OPTS = ['Ajustar (con bandas)', 'Pantalla completa', 'Automático'];
-const TEXT_SIZE_OPTS = ['Normal', 'Grande'];
+const TEXT_SIZE_OPTS = ['Normal', 'Mediano', 'Grande'];
 const AUDIO_OPTS = ['Español (Latino)', 'Español (España)', 'Portugués', 'Inglés'];
 const SIZE_OPTS = ['Normal', 'Grande', 'Pequeño'];
 const STYLE_OPTS = ['Aa', 'Aa', 'Aa'];
