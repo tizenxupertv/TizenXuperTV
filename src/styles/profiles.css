@@ -47,37 +47,9 @@
 .lp-picker-item.is-focused .lp-picker-name { color: #ffffff; }
 .lp-picker-hint { margin: 0; font-size: 17px; color: #64748b; }
 
-/* Perfil › Perfiles: one card per profile, plus "Añadir perfil" */
-.lp-grid { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 26px; max-width: 1380px; }
-.lp-card {
-  width: 196px;
-  padding: 24px 16px 20px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 3px solid transparent;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  cursor: pointer;
-}
-.lp-card.is-active { background: rgba(255, 255, 255, 0.08); }
-.lp-card.is-focused { border-color: #ffffff; }
-.lp-card-name {
-  max-width: 100%;
-  font-size: 19px;
-  font-weight: 800;
-  color: #ffffff;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.lp-card-tag { font-size: 14px; font-weight: 700; color: #94a3b8; min-height: 18px; }
-.lp-card.is-active .lp-card-tag { color: #22d3ee; }
 .lp-add-circle {
-  width: 96px;
-  height: 96px;
+  width: 132px;
+  height: 132px;
   border-radius: 50%;
   border: 3px dashed rgba(255, 255, 255, 0.35);
   box-sizing: border-box;
@@ -85,9 +57,23 @@
   align-items: center;
   justify-content: center;
   color: #cbd5e1;
-  font-size: 46px;
+  font-size: 60px;
   font-weight: 300;
 }
+.lp-picker-item.is-focused .lp-add-circle { border: 5px solid #ffffff; color: #ffffff; }
+.lp-picker-avatar { position: relative; }
+.lp-picker-edit {
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: rgba(4, 6, 10, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+.lp-picker-tag { min-height: 18px; margin-top: -10px; font-size: 14px; font-weight: 700; color: #22d3ee; }
+.lp-manage-btn { margin-top: -16px; }
 
 /* Dialogs: what to do with a profile, and the name editor */
 .lp-dialog-head { display: flex; align-items: center; gap: 20px; margin-bottom: 22px; }
@@ -110,3 +96,6 @@
 .lp-name-field.is-empty { color: #64748b; font-weight: 600; }
 .lp-name-caret { width: 3px; height: 30px; margin-left: 2px; background: #22d3ee; }
 .lp-name-error { margin: -6px 0 14px; font-size: 16px; color: #fda4af; }
+
+/* Mi perfil: "Cerrar sesión" right after "Cambiar perfil" */
+.lp-logout-next { margin-left: 12px; white-space: nowrap; }
