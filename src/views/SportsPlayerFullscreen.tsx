@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../styles/sportsPlayer.css';
-import { MatchHeader } from '../components/sports/MatchHeader';
+import { MatchCrest, MatchHeader } from '../components/sports/MatchHeader';
+import { scoreboardService } from '../services/scoreboardService';
 import { SportsEvent, SportsStream } from '../types/sports.ts';
 import { sportsService } from '../services/sportsService.ts';
 
@@ -37,15 +38,25 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   const errorRef = useRef<string | null>(null);
 
   const currentStream = streams[currentStreamIdx] || streams[0];
+  const versus = !!event.away && event.away.trim().toLowerCase() !== event.home.trim().toLowerCase();
+  const score = versus ? scoreboardService.findScore(event.home, event.away) : null;
 
+  const osdVisibleRef = useRef(true);
+  const hideOsd = useCallback(() => {
+    osdVisibleRef.current = false;
+    setShowOsd(false);
+    if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
+  }, []);
   const triggerOsd = useCallback(() => {
+    osdVisibleRef.current = true;
     setShowOsd(true);
     if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
     osdTimerRef.current = setTimeout(() => {
+      osdVisibleRef.current = false;
       setShowOsd(false);
       // The signal list stays open over a failed signal: it is the only way on
       if (!errorRef.current) setShowServerMenu(false);
-    }, 4500);
+    }, 5000);
   }, []);
 
   useEffect(() => {
@@ -253,76 +264,39 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (Date.now() - openedAtRef.current < 600 && (e.key === 'Enter' || e.key === 'ArrowUp')) return;
+
+      const isBack = e.key === 'Escape' || e.key === 'Backspace' || (e as any).keyCode === 10009;
+
+      // Error card: the other signals as a vertical list
+      if (error) {
+        e.preventDefault();
+        if (showServerMenu && e.key === 'ArrowUp') setServerMenuIdx(i => Math.max(0, i - 1));
+        else if (showServerMenu && e.key === 'ArrowDown') setServerMenuIdx(i => Math.min(streams.length - 1, i + 1));
+        else if (e.key === 'Enter') {
+          if (showServerMenu) { setCurrentStreamIdx(serverMenuIdx); setShowServerMenu(false); }
+          else if (streams.length > 1) setShowServerMenu(true);
+        } else if (isBack) onClose();
+        return;
+      }
+
+      // Watching: the first key only shows the bar; ◄ ► move along the signals, OK switches, Back hides the bar
+      if (!osdVisibleRef.current) {
+        if (isBack) { e.preventDefault(); onClose(); return; }
+        e.preventDefault();
+        setServerMenuIdx(currentStreamIdx);
+        triggerOsd();
+        return;
+      }
       triggerOsd();
-
-      if (showServerMenu) {
-        if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          setServerMenuIdx(i => Math.max(0, i - 1));
-          return;
-        }
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          setServerMenuIdx(i => Math.min(streams.length - 1, i + 1));
-          return;
-        }
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          setCurrentStreamIdx(serverMenuIdx);
-          setShowServerMenu(false);
-          return;
-        }
-        if (e.key === 'Escape' || e.key === 'Backspace' || (e as any).keyCode === 10009) {
-          e.preventDefault();
-          setShowServerMenu(false);
-          return;
-        }
-      }
-
-      // Normal player keys
-      switch (e.key) {
-        case 'Enter':
-          setShowServerMenu(true);
-          setServerMenuIdx(currentStreamIdx);
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          setShowServerMenu(true);
-          setServerMenuIdx(currentStreamIdx);
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          if (streams.length > 1) {
-            setCurrentStreamIdx(i => (i + 1) % streams.length);
-          }
-          break;
-        case 'ArrowLeft':
-        case 'ArrowRight':
-          e.preventDefault();
-          if (streams.length > 1) {
-            const next = e.key === 'ArrowRight'
-              ? (currentStreamIdx + 1) % streams.length
-              : (currentStreamIdx - 1 + streams.length) % streams.length;
-            setCurrentStreamIdx(next);
-          }
-          break;
-        case 'Escape':
-        case 'Backspace':
-          e.preventDefault();
-          onClose();
-          break;
-        default:
-          if ((e as any).keyCode === 10009) { // Tizen Return Key
-            e.preventDefault();
-            onClose();
-          }
-          break;
-      }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); setServerMenuIdx(i => Math.max(0, i - 1)); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); setServerMenuIdx(i => Math.min(streams.length - 1, i + 1)); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (serverMenuIdx !== currentStreamIdx) setCurrentStreamIdx(serverMenuIdx); }
+      else if (isBack) { e.preventDefault(); hideOsd(); }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showServerMenu, serverMenuIdx, currentStreamIdx, streams, triggerOsd, onClose]);
+  }, [error, showServerMenu, serverMenuIdx, currentStreamIdx, streams, triggerOsd, onClose]);
 
   // Signals list, shared by the error card and the side panel
   const signalList = (
@@ -369,7 +343,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
 
       {/* Connecting: the match and the signal, in the same card as the errors */}
       {isBuffering && !error && (
-        <div className={`spp-error is-loading ${showServerMenu ? 'is-beside-panel' : ''}`}>
+        <div className="spp-error is-loading">
           <MatchHeader event={event} />
           <div className="spp-loading"><span className="spp-spinner" />Conectando a {currentStream?.name || 'la señal'}…</div>
         </div>
@@ -392,63 +366,40 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         </div>
       )}
 
-      {/* Overlay Header OSD */}
-      {showOsd && !showServerMenu && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          padding: '32px 48px',
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          color: '#fff',
-          transition: 'opacity 0.3s ease'
-        }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <div className="sports-badge-live">
-                <span className="badge-dot" />
-                EN VIVO
-              </div>
-              <span style={{ fontSize: 14, color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+      {/* Bottom bar while watching: the match, its score, and the signals (◄ ► and OK) */}
+      {showOsd && !error && (
+        <div className="spp-bar">
+          <div className="spp-bar-match">
+            <MatchCrest src={event.homeLogo || event.leagueLogo} name={event.home} />
+            <div className="spp-bar-titles">
+              <div className="spp-bar-league">
+                <span className="spb-live-tag"><span className="spb-dot" />{score && score.state === 'live' && score.periodDetail ? score.periodDetail : 'EN VIVO'}</span>
                 {event.league}
-              </span>
+              </div>
+              <div className="spp-bar-name">
+                {event.home}
+                {versus && (score ? <span className="spp-bar-score">{score.homeScore} – {score.awayScore}</span> : <span className="spp-bar-vs">vs</span>)}
+                {versus && event.away}
+              </div>
             </div>
-            <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: '#ffffff' }}>
-              {event.home} {event.away ? `vs ${event.away}` : ''}
-            </h2>
+            {versus && <MatchCrest src={event.awayLogo} name={event.away} />}
           </div>
-
-          {/* Current Server Badge */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            background: 'rgba(255, 255, 255, 0.08)',
-            padding: '10px 18px',
-            borderRadius: 14,
-            border: '1px solid rgba(255, 255, 255, 0.12)'
-          }}>
-            <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 700 }}>Señal:</span>
-            <span style={{ fontSize: 15, fontWeight: 800, color: '#00e5ff' }}>
-              {currentStream?.name}
-            </span>
-            <span style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
-              ({currentStreamIdx + 1}/{streams.length})
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Signal picker while watching: a compact panel at the right */}
-      {showServerMenu && !error && (
-        <div className="spp-panel">
-          <div className="spp-panel-title">Elegir señal</div>
-          <div className="spp-hint">▲ ▼ para elegir · OK para ver</div>
-          {signalList}
+          {streams.length > 1 && (
+            <div className="spp-bar-signals">
+              <span className="spp-bar-label">Señal</span>
+              {streams.map((st, idx) => (
+                <div
+                  key={idx}
+                  className={`spp-chip ${idx === serverMenuIdx ? 'is-focused' : ''} ${idx === currentStreamIdx ? 'is-playing' : ''} ${failed.has(idx) ? 'is-failed' : ''}`}
+                  onClick={() => setCurrentStreamIdx(idx)}
+                >
+                  {idx === currentStreamIdx && <span className="spp-chip-dot" />}
+                  {st.name}
+                </div>
+              ))}
+              <span className="spp-bar-hint">◄ ► · OK para cambiar</span>
+            </div>
+          )}
         </div>
       )}
     </div>
