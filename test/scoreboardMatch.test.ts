@@ -36,3 +36,12 @@ test('accents, short names and extra words still match', () => {
   const s = service.findScore('Atlético Nacional', 'Club América');
   assert.deepEqual([s.homeScore, s.awayScore], ['1', '0']);
 });
+
+test('initials and US nicknames match ESPN short names', () => {
+  service.games = [
+    { ...game('Seattle Sounders FC', 'LAFC', '1', '2'), awayShort: 'LAFC', awayAbbr: 'LAFC' },
+    { ...game('Utah Utes', 'BYU Cougars', '14', '21'), sport: 'cfb' }
+  ];
+  assert.deepEqual(Object.values(service.findScore('Seattle Sounders FC', 'Los Angeles FC')).slice(0, 2), ['1', '2']);
+  assert.deepEqual(Object.values(service.findScore('Utah Utes', 'Brigham Young Cougars')).slice(0, 2), ['14', '21']);
+});

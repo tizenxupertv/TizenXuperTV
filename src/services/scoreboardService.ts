@@ -59,8 +59,10 @@ interface NormalizedEspnGame {
 const ESPN_ENDPOINTS: Record<string, string> = {
   nba: 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard',
   nhl: 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard',
-  soccer: 'https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard',
-  cfb: 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard',
+  // Without a limit ESPN returns only 100 soccer games and the top-25 college games
+  soccer: 'https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard?limit=500',
+  cfb: 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=300',
+  cfl: 'https://site.api.espn.com/apis/site/v2/sports/football/cfl/scoreboard',
   nfl: 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard',
   mlb: 'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard'
 };
@@ -215,6 +217,15 @@ class ScoreboardService {
       const [few, many] = ww.length <= ow.length ? [ww, ow] : [ow, ww];
       if (few.every(x => many.indexOf(x) >= 0)) return 1;
     }
+    // Initials: "Los Angeles FC" is ESPN's "LAFC"
+    const initials = w.split(' ').filter(Boolean).map(x => (x === 'fc' || x === 'sc' || x === 'cf' ? x : x[0])).join('');
+    if (initials.length >= 3 && (initials === ea || initials === es.replace(/ /g, ''))) return 1;
+    // US teams are "<place> <nickname>": "Brigham Young Cougars" is ESPN's "BYU Cougars". The nickname alone only
+    // counts when the place also shares a letter start, so "Utah Utes" never takes "Utah Jazz"
+    const wl = w.split(' ');
+    const fl = ef.split(' ');
+    const nick = wl[wl.length - 1];
+    if (nick.length >= 4 && nick === fl[fl.length - 1] && wl.length > 1 && fl.length > 1 && wl[0][0] === fl[0][0]) return 1;
     return 0;
   }
 

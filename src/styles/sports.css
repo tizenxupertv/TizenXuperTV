@@ -62,7 +62,9 @@
 .spb-when { font-size: 13px; font-weight: 700; color: #38bdf8; }
 .spb-when.is-done { color: #94a3b8; }
 .spb-card-body { flex: 1; min-width: 0; }
-.spb-card.is-skeleton { height: 118px; animation: tg-pulse 1.6s infinite ease-in-out; }
+.spb-card.is-skeleton { height: 118px; animation: spb-skeleton 1.6s infinite ease-in-out; }
+/* Opacity only: a scaling skeleton makes the grid wobble */
+@keyframes spb-skeleton { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
 .spb-skeleton { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
 
 .spb-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 80px 0; text-align: center; }

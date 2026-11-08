@@ -1,10 +1,14 @@
 import type { TabId } from '../components/layout/TopNavbar';
 
-/** Tabs the user can hide in Perfil › Pestañas (the content stays reachable from Buscar and Explorar) */
+/** Tabs the user can show or hide in Perfil › Pestañas */
 export const HIDEABLE_TABS: Array<{ id: TabId; name: string }> = [
+  { id: 'deportes', name: 'Deportes' },
   { id: 'kids', name: 'Kids' },
   { id: 'anime', name: 'Anime' }
 ];
+
+/** Until the user chooses: Deportes shown, Kids and Anime hidden (their titles stay in Buscar and Explorar) */
+const DEFAULT_HIDDEN: TabId[] = ['kids', 'anime'];
 
 const KEY = 'xuper_hidden_tabs';
 
@@ -14,10 +18,10 @@ class TabPrefs {
   hidden(): TabId[] {
     try {
       const raw = localStorage.getItem(KEY);
-      const list = raw ? JSON.parse(raw) : [];
+      const list = raw ? JSON.parse(raw) : DEFAULT_HIDDEN;
       return Array.isArray(list) ? list.filter(id => HIDEABLE_TABS.some(t => t.id === id)) : [];
     } catch (e) {
-      return [];
+      return DEFAULT_HIDDEN.slice();
     }
   }
 
