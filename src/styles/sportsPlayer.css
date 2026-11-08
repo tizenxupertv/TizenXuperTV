@@ -1,0 +1,44 @@
+/* Sports player: error card and signal picker (views/SportsPlayerFullscreen.tsx) */
+.spp-error {
+  position: absolute; width: 640px; max-width: 80vw; padding: 36px 40px; box-sizing: border-box; text-align: center;
+  border-radius: 26px; background: rgba(28, 28, 30, 0.97); border: 1px solid rgba(255, 255, 255, 0.14); color: #ffffff;
+}
+.spp-league { font-size: 14px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; }
+
+.spp-error-msg { margin-top: 22px; font-size: 20px; font-weight: 800; color: #ffffff; }
+.spp-error-detail { margin-top: 6px; font-size: 15px; color: #64748b; }
+.spp-hint { margin: 18px 0 14px; font-size: 15px; color: #94a3b8; }
+.spp-error .spp-signals { text-align: left; }
+
+.spp-panel {
+  position: absolute; right: 48px; top: 50%; transform: translateY(-50%); width: 420px; max-height: 80vh;
+  padding: 28px; box-sizing: border-box; border-radius: 26px; z-index: 10000; color: #ffffff;
+  background: rgba(28, 28, 30, 0.97); border: 1px solid rgba(255, 255, 255, 0.14); display: flex; flex-direction: column;
+}
+.spp-panel-title { font-size: 24px; font-weight: 800; }
+.spp-panel .spp-hint { margin: 6px 0 18px; }
+
+.spp-signals { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.spp-signal {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05); color: #e2e8f0; font-size: 18px; font-weight: 700; border: 3px solid transparent;
+}
+.spp-signal.is-playing { color: #38bdf8; }
+.spp-signal.is-failed { color: #64748b; }
+.spp-signal.is-focused { background: #ffffff; color: #000000; border-color: #ffffff; }
+.spp-signal-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spp-signal-tag { flex-shrink: 0; font-size: 13px; font-weight: 800; padding: 3px 10px; border-radius: 8px; background: rgba(56, 189, 248, 0.14); color: #38bdf8; }
+.spp-signal-tag.is-failed { background: rgba(255, 255, 255, 0.06); color: #94a3b8; }
+.spp-signal.is-focused .spp-signal-tag { background: rgba(0, 0, 0, 0.08); color: #000000; }
+.spp-league { display: inline-flex; align-items: center; gap: 10px; }
+.spp-league-logo { width: 26px; height: 26px; object-fit: contain; }
+.spp-match { display: flex; align-items: flex-start; justify-content: center; gap: 28px; margin-top: 22px; }
+.spp-side { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 210px; }
+.spp-side-name { font-size: 20px; font-weight: 800; color: #ffffff; line-height: 1.25; }
+.spp-vs { margin-top: 30px; font-size: 16px; font-weight: 800; color: #64748b; text-transform: uppercase; }
+.spp-crest {
+  position: relative; width: 84px; height: 84px; border-radius: 50%; overflow: hidden;
+  background: rgba(255, 255, 255, 0.06); display: inline-flex; align-items: center; justify-content: center;
+}
+.spp-crest img { position: absolute; inset: 10px; width: calc(100% - 20px); height: calc(100% - 20px); object-fit: contain; z-index: 1; }
+.spp-crest-text { font-size: 22px; font-weight: 800; color: #94a3b8; }

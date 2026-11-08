@@ -6,6 +6,9 @@ import { DestacadosView, DestacadosFocus, ContentRowDef } from './views/Destacad
 import { LiveTvView } from './views/LiveTvView';
 import { VodDetailView } from './views/VodDetailView';
 import { VodPlayerFullscreen } from './views/VodPlayerFullscreen';
+import { SportsView } from './views/SportsView';
+import { SportsPlayerFullscreen } from './views/SportsPlayerFullscreen';
+import type { SportsEvent, SportsStream } from './types/sports';
 import { SearchModal } from './components/search/SearchModal';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { BrowseScreen, resolveCategoryIdForRow } from './screens/BrowseScreen';
@@ -65,6 +68,13 @@ export const App: React.FC = () => {
 
   // Active VOD Player State
   const [activeVodPlayer, setActiveVodPlayer] = useState<VodPlayerState | null>(null);
+
+  // Active Sports Stream Player State
+  const [activeSportsPlayer, setActiveSportsPlayer] = useState<{
+    event: SportsEvent;
+    streamIndex: number;
+    streams: SportsStream[];
+  } | null>(null);
 
   // Catalog, live TV, detail screen and screen stack (profile, PIN)
   const catalog = useCatalog(applyDeepLink);
@@ -244,7 +254,7 @@ export const App: React.FC = () => {
 
   // Auto-rotate Hero showcase only when hero is visible at top (paused while browsing rows below to prevent background re-renders)
   useEffect(() => {
-    if (selectedTab === 'tv' || activeVodPlayer || isFullscreenLive || isSearchOpen || activeDetailItem || stack.length > 0) return;
+    if (selectedTab === 'tv' || selectedTab === 'deportes' || activeVodPlayer || activeSportsPlayer || isFullscreenLive || isSearchOpen || activeDetailItem || stack.length > 0) return;
     if (focusDomain === 'content' && destacadosFocus.area === 'row') return;
     const heroCount = Math.min(10, currentHeroItems.length);
     if (heroCount <= 1) return;
@@ -371,6 +381,13 @@ export const App: React.FC = () => {
     push({ id: 'filter', root: root || byTab[selectedTab] || 'movies' });
   }, [push, selectedTab]);
 
+  // Helper to return to the active tab in header
+  const returnToHeader = useCallback(() => {
+    setFocusDomain('header');
+    const curTabIdx = TABS.findIndex(t => t.id === selectedTab);
+    setHeaderFocusIndex(curTabIdx !== -1 ? curTabIdx : 1);
+  }, [selectedTab]);
+
   // Handle D-pad Navigation: routes each key to the handler of the active screen.
   // Kept in a ref so the window listener never runs with stale state.
   const handleKeyRef = useRef<(key: TvKey, ev?: KeyboardEvent) => boolean>(() => true);
@@ -382,6 +399,12 @@ export const App: React.FC = () => {
     // Fullscreen VOD Player (handles its own keys; back closes player)
     if (activeVodPlayer) {
       if (key === 'back') setActiveVodPlayer(null);
+      return true;
+    }
+
+    // Fullscreen Sports Player (handles its own keys; back closes player)
+    if (activeSportsPlayer) {
+      if (key === 'back') setActiveSportsPlayer(null);
       return true;
     }
 
@@ -439,13 +462,6 @@ export const App: React.FC = () => {
       }
     }
 
-    // Helper to return to the active tab in header
-    const returnToHeader = () => {
-      setFocusDomain('header');
-      const curTabIdx = TABS.findIndex(t => t.id === selectedTab);
-      setHeaderFocusIndex(curTabIdx !== -1 ? curTabIdx : 1);
-    };
-
     // Global Back key: return to header if in content, or double-press from header to exit
     if (key === 'back') {
       if (focusDomain === 'content') {
@@ -486,6 +502,10 @@ export const App: React.FC = () => {
 
     if (selectedTab === 'tv') {
       return handleLiveTvKeys(key, { ...live, guardLiveCat, returnToHeader });
+    }
+
+    if (selectedTab === 'deportes') {
+      return true;
     }
 
     return handleVodTabsKeys(key, {
@@ -658,9 +678,29 @@ export const App: React.FC = () => {
         />
       </div>
 
+      {/* View: DEPORTES (Cartelera deportiva en vivo y transmisiones) */}
+      {selectedTab === 'deportes' && (
+        <div
+          className="tab-pane-sports"
+          style={{
+            display: 'contents',
+            visibility: activeDetailItem || activeVodPlayer || activeSportsPlayer ? 'hidden' : 'visible'
+          }}
+        >
+          <SportsView
+            isFocusActive={focusDomain === 'content' && !activeSportsPlayer && !activeDetailItem && !activeVodPlayer}
+            onFocusHeader={returnToHeader}
+            onPlayEventStream={(event, streamIndex, streams) => {
+              playerService.stop();
+              setActiveSportsPlayer({ event, streamIndex, streams });
+            }}
+          />
+        </div>
+      )}
+
       {/* View: VOD TABS (Destacados, Películas, Series, Kids, Anime, Explorar) */}
       {/* Stays mounted under the detail / player (hidden) so Back returns to the same row, card and scroll */}
-      {selectedTab !== 'tv' && (
+      {selectedTab !== 'tv' && selectedTab !== 'deportes' && (
         <div
           className="tab-pane-vod"
           style={{ display: 'contents', visibility: activeDetailItem || activeVodPlayer ? 'hidden' : 'visible' }}
@@ -735,6 +775,16 @@ export const App: React.FC = () => {
           episodes={activeVodPlayer.episodes}
           onPlayEpisode={ep => setActiveVodPlayer(prev => (prev ? { ...prev, episode: ep, startAt: 0 } : prev))}
           onClose={() => setActiveVodPlayer(null)}
+        />
+      )}
+
+      {/* Fullscreen Sports Player */}
+      {activeSportsPlayer && (
+        <SportsPlayerFullscreen
+          event={activeSportsPlayer.event}
+          initialStreamIndex={activeSportsPlayer.streamIndex}
+          streams={activeSportsPlayer.streams}
+          onClose={() => setActiveSportsPlayer(null)}
         />
       )}
 
