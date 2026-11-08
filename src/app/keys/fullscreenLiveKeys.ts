@@ -42,6 +42,13 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
     guardLiveCat,
     locateLiveChannel
   } = ctx;
+
+  // Black screen on: any key brings the picture back (and does nothing else)
+  if (ctx.screenOff) {
+    ctx.setScreenOff(false);
+    triggerOsd();
+    return true;
+  }
   if (showFullscreenGuide) {
     // Navigating inside Quick Mini-Guide Drawer (search + categories + channels)
     const searching = fullscreenQuery.trim().length > 0;
@@ -247,19 +254,27 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
     return true;
   }
 
-  // When focused on InfoBar Action Buttons ([☰ Lista de canales] / [★ Favoritos])
+  // When focused on InfoBar Action Buttons ([☰ Lista de canales] / [★ Favoritos] / [Pantalla negra])
   if (fullscreenFocusBtn !== 'none') {
+    const buttons = ['channels', 'fav', 'screen'] as const;
+    const at = Math.max(0, buttons.indexOf(fullscreenFocusBtn));
     if (key === 'left') {
-      setFullscreenFocusBtn('channels');
+      setFullscreenFocusBtn(buttons[Math.max(0, at - 1)]);
       triggerOsd();
       return true;
     }
     if (key === 'right') {
-      setFullscreenFocusBtn('fav');
+      setFullscreenFocusBtn(buttons[Math.min(buttons.length - 1, at + 1)]);
       triggerOsd();
       return true;
     }
     if (key === 'enter') {
+      if (fullscreenFocusBtn === 'screen') {
+        ctx.setScreenOff(true);
+        setShowFullscreenOsd(false);
+        setFullscreenFocusBtn('none');
+        return true;
+      }
       if (fullscreenFocusBtn === 'fav' && ctx.tunedLiveChannel) {
         ctx.toggleLiveFavorite(ctx.tunedLiveChannel);
         triggerOsd();

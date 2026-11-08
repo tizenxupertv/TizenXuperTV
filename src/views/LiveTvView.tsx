@@ -1,6 +1,7 @@
 import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { LiveChannel, LiveCategory } from '../types/channel';
 import { playerService, LiveStatus } from '../services/playerService';
+import '../styles/screenOff.css';
 import { iptvService, IPTV_CATEGORY_PREFIX, IPTV_CATEGORY_LABEL } from '../services/iptvService';
 import { parentalService } from '../services/parentalService';
 import { useRenderCount } from '../debug/renderCount';
@@ -155,7 +156,10 @@ interface LiveTvViewProps {
   drawerKb?: KbState;
   onDrawerResults?: (channels: LiveChannel[]) => void;
   drawerCatIndex?: number;
-  fullscreenFocusBtn?: 'none' | 'channels' | 'fav';
+  fullscreenFocusBtn?: 'none' | 'channels' | 'fav' | 'screen';
+  /** "Pantalla negra": black layer over the fullscreen picture, the sound goes on */
+  screenOff?: boolean;
+  onScreenOff?: () => void;
   onTuneChannel: (channel: LiveChannel) => void;
   onEnterFullscreen: (channel: LiveChannel) => void;
   onExitFullscreen: () => void;
@@ -251,6 +255,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   onDrawerResults,
   drawerCatIndex = 0,
   fullscreenFocusBtn = 'none',
+  screenOff = false,
+  onScreenOff,
   onTuneChannel,
   onEnterFullscreen,
   onExitFullscreen,
@@ -1027,6 +1033,13 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                 >
                   {isDisplayChannelFav ? '★' : '☆'}
                 </button>
+                <button
+                  className={`pi-action-btn ${fullscreenFocusBtn === 'screen' ? 'is-focused' : ''}`}
+                  title="Pantalla negra: apaga la imagen y sigue el sonido"
+                  onClick={onScreenOff}
+                >
+                  ◐ Pantalla negra
+                </button>
               </div>
 
               <div className="pi-date">{liveClock}</div>
@@ -1078,6 +1091,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
               </div>
             </div>
           )}
+
+          {isFullscreen && screenOff && <ScreenOffLayer channelName={displayChannel ? displayChannel.name : ''} />}
 
           {/* =========================================================
               FULLSCREEN: Authentic Floating Channel Drawer (Vanilla Layout)
@@ -1329,6 +1344,31 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           }}
         />
       )}
+    </div>
+  );
+};
+
+/**
+ * Black screen for radio and music: all black (OLED pixels switch off) with a dim clock that moves every minute so
+ * nothing stays in the same place on the panel. Any key brings the picture back (fullscreenLiveKeys)
+ */
+const ScreenOffLayer: React.FC<{ channelName: string }> = ({ channelName }) => {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const pos = [
+    { left: '12%', top: '18%' }, { left: '62%', top: '22%' }, { left: '30%', top: '62%' },
+    { left: '70%', top: '70%' }, { left: '44%', top: '40%' }, { left: '16%', top: '78%' }
+  ][now.getMinutes() % 6];
+  const pad = (n: number) => (n < 10 ? '0' : '') + n;
+  return (
+    <div className="screen-off-layer">
+      <div className="screen-off-clock" style={pos}>
+        <div className="screen-off-time">{pad(now.getHours())}:{pad(now.getMinutes())}</div>
+        {channelName && <div className="screen-off-sub">{channelName} · pulsa cualquier tecla</div>}
+      </div>
     </div>
   );
 };
