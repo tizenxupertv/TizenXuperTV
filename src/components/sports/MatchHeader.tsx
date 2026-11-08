@@ -5,7 +5,7 @@ import '../../styles/sportsPlayer.css';
 /** Team crest, or its initials when the image is missing or fails */
 export const MatchCrest: React.FC<{ src?: string; name: string }> = ({ src, name }) => (
   <span className="spp-crest">
-    {src ? <img src={src} alt="" onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }} /> : null}
+    {src ? <img src={src} alt="" decoding="async" onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }} /> : null}
     <span className="spp-crest-text">{name.slice(0, 2).toUpperCase()}</span>
   </span>
 );
