@@ -55,7 +55,7 @@ test('deleting a profile removes its data and falls back to "Principal"', () => 
   assert.equal(store.remove('principal'), false, 'the main profile cannot be deleted');
 });
 
-test('at most six profiles, with clean names', () => {
+test('at most MAX_PROFILES profiles, with clean names', () => {
   const store = createProfileStore(memory(), memory());
   for (let i = 0; i < 10; i++) store.create(`perfil ${i}`);
   assert.equal(store.list().length, MAX_PROFILES);

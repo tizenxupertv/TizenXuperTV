@@ -28,7 +28,7 @@ export const PROFILES_KEY = 'xuper_profiles_v1';
 /** Set for this launch (and the reload that follows a switch) once someone answered "¿Quién está viendo?" */
 const CHOSEN_KEY = 'xuper_profile_chosen';
 export const MAIN_PROFILE = 'principal';
-export const MAX_PROFILES = 6;
+export const MAX_PROFILES = 3;
 export const MAX_NAME = 16;
 export const PROFILE_COLORS = ['#7c3aed', '#0891b2', '#d97706', '#059669', '#2563eb', '#db2777'];
 
