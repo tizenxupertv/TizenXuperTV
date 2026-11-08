@@ -1,7 +1,7 @@
-import { kvGet, kvSet } from '../lib/kvStore';
-import { VodItem, VodEpisode, VodSeason } from '../types/vod';
-import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../lib/catalogOrganizer';
-import { formatDuration } from '../lib/vodResume';
+import { kvGet, kvSet } from '../lib/kvStore.ts';
+import type { VodItem, VodEpisode, VodSeason, PersonDetail, PersonResult } from '../types/vod';
+import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../lib/catalogOrganizer.ts';
+import { formatDuration } from '../lib/vodResume.ts';
 
 declare global {
   interface Window {
@@ -226,6 +226,10 @@ class CatalogService {
     rowsByGroup: Record<string, VodItem[]>;
     portalRows: Record<string, PortalRow[]>;
   } | null = null;
+
+  public getCachedCatalog() {
+    return this.cache;
+  }
 
   public async fetchCatalog(): Promise<{
     featured: VodItem[];
@@ -1134,6 +1138,132 @@ export function getPortalColumnPage(
         items: (res.items || []).map((raw, i) => normalizeItem(raw, offset + i)),
         total: res.total || 0
       });
+    });
+  });
+}
+
+export function getPersons(contentId: string): Promise<PersonResult> {
+  return new Promise((resolve) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.getPerson !== 'function') {
+      return resolve({ directors: [], actors: [] });
+    }
+    client.getPerson(contentId, (err: any, data: any) => {
+      if (err || !data) return resolve({ directors: [], actors: [] });
+      const dirList = (data.directorList || data.directors || []).map((d: any) => ({
+        puId: String(d.puId || ''),
+        name: String(d.name || ''),
+        icon: d.icon || undefined,
+        birthPlace: d.birthPlace || undefined,
+        birthTime: d.birthTime || undefined,
+        awards: d.awards || undefined,
+        introduction: d.introduction || undefined,
+        personType: 1
+      }));
+      const actList = (data.actorDisplayList || data.actors || []).map((a: any) => ({
+        puId: String(a.puId || ''),
+        name: String(a.name || ''),
+        icon: a.icon || undefined,
+        birthPlace: a.birthPlace || undefined,
+        birthTime: a.birthTime || undefined,
+        awards: a.awards || undefined,
+        introduction: a.introduction || undefined,
+        personType: 0
+      }));
+      resolve({ directors: dirList, actors: actList });
+    });
+  });
+}
+
+function resolveLocalCatalogFallback(personName: string, resolve: (res: { items: VodItem[]; total: number }) => void) {
+  const norm = personName.trim().toLowerCase();
+  const cached = catalogService.getCachedCatalog();
+  const candidates: VodItem[] = cached
+    ? [...cached.featured, ...cached.movies, ...cached.series, ...cached.kids, ...cached.anime]
+    : [];
+
+  const matched = candidates.filter(it =>
+    (it.actors && it.actors.toLowerCase().includes(norm)) ||
+    (it.director && it.director.toLowerCase().includes(norm)) ||
+    (it.title && it.title.toLowerCase().includes(norm))
+  );
+
+  const seen: Record<string, boolean> = {};
+  const unique = matched.filter(it => {
+    if (seen[it.id]) return false;
+    seen[it.id] = true;
+    return true;
+  });
+
+  resolve({ items: unique, total: unique.length });
+}
+
+export function getPersonWorks(
+  puId: string,
+  pageNum = 1,
+  pageSize = 24,
+  personName?: string
+): Promise<{ items: VodItem[]; total: number }> {
+  return new Promise((resolve) => {
+    const client = window.MagisClient;
+
+    const fallbackToSearch = () => {
+      if (!personName) return resolve({ items: [], total: 0 });
+      if (client && typeof client.search === 'function') {
+        client.search(personName, (sErr: any, sRes: any) => {
+          if (!sErr && sRes && sRes.items && sRes.items.length > 0) {
+            return resolve({
+              items: sRes.items.map((raw: any, i: number) => normalizeItem(raw, i)),
+              total: sRes.total || sRes.items.length
+            });
+          }
+          resolveLocalCatalogFallback(personName, resolve);
+        }, { pageSize });
+        return;
+      }
+      resolveLocalCatalogFallback(personName, resolve);
+    };
+
+    if (client && typeof client.getItemByPerson === 'function' && puId) {
+      client.getItemByPerson(puId, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
+        if (!err && res && res.items && res.items.length > 0) {
+          const offset = (pageNum - 1) * pageSize;
+          return resolve({
+            items: (res.items || []).map((raw, i) => normalizeItem(raw, offset + i)),
+            total: res.total || 0
+          });
+        }
+        fallbackToSearch();
+      });
+      return;
+    }
+
+    fallbackToSearch();
+  });
+}
+
+export function getChannelCatchup(channelCode: string, columnId = 0, pageNum = 1, pageSize = 50): Promise<{ programs: any[]; total: number }> {
+  return new Promise((resolve) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.getAllbackProgram !== 'function') {
+      return resolve({ programs: [], total: 0 });
+    }
+    client.getAllbackProgram(channelCode, columnId, pageNum, pageSize, (err: any, res: any) => {
+      if (err || !res) return resolve({ programs: [], total: 0 });
+      resolve({ programs: res.programs || [], total: res.total || 0 });
+    });
+  });
+}
+
+export function getCatchupStreamUrl(channelCode: string, contentId: string, columnId = 0): Promise<string | null> {
+  return new Promise((resolve) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.startPlayBTV !== 'function') {
+      return resolve(null);
+    }
+    client.startPlayBTV(channelCode, contentId, columnId, (err: any, res: any) => {
+      if (err || !res || !res.url) return resolve(null);
+      resolve(res.url);
     });
   });
 }

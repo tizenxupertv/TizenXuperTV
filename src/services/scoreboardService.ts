@@ -1,4 +1,12 @@
-import type { LiveMatchScore } from '../types/sports.ts';
+import type {
+  LiveMatchScore,
+  FullMatchDetails,
+  MatchEventItem,
+  MatchLineup,
+  MatchPlayer,
+  MatchStatComparison,
+  MatchEventType
+} from '../types/sports.ts';
 
 interface EspnCompetitor {
   homeAway: 'home' | 'away';
@@ -8,6 +16,7 @@ interface EspnCompetitor {
     displayName?: string;
     shortDisplayName?: string;
     abbreviation?: string;
+    logo?: string;
   };
   athlete?: {
     displayName?: string;
@@ -43,18 +52,32 @@ interface EspnEvent {
 }
 
 interface NormalizedEspnGame {
+  id: string;
   sport: string;
+  summaryPath: string;
   homeFull: string;
   homeShort: string;
   homeAbbr: string;
+  homeLogo?: string;
   homeScore: string;
   awayFull: string;
   awayShort: string;
   awayAbbr: string;
+  awayLogo?: string;
   awayScore: string;
   state: 'live' | 'finished' | 'scheduled';
   periodDetail: string;
 }
+
+const ESPN_SUMMARY_PATHS: Record<string, string> = {
+  soccer: 'soccer/all',
+  nba: 'basketball/nba',
+  nfl: 'football/nfl',
+  mlb: 'baseball/mlb',
+  nhl: 'hockey/nhl',
+  cfb: 'football/college-football',
+  cfl: 'football/cfl'
+};
 
 const ESPN_ENDPOINTS: Record<string, string> = {
   nba: 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard',
@@ -191,11 +214,13 @@ class ScoreboardService {
             const homeFull = homeComp.team?.displayName || homeComp.athlete?.displayName || '';
             const homeShort = homeComp.team?.shortDisplayName || '';
             const homeAbbr = homeComp.team?.abbreviation || '';
+            const homeLogo = homeComp.team?.logo;
             const homeScore = this.parseScore(homeComp);
 
             const awayFull = awayComp.team?.displayName || awayComp.athlete?.displayName || '';
             const awayShort = awayComp.team?.shortDisplayName || '';
             const awayAbbr = awayComp.team?.abbreviation || '';
+            const awayLogo = awayComp.team?.logo;
             const awayScore = this.parseScore(awayComp);
 
             const statusType = comp.status?.type || ev.status?.type;
@@ -211,14 +236,18 @@ class ScoreboardService {
             const periodDetail = (statusType?.shortDetail || statusType?.detail || '').trim();
 
             parsed.push({
+              id: ev.id,
               sport: sportKey,
+              summaryPath: ESPN_SUMMARY_PATHS[sportKey] || 'soccer/all',
               homeFull,
               homeShort,
               homeAbbr,
+              homeLogo,
               homeScore,
               awayFull,
               awayShort,
               awayAbbr,
+              awayLogo,
               awayScore,
               state,
               periodDetail
@@ -291,7 +320,9 @@ class ScoreboardService {
     return found;
   }
 
-  private matchScore(homeName: string, awayName: string): LiveMatchScore | null {
+  public findBestMatch(homeName: string, awayName: string): { game: NormalizedEspnGame; swapped: boolean } | null {
+    if (!homeName || !awayName || this.games.length === 0) return null;
+    this.ensureIndex();
     let best: { game: NormalizedEspnGame; swapped: boolean; score: number } | null = null;
     for (const g of this.candidates(homeName, awayName)) {
       const direct = [this.teamScore(homeName, g.homeFull, g.homeShort, g.homeAbbr), this.teamScore(awayName, g.awayFull, g.awayShort, g.awayAbbr)];
@@ -301,6 +332,11 @@ class ScoreboardService {
       const top = Math.max(d, c);
       if (top && (!best || top > best.score)) best = { game: g, swapped: c > d, score: top };
     }
+    return best;
+  }
+
+  private matchScore(homeName: string, awayName: string): LiveMatchScore | null {
+    const best = this.findBestMatch(homeName, awayName);
     if (!best || best.game.state === 'scheduled') return null;
     const g = best.game;
     return {
@@ -309,6 +345,178 @@ class ScoreboardService {
       state: g.state,
       periodDetail: g.periodDetail,
       sport: g.sport
+    };
+  }
+
+  public async getMatchDetails(homeName: string, awayName: string): Promise<FullMatchDetails | null> {
+    const match = this.findBestMatch(homeName, awayName);
+    if (!match) return null;
+    const { game, swapped } = match;
+    const url = `https://site.api.espn.com/apis/site/v2/sports/${game.summaryPath}/summary?event=${game.id}`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return this.parseMatchSummary(game, data, swapped);
+    } catch (e) {
+      console.warn('[scoreboardService] failed to fetch match summary:', e);
+      return null;
+    }
+  }
+
+  private parseMatchSummary(game: NormalizedEspnGame, data: any, swapped: boolean): FullMatchDetails {
+    const homeName = swapped ? game.awayFull : game.homeFull;
+    const awayName = swapped ? game.homeFull : game.awayFull;
+    const homeLogo = swapped ? game.awayLogo : game.homeLogo;
+    const awayLogo = swapped ? game.homeLogo : game.awayLogo;
+    const homeScore = (swapped ? game.awayScore : game.homeScore) || '0';
+    const awayScore = (swapped ? game.homeScore : game.awayScore) || '0';
+
+    // 1. Events (Key Events timeline: Goals, Cards, Substitutions)
+    const rawEvents: any[] = data.keyEvents || [];
+    const events: MatchEventItem[] = [];
+
+    for (const k of rawEvents) {
+      const text = (k.type?.text || '').toLowerCase();
+      const typeStr = (k.type?.type || '').toLowerCase();
+      let type: MatchEventType = 'other';
+
+      if (typeStr.includes('goal') || text.includes('goal') || k.scoringPlay) {
+        type = 'goal';
+      } else if (typeStr.includes('yellow-card') || text.includes('yellow card')) {
+        type = 'yellow_card';
+      } else if (typeStr.includes('red-card') || text.includes('red card')) {
+        type = 'red_card';
+      } else if (typeStr.includes('substitution') || text.includes('substitution')) {
+        type = 'substitution';
+      } else if (text.includes('penalty')) {
+        type = 'penalty';
+      } else {
+        continue; // Skip delays, kickoffs and generic messages
+      }
+
+      const teamName = k.team?.displayName || '';
+      const isHome = this.teamMatches(teamName, homeName, '', '');
+      const teamSide: 'home' | 'away' = isHome ? 'home' : 'away';
+
+      const player = k.participants?.[0]?.athlete?.displayName || k.shortText || '';
+      const subPlayer = type === 'substitution' ? k.participants?.[1]?.athlete?.displayName : undefined;
+
+      events.push({
+        id: k.id || String(Math.random()),
+        type,
+        time: k.clock?.displayValue || '',
+        teamSide,
+        player,
+        subPlayer,
+        detail: k.text
+      });
+    }
+
+    // 2. Lineups & Formations
+    let lineups: { home: MatchLineup; away: MatchLineup } | undefined;
+    const rosters: any[] = data.rosters || [];
+    if (rosters.length >= 2) {
+      const r0IsHome = this.teamMatches(rosters[0]?.team?.displayName || '', homeName, '', '');
+      const homeRoster = r0IsHome ? rosters[0] : rosters[1];
+      const awayRoster = r0IsHome ? rosters[1] : rosters[0];
+
+      const parsePlayers = (list: any[] = []) => {
+        const starters: MatchPlayer[] = [];
+        const bench: MatchPlayer[] = [];
+        for (const p of list) {
+          const item: MatchPlayer = {
+            id: p.athlete?.id || p.jersey || p.athlete?.displayName,
+            name: p.athlete?.displayName || p.athlete?.fullName || '',
+            jersey: p.jersey,
+            position: p.position?.abbreviation,
+            starter: Boolean(p.starter)
+          };
+          if (p.starter) starters.push(item);
+          else bench.push(item);
+        }
+        return { starters, bench };
+      };
+
+      const hP = parsePlayers(homeRoster?.roster);
+      const aP = parsePlayers(awayRoster?.roster);
+
+      lineups = {
+        home: {
+          formation: homeRoster?.formation,
+          starters: hP.starters,
+          bench: hP.bench
+        },
+        away: {
+          formation: awayRoster?.formation,
+          starters: aP.starters,
+          bench: aP.bench
+        }
+      };
+    }
+
+    // 3. Match Statistics Comparison
+    const stats: MatchStatComparison[] = [];
+    const teams: any[] = data.boxscore?.teams || [];
+    if (teams.length >= 2) {
+      const t0IsHome = this.teamMatches(teams[0]?.team?.displayName || '', homeName, '', '');
+      const hTeam = t0IsHome ? teams[0] : teams[1];
+      const aTeam = t0IsHome ? teams[1] : teams[0];
+
+      const hStatsMap = new Map<string, string>();
+      const aStatsMap = new Map<string, string>();
+
+      (hTeam.statistics || []).forEach((s: any) => hStatsMap.set(s.name, s.displayValue));
+      (aTeam.statistics || []).forEach((s: any) => aStatsMap.set(s.name, s.displayValue));
+
+      const STAT_DEFS: Array<{ name: string; label: string }> = [
+        { name: 'possession', label: 'Posesión (%)' },
+        { name: 'shots', label: 'Remates Totales' },
+        { name: 'onGoal', label: 'Remates al Arco' },
+        { name: 'fouls', label: 'Faltas Cometidas' },
+        { name: 'cornerKicks', label: 'Tiros de Esquina' },
+        { name: 'offsides', label: 'Fueras de Juego' },
+        { name: 'yellowCards', label: 'Tarjetas Amarillas' },
+        { name: 'redCards', label: 'Tarjetas Rojas' },
+        { name: 'accuratePasses', label: 'Pases Precisos' },
+        { name: 'saves', label: 'Atajadas' }
+      ];
+
+      for (const def of STAT_DEFS) {
+        const hVal = hStatsMap.get(def.name);
+        const aVal = aStatsMap.get(def.name);
+        if (hVal !== undefined || aVal !== undefined) {
+          const numH = parseFloat(hVal || '0') || 0;
+          const numA = parseFloat(aVal || '0') || 0;
+          const total = numH + numA;
+          const homePercent = total > 0 ? Math.round((numH / total) * 100) : 50;
+          const awayPercent = total > 0 ? 100 - homePercent : 50;
+
+          stats.push({
+            label: def.label,
+            homeValue: hVal ?? '0',
+            awayValue: aVal ?? '0',
+            homePercent,
+            awayPercent
+          });
+        }
+      }
+    }
+
+    return {
+      gameId: game.id,
+      sport: game.sport,
+      homeTeam: homeName,
+      awayTeam: awayName,
+      homeLogo,
+      awayLogo,
+      homeScore,
+      awayScore,
+      status: game.state,
+      periodDetail: game.periodDetail,
+      events,
+      lineups,
+      stats
     };
   }
 }

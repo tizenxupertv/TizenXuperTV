@@ -1,20 +1,43 @@
-/* Deportes tab (views/SportsView.tsx): live row with scores, sport chips, schedule grid by day */
+/* Deportes tab (views/SportsView.tsx): vertical categories sidebar on left (same as Live TV), live row and schedule grid on right */
 .spb-root {
-  position: absolute; left: 0; top: 68px; width: 100%; height: calc(100vh - 68px);
-  padding: 16px min(48px, 2.5vw) 60px; box-sizing: border-box; overflow: hidden;
+  position: absolute;
+  left: 0;
+  top: 68px;
+  width: 100%;
+  height: calc(100vh - 68px);
+  padding: 16px min(48px, 2.5vw) 24px min(48px, 2.5vw);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 /* Drawn inside the card, so a row or grid with overflow hidden never clips it */
 .spb-focus { outline: 3px solid #ffffff; outline-offset: -3px; }
 .spb-track { will-change: transform; }
 
-.spb-chips { display: flex; gap: 12px; flex-wrap: nowrap; overflow: hidden; height: 44px; margin: 6px 0 26px; }
-.spb-chip {
-  display: inline-flex; align-items: center; gap: 10px; padding: 10px 22px; border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05); color: #cbd5e1; font-size: 17px; font-weight: 700;
+.spb-layout {
+  display: flex;
+  gap: min(22px, 1.4vw);
+  width: 100%;
+  height: 100%;
 }
-.spb-chip.is-on { background: rgba(56, 189, 248, 0.16); color: #38bdf8; }
-.spb-chip.spb-focus { background: #ffffff; color: #000000; outline: none; }
-.spb-chip-count { font-size: 14px; opacity: 0.7; }
+
+.spb-layout .live-col-categories {
+  flex-shrink: 0;
+}
+
+.live-cat-vrow.is-focused .browse-cat-vcount {
+  background: rgba(0, 0, 0, 0.14) !important;
+  color: #000000 !important;
+  font-weight: 800 !important;
+}
+
+/* Main content on the right */
+.spb-main-content {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
 
 .spb-section { display: flex; align-items: center; gap: 10px; height: 30px; margin: 0 0 14px; font-size: 22px; font-weight: 800; color: #ffffff; }
 .spb-section.is-day { margin-top: 30px; text-transform: capitalize; }
@@ -34,8 +57,8 @@
   display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 8px; flex-shrink: 0;
   background: rgba(239, 68, 68, 0.14); color: #f87171; font-size: 14px; font-weight: 800;
 }
-.spb-team-line { display: flex; align-items: center; gap: 14px; margin: 8px 0; }
-.spb-team-line.is-small { gap: 10px; margin: 5px 0; }
+.spb-team-line { display: flex; align-items: center; gap: 16px; margin: 8px 0; }
+.spb-team-line.is-small { gap: 12px; margin: 5px 0; }
 .spb-team { flex: 1; min-width: 0; font-size: 21px; font-weight: 700; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .is-small .spb-team { font-size: 17px; }
 .spb-score { font-size: 30px; font-weight: 900; color: #ffffff; font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
@@ -43,12 +66,37 @@
 .spb-meta { margin-top: 12px; font-size: 14px; color: #64748b; }
 
 .spb-crest {
-  position: relative; width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
-  background: rgba(255, 255, 255, 0.08); display: inline-flex; align-items: center; justify-content: center;
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-.spb-crest.is-big { width: 40px; height: 40px; }
-.spb-crest img { position: absolute; inset: 3px; width: calc(100% - 6px); height: calc(100% - 6px); object-fit: contain; z-index: 1; }
-.spb-crest-text { font-size: 12px; font-weight: 800; color: #94a3b8; }
+.spb-crest.is-big {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+.spb-crest img {
+  position: static;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+.spb-crest-text {
+  font-size: 13px;
+  font-weight: 800;
+  color: #94a3b8;
+}
 
 .spb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; height: 118px; margin-bottom: 18px; }
 .spb-card {
@@ -63,7 +111,6 @@
 .spb-when.is-done { color: #94a3b8; }
 .spb-card-body { flex: 1; min-width: 0; }
 .spb-card.is-skeleton { height: 118px; animation: spb-skeleton 1.6s infinite ease-in-out; }
-/* Opacity only: a scaling skeleton makes the grid wobble */
 @keyframes spb-skeleton { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
 .spb-skeleton { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
 
@@ -79,3 +126,17 @@
 .spb-stream { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); font-size: 18px; font-weight: 700; color: #e2e8f0; }
 .spb-stream.spb-focus { background: #ffffff; color: #000000; outline: none; }
 .spb-stream-play { font-size: 15px; opacity: 0.7; }
+
+.spb-details-btn {
+  margin-top: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+}
+
+.spb-details-btn.spb-focus {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+  box-shadow: none !important;
+}

@@ -10,6 +10,7 @@ export interface LiveChannel {
   isFav?: boolean;
   colId?: string | number;
   categoryName?: string;
+  badge?: string;
 }
 
 export interface LiveCategory {
@@ -18,6 +19,7 @@ export interface LiveCategory {
   isFav?: boolean;
   isEspn?: boolean;
   isM3u?: boolean;
+  badge?: string;
   /** Free IPTV list shown as this category (services/iptvService) */
   iptvListId?: string;
 }

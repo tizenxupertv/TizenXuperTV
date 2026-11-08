@@ -9,6 +9,9 @@ export type LiveTvKeysCtx = LiveTvState & {
 };
 
 export function handleLiveTvKeys(key: TvKey, ctx: LiveTvKeysCtx): boolean {
+  if (ctx.catchupChannel) {
+    return true;
+  }
   const {
     liveTvFocus,
     setLiveTvFocus,
@@ -101,9 +104,17 @@ export function handleLiveTvKeys(key: TvKey, ctx: LiveTvKeysCtx): boolean {
       return true;
     }
     if (key === 'right') {
-      // Move to Preview Action Buttons (Pantalla completa / Favorito)
+      // Move to Preview Action Buttons (Pantalla completa / Favorito / Replay)
       setLiveTvFocus(prev => ({ ...prev, area: 'preview_btns', btnIndex: 0 }));
       return true;
+    }
+    if (key === 'colorYellow' || key === 'colorBlue') {
+      // Quick access: Open Catch-Up / Replay modal on focused channel
+      const focusedChannel = liveChannelsRef.current[liveTvFocus.channelIndex] || tunedLiveChannel;
+      if (focusedChannel && ctx.setCatchupChannel) {
+        ctx.setCatchupChannel(focusedChannel);
+        return true;
+      }
     }
     if (key === 'enter') {
       // OK / Enter pressed on a channel:
@@ -123,9 +134,9 @@ export function handleLiveTvKeys(key: TvKey, ctx: LiveTvKeysCtx): boolean {
   }
 
   if (liveTvFocus.area === 'preview_btns') {
-    // btnIndex 0 = Pantalla completa (inside the preview), 1 = Favorito (below it)
+    // btnIndex 0 = Pantalla completa (inside preview), 1 = Favorito, 2 = Replay (↺)
     if (key === 'up') {
-      if (liveTvFocus.btnIndex === 1) {
+      if (liveTvFocus.btnIndex === 1 || liveTvFocus.btnIndex === 2) {
         setLiveTvFocus(prev => ({ ...prev, btnIndex: 0 }));
       } else {
         returnToHeader();
@@ -134,16 +145,25 @@ export function handleLiveTvKeys(key: TvKey, ctx: LiveTvKeysCtx): boolean {
     }
     if (key === 'down') {
       if (liveTvFocus.btnIndex === 0) {
-        setLiveTvFocus(prev => ({ ...prev, btnIndex: 1 }));
+        setLiveTvFocus(prev => ({ ...prev, btnIndex: 2 }));
       }
       return true;
     }
     if (key === 'left') {
-      // Move back to Channels column
-      setLiveTvFocus(prev => ({ ...prev, area: 'channels' }));
+      if (liveTvFocus.btnIndex === 1) {
+        // Move from Favorito to Replay
+        setLiveTvFocus(prev => ({ ...prev, btnIndex: 2 }));
+      } else {
+        // Move back to Channels column
+        setLiveTvFocus(prev => ({ ...prev, area: 'channels' }));
+      }
       return true;
     }
     if (key === 'right') {
+      if (liveTvFocus.btnIndex === 2) {
+        // Move from Replay to Favorito
+        setLiveTvFocus(prev => ({ ...prev, btnIndex: 1 }));
+      }
       return true;
     }
     if (key === 'enter') {
@@ -155,6 +175,12 @@ export function handleLiveTvKeys(key: TvKey, ctx: LiveTvKeysCtx): boolean {
         // Favorito
         if (tunedLiveChannel) {
           toggleLiveFavorite(tunedLiveChannel);
+        }
+      } else if (liveTvFocus.btnIndex === 2) {
+        // Replay / Catchup modal
+        const targetCh = liveChannelsRef.current[liveTvFocus.channelIndex] || tunedLiveChannel;
+        if (targetCh && ctx.setCatchupChannel) {
+          ctx.setCatchupChannel(targetCh);
         }
       }
       return true;

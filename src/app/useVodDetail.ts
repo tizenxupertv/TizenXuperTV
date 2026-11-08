@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { VodDetailFocus } from '../views/VodDetailView';
-import { VodItem } from '../types/vod';
+import { VodItem, PersonDetail, parseCastFromVodItem } from '../types/vod';
 import { DetailEpisodes } from './types';
 import type { TitleChoices } from '../lib/titleOptions';
 
@@ -8,6 +8,7 @@ export interface DetailCounts {
   seasonsCount: number;
   episodesCount: number;
   relatedCount: number;
+  castCount?: number;
   isSeries: boolean;
   hasTrailer?: boolean;
   /** What the title offers for Audio / Subtítulos / Resolución (all options while unknown) */
@@ -27,16 +28,20 @@ export function useVodDetail(featuredItems: VodItem[], movieItems: VodItem[], se
     actionIndex: 0,
     seasonIndex: 0,
     episodeIndex: 0,
-    relatedIndex: 0
+    relatedIndex: 0,
+    castIndex: 0
   });
   const [detailCounts, setDetailCounts] = useState<DetailCounts>({
     seasonsCount: 1,
     episodesCount: 0,
     relatedCount: 0,
+    castCount: 0,
     isSeries: false
   });
 
   const [detailEpisodes, setDetailEpisodes] = useState<DetailEpisodes>({ episodes: [] });
+  const [detailCast, setDetailCast] = useState<PersonDetail[]>([]);
+  const [selectedPerson, setSelectedPerson] = useState<PersonDetail | null>(null);
 
   const detailHistoryRef = useRef<DetailHistoryEntry[]>([]);
   const currentDetailItemRef = useRef<VodItem | null>(null);
@@ -52,13 +57,17 @@ export function useVodDetail(featuredItems: VodItem[], movieItems: VodItem[], se
       });
     }
     setDetailEpisodes({ episodes: [] });
+    const initialCast = parseCastFromVodItem(item);
+    setDetailCast(initialCast);
+    setDetailCounts(prev => ({ ...prev, castCount: initialCast.length }));
     setActiveDetailItem(item);
     setDetailFocus({
       area: 'actions',
       actionIndex: 0,
       seasonIndex: 0,
       episodeIndex: 0,
-      relatedIndex: 0
+      relatedIndex: 0,
+      castIndex: 0
     });
   }, []);
 
@@ -66,6 +75,9 @@ export function useVodDetail(featuredItems: VodItem[], movieItems: VodItem[], se
     if (detailHistoryRef.current.length > 0) {
       const prev = detailHistoryRef.current.pop()!;
       setDetailEpisodes({ episodes: [] });
+      const prevCast = parseCastFromVodItem(prev.item);
+      setDetailCast(prevCast);
+      setDetailCounts(c => ({ ...c, castCount: prevCast.length }));
       setActiveDetailItem(prev.item);
       setDetailFocus(prev.focus);
     } else {
@@ -100,6 +112,10 @@ export function useVodDetail(featuredItems: VodItem[], movieItems: VodItem[], se
     closeDetail,
     currentRelatedItems,
     detailEpisodes,
-    setDetailEpisodes
+    setDetailEpisodes,
+    detailCast,
+    setDetailCast,
+    selectedPerson,
+    setSelectedPerson
   };
 }

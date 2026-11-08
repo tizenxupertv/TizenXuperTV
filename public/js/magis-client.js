@@ -1989,12 +1989,95 @@
     });
   }
 
+  function getPerson(contentId, callback) {
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      call('getPerson', {
+        contentId: String(contentId || ''),
+        imdb: '',
+        type: '0',
+        macAddr: deviceIdentity(false).etheMac
+      }, function (pErr, pRes) {
+        if (pErr) return callback(pErr);
+        var data = pRes && pRes.data ? pRes.data : pRes;
+        callback(null, data || {});
+      });
+    });
+  }
+
+  function getItemByPerson(puId, pageNum, pageSize, callback) {
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      var pNum = Math.max(1, parseInt(pageNum, 10) || 1);
+      var pSize = Math.max(1, Math.min(50, parseInt(pageSize, 10) || 24));
+      call('getItemByPerson', {
+        puId: String(puId || ''),
+        type: '0',
+        pageNum: pNum,
+        pageSize: pSize
+      }, function (wErr, wRes) {
+        if (wErr) return callback(wErr);
+        var data = wRes && wRes.data ? wRes.data : wRes;
+        var list = (data && (data.assetList || data.list)) || [];
+        var total = (data && (data.totalSize || data.total)) || list.length;
+        var items = [];
+        for (var i = 0; i < list.length; i++) {
+          var it = itemFromAsset(list[i]);
+          if (it) items.push(it);
+        }
+        callback(null, { items: items, total: total });
+      });
+    });
+  }
+
+  function getAllbackProgram(channelCode, columnId, pageNum, pageSize, callback) {
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      var pNum = Math.max(1, parseInt(pageNum, 10) || 1);
+      var pSize = Math.max(1, Math.min(100, parseInt(pageSize, 10) || 50));
+      call('getAllbackProgram', {
+        channelCode: String(channelCode || ''),
+        columnId: parseInt(columnId, 10) || 0,
+        pageNum: pNum,
+        pageSize: pSize
+      }, function (cErr, cRes) {
+        if (cErr) return callback(cErr);
+        var data = cRes && cRes.data ? cRes.data : cRes;
+        var list = (data && (data.channelList || data.programList || data.list)) || [];
+        var total = (data && (data.totalSize || data.total)) || list.length;
+        callback(null, { programs: list, total: total });
+      });
+    });
+  }
+
+  function startPlayBTV(channelCode, contentId, columnId, callback) {
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      call('v6/startPlayBTV', {
+        channelCode: String(channelCode || ''),
+        contentId: String(contentId || ''),
+        columnId: parseInt(columnId, 10) || 0,
+        type: '0'
+      }, function (bErr, bRes) {
+        if (bErr) return callback(bErr);
+        var data = bRes && bRes.data ? bRes.data : bRes;
+        var urls = (data && data.totalPlayUrlList) || [];
+        var playUrl = urls.length > 0 ? (urls[0].playUrl || urls[0].url || urls[0]) : (data && data.playUrl);
+        callback(null, { url: playUrl, raw: data });
+      });
+    });
+  }
+
   window.MagisClient = {
     ensureSession: ensureSession,
     resolve: resolve,
     mediaInfo: mediaInfo,
     mediaOptions: mediaOptions,
     detail: detail,
+    getPerson: getPerson,
+    getItemByPerson: getItemByPerson,
+    getAllbackProgram: getAllbackProgram,
+    startPlayBTV: startPlayBTV,
     home: home,
     getHome: getHome,
     getShelveData: getShelveData,

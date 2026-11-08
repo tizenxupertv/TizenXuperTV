@@ -1,4 +1,4 @@
-import { VodItem, VodSeason } from '../types/vod';
+import type { VodItem, VodSeason } from '../types/vod';
 
 /** Strips accents, lowercases, and removes non-alphanumeric chars for robust matching */
 export function normalizeCatalogText(value: string | undefined | null): string {
