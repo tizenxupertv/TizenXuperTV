@@ -473,7 +473,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
               {!isTvSearch && remoteState === 'done' && remoteTotal > totalResults && ` · ${remoteTotal.toLocaleString('es')} en el catálogo`}
               {!isTvSearch && remoteState === 'failed' && ' · sin conexión con el catálogo completo'}
             </span>
-            <span className="search-nav-hint">▲ ▼ ◄ ► y OK · Selecciona "Buscar" o ► para ver resultados</span>
+            <span className="search-nav-hint">▲ ▼ ◀ ▶ y OK · Selecciona "Buscar" o ▶ para ver resultados</span>
           </div>
           )}
 

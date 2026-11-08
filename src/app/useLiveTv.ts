@@ -52,6 +52,8 @@ export function useLiveTv() {
       return null;
     }
   });
+
+  const [catchupChannel, setCatchupChannel] = useState<LiveChannel | null>(null);
   // Remember the selected category too, so the next start opens the category of the last channel
   useEffect(() => {
     const idx = liveTvFocus.selectedCatIndex;
@@ -257,6 +259,8 @@ export function useLiveTv() {
     setShowFullscreenOsd,
     triggerOsd,
     toggleLiveFavorite,
+    catchupChannel,
+    setCatchupChannel,
     locateLiveChannel,
     numericBuffer,
     pushNumericDigit,

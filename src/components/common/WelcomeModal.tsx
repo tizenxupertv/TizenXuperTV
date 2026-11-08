@@ -99,7 +99,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ forceStep }) => {
             {/* 3 Remote Navigation Feature Cards */}
             <div className="welcome-modal-cards-grid">
               <div className="welcome-nav-card">
-                <div className="welcome-key-chip">◄ ▲ ▼ ►</div>
+                <div className="welcome-key-chip">◀ ▲ ▼ ▶</div>
                 <div className="welcome-card-title">Navegación</div>
                 <p className="welcome-card-desc">
                   Explora categorías, sintoniza canales y navega entre filas con las flechas del control.

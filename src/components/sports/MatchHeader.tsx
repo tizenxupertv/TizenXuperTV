@@ -3,12 +3,18 @@ import type { SportsEvent } from '../../types/sports.ts';
 import '../../styles/sportsPlayer.css';
 
 /** Team crest, or its initials when the image is missing or fails */
-export const MatchCrest: React.FC<{ src?: string; name: string }> = ({ src, name }) => (
-  <span className="spp-crest">
-    {src ? <img src={src} alt="" decoding="async" onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }} /> : null}
-    <span className="spp-crest-text">{name.slice(0, 2).toUpperCase()}</span>
-  </span>
-);
+export const MatchCrest: React.FC<{ src?: string; name: string }> = ({ src, name }) => {
+  const [failed, setFailed] = React.useState(false);
+  return (
+    <span className="spp-crest">
+      {src && !failed ? (
+        <img src={src} alt="" decoding="async" onError={() => setFailed(true)} />
+      ) : (
+        <span className="spp-crest-text">{name.slice(0, 2).toUpperCase()}</span>
+      )}
+    </span>
+  );
+};
 
 /**
  * League (with its logo) and the two teams with their crests, or the single event: the head of the signal picker,

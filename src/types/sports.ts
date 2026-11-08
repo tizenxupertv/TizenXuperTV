@@ -52,3 +52,54 @@ export interface SportsStream {
   tokenApi?: string;
 }
 
+
+export type MatchEventType = 'goal' | 'yellow_card' | 'red_card' | 'substitution' | 'penalty' | 'other';
+
+export interface MatchEventItem {
+  id: string;
+  type: MatchEventType;
+  time: string;
+  teamSide: 'home' | 'away';
+  player: string;
+  subPlayer?: string;
+  score?: string;
+  detail?: string;
+}
+
+export interface MatchPlayer {
+  id: string;
+  name: string;
+  jersey?: string;
+  position?: string;
+  starter: boolean;
+}
+
+export interface MatchLineup {
+  formation?: string;
+  starters: MatchPlayer[];
+  bench: MatchPlayer[];
+}
+
+export interface MatchStatComparison {
+  label: string;
+  homeValue: string | number;
+  awayValue: string | number;
+  homePercent?: number;
+  awayPercent?: number;
+}
+
+export interface FullMatchDetails {
+  gameId: string;
+  sport: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeLogo?: string;
+  awayLogo?: string;
+  homeScore?: string;
+  awayScore?: string;
+  status: string;
+  periodDetail?: string;
+  events: MatchEventItem[];
+  lineups?: { home: MatchLineup; away: MatchLineup };
+  stats: MatchStatComparison[];
+}

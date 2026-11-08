@@ -210,7 +210,10 @@ export const App: React.FC = () => {
     handleOpenDetail,
     currentRelatedItems,
     detailEpisodes,
-    setDetailEpisodes
+    setDetailEpisodes,
+    setDetailCast,
+    selectedPerson,
+    setSelectedPerson
   } = detail;
 
   // Starts playback from the detail screen: resume / next episode / chosen episode / trailer
@@ -846,6 +849,8 @@ export const App: React.FC = () => {
           drawerCatIndex={fullscreenCatCursor}
           fullscreenFocusBtn={fullscreenFocusBtn}
           numericBuffer={numericBuffer}
+          catchupChannel={live.catchupChannel}
+          setCatchupChannel={live.setCatchupChannel}
           {...liveViewHandlers}
         />
       </div>
@@ -924,6 +929,10 @@ export const App: React.FC = () => {
           onOpenSeasonMenu={() => setDetailFocus(prev => ({ ...prev, area: 'seasonMenu', seasonMenuIndex: prev.seasonIndex }))}
           onSelectRelated={rel => handleOpenDetail(rel)}
           onDetailLoaded={counts => setDetailCounts(counts)}
+          onCastChange={cast => setDetailCast(cast)}
+          selectedPerson={selectedPerson}
+          onSelectPerson={p => setSelectedPerson(p)}
+          onClosePerson={() => setSelectedPerson(null)}
           onOpenAudioModal={col => {
             const current = col === 'menu' ? 0 : settingPosition(col, detail.detailCounts);
             setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: col, modalIndex: current, quickIndex: 1 }));

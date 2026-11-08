@@ -8,6 +8,7 @@ import { useViewProfiler } from '../lib/perfMonitor';
 import { channelKey, isSameChannel, normalizeChannels, realText } from '../lib/channelKey';
 import { ChannelRow, CategoryRow } from '../components/live/LiveRows';
 import { OnScreenKeyboard, KbState, KB_INITIAL } from '../components/live/OnScreenKeyboard';
+import { CatchupModal } from '../components/live/CatchupModal';
 import { normalizeText } from '../utils/normalizeText';
 import { getChannelEntry, setChannelEntry } from '../lib/channelCache';
 import { pk } from '../lib/localProfiles';
@@ -69,7 +70,7 @@ export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
     id: 'wiwy-espn-1',
     code: 'wiwy-espn-1',
     name: 'ESPN',
-    url: 'https://barinaslive1.boldmss.com/ESPN/ESPN.isml/ESPN.m3u8',
+    url: 'http://190.61.47.54:8000/play/a004/index.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
     time: 'EN VIVO'
   },
@@ -77,47 +78,55 @@ export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
     id: 'wiwy-espn-2',
     code: 'wiwy-espn-2',
     name: 'ESPN 2',
-    url: 'https://barinaslive1.boldmss.com/ESPN_2/ESPN_2.isml/ESPN_2.m3u8',
+    url: 'http://190.61.47.54:8000/play/a005/index.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-2-us.png',
     time: 'EN VIVO'
   },
   {
-    id: 'wiwy-espn-3',
-    code: 'wiwy-espn-3',
-    name: 'ESPN 3',
-    url: 'https://barinaslive1.boldmss.com/ESPN_3/ESPN_3.isml/ESPN_3.m3u8',
-    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-3-us.png',
+    id: 'wiwy-espn-premium',
+    code: 'wiwy-espn-premium',
+    name: 'ESPN Premium',
+    url: 'http://158.172.155.130:8000/play/a0ao/index.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-mx',
+    code: 'wiwy-espn-mx',
+    name: 'ESPN México',
+    url: 'http://168.228.44.241:9997/play/a06p/index.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
     time: 'EN VIVO'
   },
   {
     id: 'wiwy-espn-4',
     code: 'wiwy-espn-4',
     name: 'ESPN 4',
-    url: 'https://barinaslive1.boldmss.com/ESPN_4/ESPN_4.isml/ESPN_4.m3u8',
+    url: 'http://181.78.197.59:8000/play/a07n/index.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
     time: 'EN VIVO'
   },
   {
-    id: 'wiwy-espn-5',
-    code: 'wiwy-espn-5',
-    name: 'ESPN 5',
-    url: 'https://barinaslive1.boldmss.com/ESPN_5/ESPN_5.isml/ESPN_5.m3u8',
+    id: 'wiwy-espn-usa',
+    code: 'wiwy-espn-usa',
+    name: 'ESPN USA HD',
+    url: 'http://85.237.89.160:9590/usa-s/ESPN-HD/index.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
     time: 'EN VIVO'
   },
   {
-    id: 'wiwy-espn-6',
-    code: 'wiwy-espn-6',
-    name: 'ESPN 6',
-    url: 'https://barinaslive1.boldmss.com/ESPN_6/ESPN_6.isml/ESPN_6.m3u8',
-    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
+    id: 'wiwy-espn-2-usa',
+    code: 'wiwy-espn-2-usa',
+    name: 'ESPN 2 USA HD',
+    url: 'http://85.237.89.160:9590/usa-s/ESPN-2-HD/index.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-2-us.png',
     time: 'EN VIVO'
   },
   {
-    id: 'wiwy-espn-7',
-    code: 'wiwy-espn-7',
-    name: 'ESPN 7',
-    url: 'https://barinaslive1.boldmss.com/ESPN_7/ESPN_7.isml/ESPN_7.m3u8',
+    id: 'wiwy-espn-8',
+    code: 'wiwy-espn-8',
+    name: 'ESPN The Ocho',
+    url: 'https://d3b6q2ou5kp8ke.cloudfront.net/ESPNTheOcho.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
     time: 'EN VIVO'
   }
@@ -158,6 +167,8 @@ interface LiveTvViewProps {
   onSelectCategory?: (catIndex: number) => void;
   onOpenDrawerSearch?: () => void;
   numericBuffer?: string;
+  catchupChannel?: LiveChannel | null;
+  setCatchupChannel?: (ch: LiveChannel | null) => void;
 }
 
 // Global in-memory cache for ultra-fast instant category switching
@@ -250,11 +261,24 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   onCategoriesLoaded,
   onSelectCategory,
   onOpenDrawerSearch,
-  numericBuffer
+  numericBuffer,
+  catchupChannel,
+  setCatchupChannel
 }) => {
   useRenderCount('LiveTvView');
   useViewProfiler('TV en Vivo');
   const [streamQuality, setStreamQuality] = useState<string>('FHD 1080p');
+  const [internalCatchup, setInternalCatchup] = useState<LiveChannel | null>(null);
+
+  const activeCatchupChannel = catchupChannel !== undefined ? catchupChannel : internalCatchup;
+  const onOpenCatchup = (ch: LiveChannel) => {
+    if (setCatchupChannel) setCatchupChannel(ch);
+    else setInternalCatchup(ch);
+  };
+  const onCloseCatchup = () => {
+    if (setCatchupChannel) setCatchupChannel(null);
+    else setInternalCatchup(null);
+  };
 
   // Query AVPlay hardware stream quality when OSD is visible
   useEffect(() => {
@@ -558,19 +582,29 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       return;
     }
 
-    // ESPN category: direct verified ESPN feeds (analogous to Cactus TV / WiwyXuper) + portal feeds
+    // ESPN category: direct verified ESPN feeds + portal feeds
     if (activeCategory.id === 'espn' || activeCategory.isEspn) {
       const isEspnChannel = (name: string) => /\bespn\b/i.test(name) || /^espn/i.test(name.trim());
       const sortEspn = (a: LiveChannel, b: LiveChannel) => {
-        const numA = (a.name.match(/\d+/) || [])[0];
-        const numB = (b.name.match(/\d+/) || [])[0];
-        if (numA && numB) return parseInt(numA, 10) - parseInt(numB, 10);
-        if (numA) return 1;
-        if (numB) return -1;
+        const getPriority = (name: string) => {
+          const n = name.toLowerCase();
+          if (n === 'espn') return 1;
+          if (n === 'espn 2') return 2;
+          if (n.includes('premium')) return 3;
+          if (n.includes('méxico') || n.includes('mexico')) return 4;
+          if (n === 'espn 4') return 5;
+          if (n.includes('usa hd') && !n.includes('2')) return 6;
+          if (n.includes('2 usa hd')) return 7;
+          if (n.includes('ocho')) return 8;
+          return 10;
+        };
+        const pA = getPriority(a.name);
+        const pB = getPriority(b.name);
+        if (pA !== pB) return pA - pB;
         return a.name.localeCompare(b.name);
       };
 
-      // 1. Start with the guaranteed Cactus TV direct feeds
+      // 1. Start with the verified direct ESPN feeds
       const feeds: LiveChannel[] = ESPN_DEFAULT_FEEDS.map(f => ({
         ...f,
         isFav: !!favMap[channelKey(f)]
@@ -796,9 +830,16 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           COLUMNA 2: Lista de Canales (460px)
           ========================================================= */}
       <section className="live-col-channels">
-        <div className="live-col-header">
-          <span className="live-header-title">{activeCategory.name.toUpperCase()}</span>
-          <span className="live-header-count">{channels.length} canales</span>
+        <div className={`live-col-header ${(activeCategory.isEspn || activeCategory.badge || /deportes/i.test(activeCategory.name)) ? 'has-subtitle' : ''}`}>
+          <div className="live-col-header-main">
+            <span className="live-header-title">{activeCategory.name.toUpperCase()}</span>
+            <span className="live-header-count">{channels.length} canales</span>
+          </div>
+          {(activeCategory.isEspn || activeCategory.badge) ? (
+            <div className="live-col-header-sub">Señales experimentales sujetas a disponibilidad (Beta)</div>
+          ) : /deportes/i.test(activeCategory.name) ? (
+            <div className="live-col-header-sub">Transmisiones deportivas en fase beta · Sujetas a disponibilidad</div>
+          ) : null}
         </div>
 
         <div className="live-channel-vlist" ref={channelListRef}>
@@ -871,6 +912,13 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                 <div className="live-signal-error-desc">
                   Cambia el DNS de la TV a 1.1.1.1: Configuración › General › Red › Estado de la red › Configuración de IP ›
                   Configuración de DNS › Introducir manualmente. Si sigue igual, prueba con otra red.
+                </div>
+              </div>
+            ) : (/espn/i.test(tunedChannel?.name || '') || /deportes/i.test(activeCategory.name)) ? (
+              <div className="live-signal-error">
+                <div className="live-signal-error-title">Señal no disponible (Transmisión Experimental)</div>
+                <div className="live-signal-error-desc">
+                  Las señales deportivas son experimentales y su estabilidad depende de servidores externos. Prueba con otra señal en la lista.
                 </div>
               </div>
             ) : (
@@ -970,7 +1018,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
               <div className="pi-hint-row">
                 <div>
                   <span className="hint-badge">▲ / ▼</span> Canal
-                  <span className="hint-badge" style={{ marginLeft: 16 }}>◄ / ►</span> Lista de canales
+                  <span className="hint-badge" style={{ marginLeft: 16 }}>◀ / ▶</span> Lista de canales
                   <span className="hint-badge" style={{ marginLeft: 16 }}>OK</span> OSD Info
                 </div>
                 <div>
@@ -1105,7 +1153,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
               <div className="pc-menu">
                 <span style={{ color: '#94a3b8', fontSize: 16 }}>
                   <b style={{ color: '#00e5ff' }}>▲▼</b> Navegar &nbsp;&nbsp;|&nbsp;&nbsp; 
-                  <b style={{ color: '#00e5ff' }}>◄►</b> Categorías / Canales &nbsp;&nbsp;|&nbsp;&nbsp; 
+                  <b style={{ color: '#00e5ff' }}>◀▶</b> Categorías / Canales &nbsp;&nbsp;|&nbsp;&nbsp; 
                   <b style={{ color: '#00e5ff' }}>OK</b> {drawerArea === 'cats' ? 'Abrir' : 'Sintonizar'} &nbsp;&nbsp;|&nbsp;&nbsp; 
                   <b style={{ color: '#00e5ff' }}>BACK</b> Cerrar
                 </span>
@@ -1128,6 +1176,17 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                       <span className="epg-time-badge">{displayChannel.time}</span>
                     )}
                     <div className="epg-top-right">
+                      <button
+                        className={`epg-replay-badge-btn ${
+                          isFocusActive && focus.area === 'preview_btns' && focus.btnIndex === 2 ? 'is-focused' : ''
+                        }`}
+                        title="Ver repeticiones del canal (Catch-Up)"
+                        aria-label="Ver repeticiones del canal"
+                        onClick={() => onOpenCatchup(displayChannel)}
+                      >
+                        <span className="catchup-replay-icon">↺</span>
+                        <span>Replay</span>
+                      </button>
                       <button
                         className={`epg-fav-icon ${
                           isFocusActive && focus.area === 'preview_btns' && focus.btnIndex === 1 ? 'is-focused' : ''
@@ -1201,11 +1260,24 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             <div className="epg-footer-shortcuts">
               <span><b>OK</b> {focus.area === 'channels' && !isFocusedChannelTuned ? 'Sintonizar canal' : 'Pantalla completa'}</span>
               <span><b>▲ ▼</b> Navegar canales</span>
-              <span><b>◄ ►</b> Columnas y botones</span>
+              <span><b>◀ ▶</b> Columnas y botones</span>
             </div>
           </div>
         )}
       </main>
+
+      {activeCatchupChannel && (
+        <CatchupModal
+          channel={activeCatchupChannel}
+          onClose={onCloseCatchup}
+          onPlayCatchup={(url, title, ch) => {
+            onCloseCatchup();
+            const replayCh = { ...ch, url, now: `↺ ${title}` };
+            onTuneChannel(replayCh);
+            onEnterFullscreen(replayCh);
+          }}
+        />
+      )}
     </div>
   );
 };

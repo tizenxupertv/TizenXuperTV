@@ -41,7 +41,14 @@ function streamProxyPlugin() {
         if (license) headers['Content-License'] = license;
       } else {
         headers['User-Agent'] = ua || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
-        if (referer) headers['Referer'] = referer;
+        if (referer) {
+          headers['Referer'] = referer;
+          try {
+            headers['Origin'] = new URL(referer).origin;
+          } catch {
+            // ignore malformed referer url
+          }
+        }
       }
       if (req.headers.range) headers['Range'] = req.headers.range;
 
@@ -54,7 +61,7 @@ function streamProxyPlugin() {
         const isHttps = currentUrl.startsWith('https:');
         const mod = isHttps ? https : http;
 
-        const targetReq = mod.request(currentUrl, { method: req.method || 'GET', headers }, (targetRes) => {
+        const targetReq = mod.request(currentUrl, { method: req.method || 'GET', headers, timeout: 10000 }, (targetRes) => {
           const status = targetRes.statusCode || 200;
 
           // Follow redirects automatically
@@ -81,6 +88,7 @@ function streamProxyPlugin() {
                 if (auth) proxyUri += `&auth=${encodeURIComponent(auth)}`;
                 if (license) proxyUri += `&license=${encodeURIComponent(license)}`;
                 if (referer) proxyUri += `&referer=${encodeURIComponent(referer)}`;
+                if (ua) proxyUri += `&ua=${encodeURIComponent(ua)}`;
                 return proxyUri;
               }).join('\n');
 
@@ -99,6 +107,10 @@ function streamProxyPlugin() {
           }
         });
 
+        targetReq.on('timeout', () => {
+          targetReq.destroy(new Error('Gateway Timeout (10s)'));
+        });
+
         req.on('close', () => {
           targetReq.destroy();
         });
@@ -106,7 +118,7 @@ function streamProxyPlugin() {
         targetReq.on('error', (err) => {
           console.error('[StreamProxy] Error fetching:', currentUrl, err.message);
           if (!res.headersSent) {
-            res.statusCode = 502;
+            res.statusCode = err.message.includes('Timeout') ? 504 : 502;
             res.end(err.message);
           }
         });
@@ -148,7 +160,8 @@ export default defineConfig({
   plugins: [react(), streamProxyPlugin(), tvCompatPlugin(appVersion)],
   base: './',
   server: {
-    port: 5173,
+    port: 5174,
+    strictPort: true,
     host: true,
     proxy: {
       '/api/portalCore': {

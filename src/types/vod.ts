@@ -46,3 +46,33 @@ export interface VodItem {
   collectionId?: number;
   _portal?: boolean;
 }
+
+export interface PersonDetail {
+  puId: string;
+  name: string;
+  icon?: string;
+  birthPlace?: string;
+  birthTime?: string;
+  awards?: string;
+  introduction?: string;
+  personType?: number; // 0: Actor, 1: Director
+}
+
+export interface PersonResult {
+  directors: PersonDetail[];
+  actors: PersonDetail[];
+}
+
+export function parseCastFromVodItem(item: VodItem): PersonDetail[] {
+  const dirs: PersonDetail[] = (item.director || '')
+    .split(/[,;/]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(name => ({ puId: '', name, personType: 1 }));
+  const acts: PersonDetail[] = (item.actors || '')
+    .split(/[,;/]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(name => ({ puId: '', name, personType: 2 }));
+  return [...dirs, ...acts].slice(0, 24);
+}

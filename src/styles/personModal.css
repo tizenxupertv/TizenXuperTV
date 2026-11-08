@@ -1,0 +1,305 @@
+/* Person Detail Modal (Cast & Crew Filmography) */
+
+.person-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 6, 10, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60000;
+}
+
+.person-modal-card {
+  position: relative;
+  width: 1240px;
+  max-width: 92vw;
+  max-height: 88vh;
+  background: #111622;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 28px;
+  padding: 38px 46px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.person-modal-close-btn {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 10;
+}
+
+.person-modal-close-btn:hover {
+  background: rgba(239, 68, 68, 0.28);
+  border-color: #ef4444;
+  color: #ffffff;
+  transform: scale(1.1);
+}
+
+.person-modal-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 28px;
+}
+
+.person-avatar-wrap {
+  width: 90px;
+  height: 120px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  background: #111726;
+  box-shadow: none;
+  position: relative;
+}
+
+.person-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.person-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 38px;
+  font-weight: 900;
+  color: #94a3b8;
+  background: #182234;
+}
+
+.person-info-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.person-name {
+  margin: 0 0 8px 0;
+  font-size: 34px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.4px;
+}
+
+.person-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.person-role-tag {
+  display: inline-flex;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  background: rgba(56, 189, 248, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  color: #38bdf8;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.person-meta-item {
+  font-size: 14px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.person-awards {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fbbf24;
+  margin-bottom: 8px;
+}
+
+.person-bio {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: #cbd5e1;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.person-works-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 300px;
+}
+
+.person-works-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.2px;
+}
+
+.person-works-slider {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 12px 16px 28px;
+  scrollbar-width: none;
+}
+
+.person-works-slider::-webkit-scrollbar {
+  display: none;
+}
+
+.person-loading-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 220px;
+}
+
+.person-loading-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.person-error-text {
+  color: #f87171;
+  font-size: 15px;
+  padding: 40px 0;
+  text-align: center;
+}
+
+.person-empty-text {
+  color: #64748b;
+  font-size: 15px;
+  padding: 40px 0;
+  text-align: center;
+}
+
+.person-modal-hint {
+  font-size: 13px;
+  color: #64748b;
+  text-align: right;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 14px;
+}
+
+
+/* Inline Chips & Cast Carousel in VodDetailView */
+
+button.crew-person-chip,
+.crew-person-chip {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: normal;
+  color: #38bdf8;
+  cursor: pointer;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  font-weight: 700;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  margin: 0 4px;
+  outline: none;
+}
+
+button.crew-person-chip:hover,
+button.crew-person-chip:focus,
+.crew-person-chip:hover {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.vod-detail-cast-section {
+  margin-top: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vod-cast-slider {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  padding: 12px 4px 20px;
+  scrollbar-width: none;
+}
+
+.vod-cast-slider::-webkit-scrollbar {
+  display: none;
+}
+
+.vod-cast-card {
+  /* Inherits exact sizing, 12px radius, and Apple TV poster styling from .poster-card.apple-poster-card */
+}
+
+.vod-cast-poster-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #182337 0%, #0c121e 100%);
+  z-index: 0;
+  padding-bottom: 40px;
+}
+
+.vod-cast-person-icon {
+  color: rgba(148, 163, 184, 0.4);
+  transition: color 0.15s ease;
+}
+
+.vod-cast-card.is-focused .vod-cast-person-icon {
+  color: #00e5ff;
+}
+
+/* Poster Skeleton Cards inside Person Modal */
+.poster-card.apple-poster-card.is-skeleton {
+  pointer-events: none;
+  background: #11141d;
+  border: 3px solid rgba(255, 255, 255, 0.04);
+  animation: person-skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+.poster-card.apple-poster-card.is-skeleton .poster-card-img {
+  background: #161c28;
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes person-skeleton-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+}

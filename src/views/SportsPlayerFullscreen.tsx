@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../styles/sportsPlayer.css';
 import { MatchCrest, MatchHeader } from '../components/sports/MatchHeader';
+import { MatchDetailModal } from '../components/sports/MatchDetailModal';
 import { scoreboardService } from '../services/scoreboardService';
 import { SportsEvent, SportsStream } from '../types/sports.ts';
 import { sportsService } from '../services/sportsService.ts';
@@ -23,6 +24,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   const [showOsd, setShowOsd] = useState<boolean>(true);
   const [showServerMenu, setShowServerMenu] = useState<boolean>(false);
   const [serverMenuIdx, setServerMenuIdx] = useState<number>(initialStreamIndex);
+  const [showMatchModal, setShowMatchModal] = useState<boolean>(false);
   const [isBuffering, setIsBuffering] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   // AVPlay draws below the page: the player background must be transparent while it plays
@@ -192,6 +194,15 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
           }
         }
 
+        // Attach request headers (User-Agent, Referer) if provided
+        if (currentStream.headers && Object.keys(currentStream.headers).length > 0) {
+          player.getNetworkingEngine().registerRequestFilter((_type: any, request: any) => {
+            for (const [k, v] of Object.entries(currentStream.headers || {})) {
+              if (v) request.headers[k] = v;
+            }
+          });
+        }
+
         player.addEventListener('error', (event: any) => {
           console.error('[SportsPlayer] Shaka error event:', event.detail);
           setIsBuffering(false);
@@ -228,9 +239,14 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         (typeof (window as any).tizen === 'undefined' && typeof (window as any).webOS === 'undefined')
       );
       const referer = currentStream.headers?.['Referer'] || currentStream.headers?.['referer'] || '';
-      const effectiveHlsUrl = (isBrowserEnv && streamUrl.startsWith('http') && !streamUrl.includes('/stream-proxy'))
-        ? `/stream-proxy?url=${encodeURIComponent(streamUrl)}${referer ? `&referer=${encodeURIComponent(referer)}` : ''}`
-        : streamUrl;
+      const ua = currentStream.headers?.['User-Agent'] || currentStream.headers?.['user-agent'] || '';
+      let effectiveHlsUrl = streamUrl;
+      if (isBrowserEnv && streamUrl.startsWith('http') && !streamUrl.includes('/stream-proxy')) {
+        let proxyUri = `/stream-proxy?url=${encodeURIComponent(streamUrl)}`;
+        if (referer) proxyUri += `&referer=${encodeURIComponent(referer)}`;
+        if (ua) proxyUri += `&ua=${encodeURIComponent(ua)}`;
+        effectiveHlsUrl = proxyUri;
+      }
 
       const hls = new Hls({
         enableWorker: true,
@@ -299,9 +315,18 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   // Key navigation in player
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (showMatchModal) return; // MatchDetailModal handles its own keys
       if (Date.now() - openedAtRef.current < 600 && (e.key === 'Enter' || e.key === 'ArrowUp')) return;
 
       const isBack = e.key === 'Escape' || e.key === 'Backspace' || (e as any).keyCode === 10009;
+
+      // Toggle match details with 'i' (Info key) or yellow remote button
+      if (e.key === 'i' || (e as any).keyCode === 457 || (e as any).keyCode === 405) {
+        e.preventDefault();
+        setShowMatchModal(true);
+        hideOsd();
+        return;
+      }
 
       // Error card: the other signals as a vertical list
       if (error) {
@@ -324,10 +349,25 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         return;
       }
       triggerOsd();
-      if (e.key === 'ArrowUp') { e.preventDefault(); setServerMenuIdx(i => Math.max(0, i - 1)); }
-      else if (e.key === 'ArrowDown') { e.preventDefault(); setServerMenuIdx(i => Math.min(streams.length - 1, i + 1)); }
-      else if (e.key === 'Enter') { e.preventDefault(); if (serverMenuIdx !== currentStreamIdx) setCurrentStreamIdx(serverMenuIdx); }
-      else if (isBack) { e.preventDefault(); hideOsd(); }
+      const maxMenuIdx = streams.length; // 0..streams.length - 1 = signals; streams.length = Alineaciones y Estadísticas
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setServerMenuIdx(i => Math.max(0, i - 1));
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setServerMenuIdx(i => Math.min(maxMenuIdx, i + 1));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (serverMenuIdx === streams.length) {
+          setShowMatchModal(true);
+          hideOsd();
+        } else if (serverMenuIdx < streams.length && serverMenuIdx !== currentStreamIdx) {
+          setCurrentStreamIdx(serverMenuIdx);
+        }
+      } else if (isBack) {
+        e.preventDefault();
+        hideOsd();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -390,7 +430,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         <div className="spp-error">
           <MatchHeader event={event} />
           <div className="spp-error-msg">Esta señal no está disponible</div>
-          <div className="spp-error-detail">{error}</div>
+          <div className="spp-error-detail">Transmisión deportiva en fase beta · {error}</div>
           {streams.length > 1 && showServerMenu ? (
             <>
               <div className="spp-hint">Elige otra señal · OK para ver · Atrás para salir</div>
@@ -413,31 +453,46 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
                 {event.league}
               </div>
               <div className="spp-bar-name">
-                {event.home}
+                <span className="spp-bar-team-name">{event.home}</span>
                 {versus && (score ? <span className="spp-bar-score">{score.homeScore} – {score.awayScore}</span> : <span className="spp-bar-vs">vs</span>)}
-                {versus && event.away}
+                {versus && <span className="spp-bar-team-name">{event.away}</span>}
               </div>
             </div>
             {versus && <MatchCrest src={event.awayLogo} name={event.away} />}
           </div>
-          {streams.length > 1 && (
-            <div className="spp-bar-signals">
-              <div className="spp-bar-label">Señal</div>
-              {streams.map((st, idx) => (
-                <div
-                  key={idx}
-                  className={`spp-chip ${idx === serverMenuIdx ? 'is-focused' : ''} ${idx === currentStreamIdx ? 'is-playing' : ''} ${failed.has(idx) ? 'is-failed' : ''}`}
-                  onClick={() => setCurrentStreamIdx(idx)}
-                >
-                  <span className="spp-chip-name">{st.name}</span>
-                  {idx === currentStreamIdx && <span className="spp-chip-tag">Viendo</span>}
-                  {failed.has(idx) && idx !== currentStreamIdx && <span className="spp-chip-tag is-failed">No disponible</span>}
-                </div>
-              ))}
-              <div className="spp-bar-hint">▲ ▼ · OK para cambiar</div>
+          <div className="spp-bar-signals">
+            <div className="spp-bar-label">Señal</div>
+            {streams.map((st, idx) => (
+              <div
+                key={idx}
+                className={`spp-chip ${idx === serverMenuIdx ? 'is-focused' : ''} ${idx === currentStreamIdx ? 'is-playing' : ''} ${failed.has(idx) ? 'is-failed' : ''}`}
+                onClick={() => setCurrentStreamIdx(idx)}
+              >
+                <span className="spp-chip-name">{st.name}</span>
+                {idx === currentStreamIdx && <span className="spp-chip-tag">Viendo</span>}
+                {failed.has(idx) && idx !== currentStreamIdx && <span className="spp-chip-tag is-failed">No disponible</span>}
+              </div>
+            ))}
+            <div
+              className={`spp-chip spp-chip-details ${serverMenuIdx === streams.length ? 'is-focused' : ''}`}
+              onClick={() => {
+                setShowMatchModal(true);
+                hideOsd();
+              }}
+            >
+              <span className="spp-chip-name">📊 Alineaciones y Estadísticas</span>
             </div>
-          )}
+            <div className="spp-bar-hint">▲ ▼ · OK cambiar / abrir · [Info] Alineaciones</div>
+          </div>
         </div>
+      )}
+
+      {showMatchModal && (
+        <MatchDetailModal
+          event={event}
+          onClose={() => setShowMatchModal(false)}
+          onPlay={() => setShowMatchModal(false)}
+        />
       )}
     </div>
   );

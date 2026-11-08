@@ -726,8 +726,7 @@
 
         self._safeStopAndClose();
 
-        var isSecureRequired = String(url).indexOf(':443') !== -1 || !!(headers && (headers['Referer'] || headers['referer'] || headers['Origin']));
-        var cleanUrl = isSecureRequired ? String(url) : String(url).replace(/^https:\/\//i, 'http://');
+        var cleanUrl = String(url);
         self._lastUrl = cleanUrl;
         webapis.avplay.open(cleanUrl);
         self.syncDisplayRect();
