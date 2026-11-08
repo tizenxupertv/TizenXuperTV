@@ -2319,6 +2319,9 @@ html, body {
 
 .vod-detail-header-block {
   max-width: 960px;
+  /* Like the home hero: a short page keeps the text low on the backdrop, right above its related titles,
+     instead of leaving a gap between them. A long page (a series) starts under the header as before */
+  margin-top: auto;
 }
 
 .vod-detail-title {
@@ -2838,7 +2841,6 @@ html, body {
 
 /* Related Section (uses unified PosterCard component) */
 .vod-detail-related-section {
-  margin-top: auto;
   padding-top: 14px;
 }
 
