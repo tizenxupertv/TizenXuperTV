@@ -1,6 +1,7 @@
 import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { LiveChannel, LiveCategory } from '../types/channel';
 import { playerService, LiveStatus } from '../services/playerService';
+import '../styles/screenOff.css';
 import { iptvService, IPTV_CATEGORY_PREFIX, IPTV_CATEGORY_LABEL } from '../services/iptvService';
 import { parentalService } from '../services/parentalService';
 import { useRenderCount } from '../debug/renderCount';
@@ -155,7 +156,10 @@ interface LiveTvViewProps {
   drawerKb?: KbState;
   onDrawerResults?: (channels: LiveChannel[]) => void;
   drawerCatIndex?: number;
-  fullscreenFocusBtn?: 'none' | 'channels' | 'fav';
+  fullscreenFocusBtn?: 'none' | 'channels' | 'fav' | 'screen';
+  /** "Pantalla negra": black layer over the fullscreen picture, the sound goes on */
+  screenOff?: boolean;
+  onScreenOff?: () => void;
   onTuneChannel: (channel: LiveChannel) => void;
   onEnterFullscreen: (channel: LiveChannel) => void;
   onExitFullscreen: () => void;
@@ -251,6 +255,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   onDrawerResults,
   drawerCatIndex = 0,
   fullscreenFocusBtn = 'none',
+  screenOff = false,
+  onScreenOff,
   onTuneChannel,
   onEnterFullscreen,
   onExitFullscreen,
@@ -267,7 +273,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
 }) => {
   useRenderCount('LiveTvView');
   useViewProfiler('TV en Vivo');
-  const [streamQuality, setStreamQuality] = useState<string>('FHD 1080p');
+  const [streamQuality, setStreamQuality] = useState<string>('');
   const [internalCatchup, setInternalCatchup] = useState<LiveChannel | null>(null);
 
   const activeCatchupChannel = catchupChannel !== undefined ? catchupChannel : internalCatchup;
@@ -279,6 +285,11 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     if (setCatchupChannel) setCatchupChannel(null);
     else setInternalCatchup(null);
   };
+
+  // Reset quality when changing channel
+  useEffect(() => {
+    setStreamQuality('');
+  }, [tunedChannel]);
 
   // Query AVPlay hardware stream quality when OSD is visible
   useEffect(() => {
@@ -776,6 +787,27 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   const focusedChannel = channels[focus.channelIndex] || tunedChannel || channels[0] || null;
   // The info panel always describes the channel that is playing in the preview
   const displayChannel = tunedChannel || focusedChannel;
+
+  // A replay (catch-up programme) in fullscreen: its real position and length on the timeline, refreshed while
+  // the info bar shows (a seek shows its target at once, playerService.replayPosition)
+  const isReplay = !!(tunedChannel && ((tunedChannel.now && tunedChannel.now.startsWith('↺')) || (tunedChannel as { isCatchup?: boolean }).isCatchup));
+  const [replayPos, setReplayPos] = useState<{ t: number; d: number; paused: boolean } | null>(null);
+  useEffect(() => {
+    if (!isFullscreen || !showOsd || !isReplay) {
+      setReplayPos(null);
+      return;
+    }
+    const tick = () => setReplayPos(playerService.replayPosition());
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+  }, [isFullscreen, showOsd, isReplay]);
+  const clock = (sec: number) => {
+    const v = Math.max(0, Math.floor(sec));
+    const h = Math.floor(v / 3600), m = Math.floor((v % 3600) / 60), r = v % 60;
+    const two = (n: number) => (n < 10 ? '0' : '') + n;
+    return h > 0 ? `${h}:${two(m)}:${two(r)}` : `${two(m)}:${two(r)}`;
+  };
   // Progress of the current programme from its "HH:MM - HH:MM" times; null when the channel does not send them
   const programProgress = useMemo(() => {
     const t = displayChannel && displayChannel.time;
@@ -933,7 +965,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             <span className="live-stream-badge">
               <span className="live-pulse-dot" /> EN VIVO
             </span>
-            <span className="live-quality-tag">FHD 1080p</span>
+            {streamQuality && <span className="live-quality-tag">{streamQuality}</span>}
             {tunedChannel && (
               <span className="live-quality-tag" style={{ background: 'rgba(0, 229, 255, 0.25)', borderColor: '#00e5ff' }}>
                 {tunedChannel.name}
@@ -983,7 +1015,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
 
               <div className="pi-namerow">
                 <span className="pi-name">{displayChannel.name}</span>
-                <span className="pi-quality-badge">{streamQuality || 'FHD 1080p'}</span>
+                {streamQuality && <span className="pi-quality-badge">{streamQuality}</span>}
               </div>
 
               <div className="pi-btn-group">
@@ -1001,6 +1033,13 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                 >
                   {isDisplayChannelFav ? '★' : '☆'}
                 </button>
+                <button
+                  className={`pi-action-btn ${fullscreenFocusBtn === 'screen' ? 'is-focused' : ''}`}
+                  title="Pantalla negra: apaga la imagen y sigue el sonido"
+                  onClick={onScreenOff}
+                >
+                  ◐ Pantalla negra
+                </button>
               </div>
 
               <div className="pi-date">{liveClock}</div>
@@ -1009,17 +1048,42 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                 {displayChannel.now && !/^en vivo$/i.test(displayChannel.now.trim()) ? displayChannel.now : ''}
               </div>
               {displayChannel.next && <div className="pi-next">{`Siguiente: ${displayChannel.next}`}</div>}
-              <div className="pi-range">{displayChannel.time || 'EN VIVO'}</div>
+              <div className="pi-range">
+                {isReplay && replayPos
+                  ? `${replayPos.paused ? 'En pausa · ' : 'Repetición · '}${clock(replayPos.t)}${replayPos.d > 0 ? ` / ${clock(replayPos.d)}` : ''}`
+                  : displayChannel.time || 'EN VIVO'}
+              </div>
 
-              <div className="pi-seek">
-                <div className="bar" />
+              <div
+                className="pi-seek"
+                style={{ visibility: isReplay || programProgress !== null ? 'visible' : 'hidden' }}
+              >
+                <div
+                  className="bar"
+                  style={{
+                    width: isReplay && replayPos && replayPos.d > 0
+                      ? `${Math.min(100, (replayPos.t / replayPos.d) * 100)}%`
+                      : programProgress !== null
+                        ? `${programProgress}%`
+                        : '0%'
+                  }}
+                />
               </div>
 
               <div className="pi-hint-row">
                 <div>
                   <span className="hint-badge">▲ / ▼</span> Canal
-                  <span className="hint-badge" style={{ marginLeft: 16 }}>◀ / ▶</span> Lista de canales
-                  <span className="hint-badge" style={{ marginLeft: 16 }}>OK</span> OSD Info
+                  {isReplay ? (
+                    <>
+                      <span className="hint-badge" style={{ marginLeft: 16 }}>◀ / ▶</span> Retroceder / Adelantar
+                      <span className="hint-badge" style={{ marginLeft: 16 }}>OK</span> Pausa
+                    </>
+                  ) : (
+                    <>
+                      <span className="hint-badge" style={{ marginLeft: 16 }}>◀ / ▶</span> Lista de canales
+                      <span className="hint-badge" style={{ marginLeft: 16 }}>OK</span> OSD Info
+                    </>
+                  )}
                 </div>
                 <div>
                   <span className="hint-badge">BACK</span> Salir de pantalla completa
@@ -1027,6 +1091,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
               </div>
             </div>
           )}
+
+          {isFullscreen && screenOff && <ScreenOffLayer channelName={displayChannel ? displayChannel.name : ''} />}
 
           {/* =========================================================
               FULLSCREEN: Authentic Floating Channel Drawer (Vanilla Layout)
@@ -1278,6 +1344,31 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           }}
         />
       )}
+    </div>
+  );
+};
+
+/**
+ * Black screen for radio and music: all black (OLED pixels switch off) with a dim clock that moves every minute so
+ * nothing stays in the same place on the panel. Any key brings the picture back (fullscreenLiveKeys)
+ */
+const ScreenOffLayer: React.FC<{ channelName: string }> = ({ channelName }) => {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const pos = [
+    { left: '12%', top: '18%' }, { left: '62%', top: '22%' }, { left: '30%', top: '62%' },
+    { left: '70%', top: '70%' }, { left: '44%', top: '40%' }, { left: '16%', top: '78%' }
+  ][now.getMinutes() % 6];
+  const pad = (n: number) => (n < 10 ? '0' : '') + n;
+  return (
+    <div className="screen-off-layer">
+      <div className="screen-off-clock" style={pos}>
+        <div className="screen-off-time">{pad(now.getHours())}:{pad(now.getMinutes())}</div>
+        {channelName && <div className="screen-off-sub">{channelName} · pulsa cualquier tecla</div>}
+      </div>
     </div>
   );
 };

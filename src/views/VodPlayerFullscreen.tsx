@@ -37,6 +37,11 @@ interface VodPlayerFullscreenProps {
 const DEV_FALLBACK_URL = 'https://media.w3.org/2010/05/bunny/movie.mp4';
 const SAVE_EVERY_MS = 15000;
 const NEXT_EPISODE_SECONDS = 10;
+/**
+ * The next-episode card shows this many seconds before the end of an episode, over the credits; its countdown is
+ * the time left in the episode, and the next one starts when it ends
+ */
+const CREDITS_WINDOW_S = 15;
 
 interface SettingRow {
   group: string;
@@ -107,6 +112,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   }, [error]);
   const [retryTick, setRetryTick] = useState(0);
   const [nextCountdown, setNextCountdown] = useState<number | null>(null);
+  // Next-episode card: over the credits (the episode keeps playing) or after the end. Without a countdown when
+  // "Siguiente capítulo" is Manual in the settings
+  const [nextOffer, setNextOffer] = useState<null | 'credits' | 'end'>(null);
+  const creditsDismissedRef = useRef(false);
   const osdTimerRef = useRef<any>(null);
   const useAvPlayRef = useRef<boolean>(false);
   const requestIdRef = useRef<number>(0);
@@ -271,12 +280,44 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       timeRef.current.t = timeRef.current.d || timeRef.current.t;
       saveProgress();
     }
+    // The card was counting down over the credits: the end is its zero
+    if (nextOffer === 'credits' && settingsService.get().autoNext !== false && nextEpisode && onPlayEpisode) {
+      setNextOffer(null);
+      setNextCountdown(null);
+      onPlayEpisode(nextEpisode);
+      return;
+    }
     if (nextEpisode && onPlayEpisode && !isTrailer) {
-      setNextCountdown(NEXT_EPISODE_SECONDS);
+      setNextOffer('end');
+      setNextCountdown(settingsService.get().autoNext !== false ? NEXT_EPISODE_SECONDS : null);
     } else {
       onClose();
     }
-  }, [isTrailer, nextEpisode, onPlayEpisode, onClose, saveProgress]);
+  }, [isTrailer, nextEpisode, onPlayEpisode, onClose, saveProgress, nextOffer]);
+
+  // Credits: the last CREDITS_WINDOW_S seconds of an episode with a next one offer it while the credits play
+  // (once; Back hides it). Seeking back before the credits hides it again
+  useEffect(() => {
+    if (isTrailer || !nextEpisode || !onPlayEpisode || !(duration > 120) || nextOffer === 'end') return;
+    const left = duration - currentTime;
+    const inCredits = left <= CREDITS_WINDOW_S && left > 1;
+    const opening = inCredits && !nextOffer && isPlaying && !creditsDismissedRef.current && !pendingSeekRef.current;
+    if (opening) setNextOffer('credits');
+    if (inCredits && (opening || nextOffer === 'credits')) {
+      // The countdown is the time left in the episode (it stops while paused)
+      setNextCountdown(settingsService.get().autoNext !== false ? Math.max(0, Math.ceil(left)) : null);
+    } else if (!inCredits && nextOffer === 'credits') {
+      setNextOffer(null);
+      setNextCountdown(null);
+    }
+  }, [currentTime, duration, isPlaying, isTrailer, nextEpisode, onPlayEpisode, nextOffer]);
+  // Length of the card's countdown bar: the credits window, or the 10 s after the end
+  const countdownTotal = nextOffer === 'credits' ? CREDITS_WINDOW_S : NEXT_EPISODE_SECONDS;
+  const playNext = useCallback(() => {
+    setNextOffer(null);
+    setNextCountdown(null);
+    if (nextEpisode && onPlayEpisode) onPlayEpisode(nextEpisode);
+  }, [nextEpisode, onPlayEpisode]);
 
   // Latest callbacks for listeners registered once (AVPlay handlers, unmount)
   const handleEndedRef = useRef(handleEnded);
@@ -294,15 +335,14 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
   // Next-episode countdown
   useEffect(() => {
-    if (nextCountdown === null) return;
+    if (nextCountdown === null || nextOffer !== 'end') return;
     if (nextCountdown <= 0) {
-      setNextCountdown(null);
-      if (nextEpisode && onPlayEpisode) onPlayEpisode(nextEpisode);
+      playNext();
       return;
     }
     const t = setTimeout(() => setNextCountdown(c => (c === null ? null : c - 1)), 1000);
     return () => clearTimeout(t);
-  }, [nextCountdown, nextEpisode, onPlayEpisode]);
+  }, [nextCountdown, nextOffer, playNext]);
 
   // ---------------------------------------------------------------------------
   // Resolve the stream and start playback
@@ -893,12 +933,23 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         return;
       }
 
-      // "Next episode" card
-      if (nextCountdown !== null) {
-        if (isEnter && nextEpisode && onPlayEpisode) {
+      // "Next episode" card: OK plays it. Over the credits Back hides it and every other key works as usual;
+      // after the end Back leaves the player
+      if (nextOffer === 'credits') {
+        if (isEnter) {
+          playNext();
+          return;
+        }
+        if (isBack) {
+          creditsDismissedRef.current = true;
+          setNextOffer(null);
           setNextCountdown(null);
-          onPlayEpisode(nextEpisode);
-        } else if (isBack) {
+          return;
+        }
+      } else if (nextOffer === 'end') {
+        if (isEnter) playNext();
+        else if (isBack) {
+          setNextOffer(null);
           setNextCountdown(null);
           onClose();
         }
@@ -1334,14 +1385,16 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       )}
 
       {/* Apple TV Style Next Episode Card */}
-      {nextCountdown !== null && nextEpisode && (
+      {nextOffer && nextEpisode && (
         <div className="vod-next-episode">
-          <div className="vod-next-progress-track">
-            <div
-              className="vod-next-progress-fill"
-              style={{ width: `${Math.max(0, Math.min(100, ((NEXT_EPISODE_SECONDS - nextCountdown) / NEXT_EPISODE_SECONDS) * 100))}%` }}
-            />
-          </div>
+          {nextCountdown !== null && (
+            <div className="vod-next-progress-track">
+              <div
+                className="vod-next-progress-fill"
+                style={{ width: `${Math.max(0, Math.min(100, ((countdownTotal - nextCountdown) / countdownTotal) * 100))}%` }}
+              />
+            </div>
+          )}
           <div className="vod-next-inner">
             <div
               className="vod-next-thumb"
@@ -1354,23 +1407,19 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
             <div className="vod-next-info">
               <div className="vod-next-badge-row">
                 <span className="vod-next-tag">SIGUIENTE EPISODIO</span>
-                <span className="vod-next-timer">en {nextCountdown}s</span>
+                {nextCountdown !== null && <span className="vod-next-timer">en {nextCountdown}s</span>}
               </div>
               <div className="vod-next-title">
                 {seasonNumber ? `T${seasonNumber}:` : ''}E{nextEpisode.number || epIndex + 2} · {nextEpisode.title || nextEpisode.name || 'Capítulo'}
               </div>
               <div className="vod-next-btn-row">
-                <div
-                  className="vod-next-btn"
-                  onClick={() => {
-                    setNextCountdown(null);
-                    if (onPlayEpisode) onPlayEpisode(nextEpisode);
-                  }}
-                >
-                  <span>▶ Ver ahora</span>
-                  <span className="vod-next-btn-key">OK</span>
+                <div className="vod-next-btn" onClick={playNext}>
+                  <span className="vod-next-btn-icon">▶</span>
+                  <span>Ver ahora</span>
                 </div>
-                <span className="vod-next-cancel-hint">VOLVER Salir</span>
+                <span className="vod-next-cancel-hint">
+                  <b>Atrás</b> {nextOffer === 'credits' ? 'para seguir viendo' : 'para salir'}
+                </span>
               </div>
             </div>
           </div>

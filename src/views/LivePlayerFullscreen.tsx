@@ -41,7 +41,12 @@ export const LivePlayerFullscreen: React.FC<LivePlayerFullscreenProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const guideListRef = useRef<HTMLDivElement>(null);
-  const [streamQuality, setStreamQuality] = useState<string>('FHD 1080p');
+  const [streamQuality, setStreamQuality] = useState<string>('');
+
+  // Reset quality on channel change
+  useEffect(() => {
+    setStreamQuality('');
+  }, [channel]);
 
   // Detect real hardware stream resolution on Tizen AVPlay
   useEffect(() => {
@@ -154,9 +159,11 @@ export const LivePlayerFullscreen: React.FC<LivePlayerFullscreenProps> = ({
           <div className="osd-live-tag">
             <span className="live-pulse-dot" /> EN VIVO
           </div>
-          <div className="live-quality-tag" style={{ fontSize: 13, padding: '4px 10px' }}>
-            {streamQuality}
-          </div>
+          {streamQuality ? (
+            <div className="live-quality-tag" style={{ fontSize: 13, padding: '4px 10px' }}>
+              {streamQuality}
+            </div>
+          ) : null}
         </div>
 
         <div className="osd-bottom-row">

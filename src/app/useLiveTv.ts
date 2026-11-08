@@ -90,7 +90,9 @@ export function useLiveTv() {
   const [fullscreenKb, setFullscreenKb] = useState<KbState>(KB_INITIAL);
   const drawerResultsRef = useRef<LiveChannel[]>([]);
   const [fullscreenCatCursor, setFullscreenCatCursor] = useState<number>(0);
-  const [fullscreenFocusBtn, setFullscreenFocusBtn] = useState<'none' | 'channels' | 'fav'>('none');
+  const [fullscreenFocusBtn, setFullscreenFocusBtn] = useState<'none' | 'channels' | 'fav' | 'screen'>('none');
+  // "Pantalla negra" in fullscreen (radio and music): a black layer over the picture, the sound goes on
+  const [screenOff, setScreenOff] = useState(false);
   const [showFullscreenOsd, setShowFullscreenOsd] = useState<boolean>(true);
   const osdTimerRef = useRef<any>(null);
 
@@ -112,6 +114,7 @@ export function useLiveTv() {
     } else {
       setShowFullscreenGuide(false);
       setFullscreenFocusBtn('none');
+      setScreenOff(false);
       if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
     }
   }, [isFullscreenLive, triggerOsd, liveTvFocus.channelIndex]);
@@ -255,6 +258,8 @@ export function useLiveTv() {
     setFullscreenCatCursor,
     fullscreenFocusBtn,
     setFullscreenFocusBtn,
+    screenOff,
+    setScreenOff,
     showFullscreenOsd,
     setShowFullscreenOsd,
     triggerOsd,
