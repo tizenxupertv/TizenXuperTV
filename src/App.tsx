@@ -46,6 +46,8 @@ import { getTrackOffset, setTrackOffset } from './utils/scrollHelper';
 import { updateService } from './services/updateService';
 import { UpdateReady } from './components/common/UpdateReady';
 import { pk } from './lib/localProfiles';
+import { ProfileMenu, type ProfileMenuAction } from './components/layout/ProfileMenu';
+import { ProfilePickerScreen } from './screens/ProfilePickerScreen';
 
 export const App: React.FC = () => {
   // Read initial tab from URL if present (useful for deep-links & testing)
@@ -380,9 +382,19 @@ export const App: React.FC = () => {
     });
   }, [selectedTab]);
 
-  const openProfile = useCallback(() => {
+  // The header avatar opens its menu: switch profile, manage profiles, Mi lista e historial, Ajustes
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [profilesView, setProfilesView] = useState<null | 'pick' | 'manage'>(null);
+  const openProfile = useCallback(() => setProfileMenuOpen(true), []);
+  const runProfileMenu = useCallback((action: ProfileMenuAction) => {
+    setProfileMenuOpen(false);
+    if (action === 'manage' || action === 'add') {
+      setProfilesView(action === 'manage' ? 'manage' : 'pick');
+      return;
+    }
     playerService.stop();
-    push({ id: 'profile' });
+    // Ajustes: section 0 is Mi perfil (history and Mi lista), 1 Configuración global
+    push({ id: 'profile', section: action === 'list' ? 0 : 1 });
   }, [push]);
 
   // "+18" tab: shown only when enabled in Perfil › Bloqueo; opens the adult section after the PIN
@@ -685,6 +697,15 @@ export const App: React.FC = () => {
           onSearchClick={() => setIsSearchOpen(true)}
           onFilterClick={() => openFilter()}
           onProfileClick={openProfile}
+          profileActive={profileMenuOpen}
+        />
+      )}
+      {profileMenuOpen && <ProfileMenu onAction={runProfileMenu} onClose={() => setProfileMenuOpen(false)} />}
+      {profilesView && (
+        <ProfilePickerScreen
+          initialManaging={profilesView === 'manage'}
+          onDone={() => setProfilesView(null)}
+          onClose={() => setProfilesView(null)}
         />
       )}
 

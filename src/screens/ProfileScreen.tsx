@@ -17,7 +17,6 @@ import { formatSpeed, runSpeedTest, SpeedResult, streamingVerdict } from '../lib
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
 import { QrCode } from '../components/common/QrCode';
-import { ProfilePickerScreen } from './ProfilePickerScreen';
 import { localProfiles } from '../lib/localProfiles';
 
 /** Perfil › Sobre nosotros: what the self-update is doing on this TV */
@@ -141,8 +140,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   // "Quitar títulos": while on, OK on a title removes it from the list shown
   const [editMode, setEditMode] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
-  // The profiles view (Mi perfil › Cambiar perfil)
-  const [showProfiles, setShowProfiles] = useState(false);
 
   const rerender = () => setTick(t => t + 1);
 
@@ -338,7 +335,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     const id = SECTIONS[section].id;
     const r: Cell[][] = [];
     if (id === 'account') {
-      r.push([{ id: 'switch-profile', onActivate: () => setShowProfiles(true) }, { id: 'logout', onActivate: logout }]);
+      r.push([{ id: 'logout', onActivate: logout }]);
       const tabs: Cell[] = [
         { id: 'tab-history', onActivate: () => { setListTab('history'); setFocus({ r: 1, c: 0 }); } },
         { id: 'tab-favs', onActivate: () => { setListTab('favs'); setFocus({ r: 1, c: 1 }); } }
@@ -471,7 +468,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const cell = rows[focus.r] && rows[focus.r][focus.c];
       if (cell) cell.onActivate();
     }
-  }, isTop && !hidden && !isSearchOpen && !showProfiles);
+  }, isTop && !hidden && !isSearchOpen);
 
   // Keep focus inside the grid when its shape changes (e.g. switching list tab)
   useEffect(() => {
@@ -514,10 +511,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 {profiles.length > 1 ? ` · perfil ${activeProfile.name}` : ''} · tu historial y tu lista se quedan en este TV
               </div>
             </div>
-            <div className={`pf-btn pf-logout ${isF('switch-profile') ? 'is-focused' : ''}`} onClick={tap('switch-profile')}>
-              {profiles.length > 1 ? 'Cambiar perfil' : 'Perfiles'}
-            </div>
-            <div className={`pf-btn pf-btn-danger lp-logout-next ${isF('logout') ? 'is-focused' : ''}`} onClick={tap('logout')}>
+            <div className={`pf-btn pf-btn-danger pf-logout ${isF('logout') ? 'is-focused' : ''}`} onClick={tap('logout')}>
               {loggingOut ? 'Cerrando sesión…' : confirmLogout ? 'Pulsa OK otra vez para salir' : 'Cerrar sesión'}
             </div>
           </div>
@@ -886,7 +880,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   return (
     <div className="profile-screen" style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
       <ScreenHeader
-        title="Perfil"
+        title="Ajustes"
         actions={[{ id: 'back', title: 'Volver', icon: BackIcon, onClick: onClose }]}
       />
       <div className="profile-body">
@@ -911,7 +905,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         {renderPanel()}
       </section>
       </div>
-      {showProfiles && <ProfilePickerScreen onDone={() => setShowProfiles(false)} onClose={() => setShowProfiles(false)} />}
     </div>
   );
 };

@@ -97,5 +97,40 @@
 .lp-name-caret { width: 3px; height: 30px; margin-left: 2px; background: #22d3ee; }
 .lp-name-error { margin: -6px 0 14px; font-size: 16px; color: #fda4af; }
 
-/* Mi perfil: "Cerrar sesión" right after "Cambiar perfil" */
-.lp-logout-next { margin-left: 12px; white-space: nowrap; }
+/* Header avatar and its menu */
+.notify-btn.lp-header-avatar { padding: 0; overflow: hidden; }
+.notify-btn.lp-header-avatar .lp-avatar { font-size: 17px; }
+.lp-menu-scrim { position: fixed; inset: 0; z-index: 30000; background: rgba(4, 6, 10, 0.45); }
+.lp-menu {
+  position: fixed;
+  top: 76px;
+  right: 40px;
+  z-index: 30001;
+  width: 360px;
+  padding: 18px 12px 12px;
+  border-radius: 20px;
+  background: #111622;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  box-sizing: border-box;
+}
+.lp-menu-head { display: flex; align-items: center; gap: 14px; padding: 0 10px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); margin-bottom: 8px; }
+.lp-menu-head-text { min-width: 0; }
+.lp-menu-name { font-size: 20px; font-weight: 900; color: #ffffff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-menu-sub { margin-top: 2px; font-size: 14px; font-weight: 600; color: #94a3b8; }
+.lp-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 52px;
+  padding: 0 12px;
+  border-radius: 12px;
+  color: #e2e8f0;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lp-menu-item.is-focused { background: #ffffff; color: #000000; }
+.lp-menu-icon { width: 34px; display: flex; justify-content: center; flex-shrink: 0; }
+.lp-menu-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-menu-divider { height: 1px; margin: 8px 10px; background: rgba(255, 255, 255, 0.08); }

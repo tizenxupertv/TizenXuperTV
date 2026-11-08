@@ -25,14 +25,16 @@ interface ProfilePickerScreenProps {
   onDone: () => void;
   /** Opened from Perfil: Back closes the view. At startup there is nothing behind it */
   onClose?: () => void;
+  /** Opens already in "Administrar perfiles" */
+  initialManaging?: boolean;
 }
 
 /**
  * The profiles view: "¿Quién está viendo?" when the app opens with two or more local profiles, and from
- * Perfil › Mi perfil › Cambiar perfil. Profiles are added, renamed and deleted here. Choosing another profile
+ * the header avatar's menu. Profiles are added, renamed and deleted here. Choosing another profile
  * than the one in use reloads the app: every service reads its profile's data when it loads.
  */
-export const ProfilePickerScreen: React.FC<ProfilePickerScreenProps> = ({ onDone, onClose }) => {
+export const ProfilePickerScreen: React.FC<ProfilePickerScreenProps> = ({ onDone, onClose, initialManaging = false }) => {
   const [, setTick] = useState(0);
   const profiles = localProfiles.list();
   const activeId = localProfiles.active().id;
@@ -40,7 +42,7 @@ export const ProfilePickerScreen: React.FC<ProfilePickerScreenProps> = ({ onDone
   // Focus: a tile of the row (profiles, then "Añadir perfil") or the "Administrar perfiles" button below
   const [index, setIndex] = useState(() => Math.max(0, profiles.findIndex(p => p.id === activeId)));
   const [onManageBtn, setOnManageBtn] = useState(false);
-  const [managing, setManaging] = useState(false);
+  const [managing, setManaging] = useState(initialManaging);
   const [switching, setSwitching] = useState(false);
   // Dialog of a profile while managing (its buttons, or the delete confirmation) and the name editor
   const [menu, setMenu] = useState<{ id: string; choice: number; confirmDelete: boolean } | null>(null);
