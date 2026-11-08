@@ -848,6 +848,8 @@ export const App: React.FC = () => {
           drawerKb={fullscreenKb}
           drawerCatIndex={fullscreenCatCursor}
           fullscreenFocusBtn={fullscreenFocusBtn}
+          screenOff={live.screenOff}
+          onScreenOff={() => live.setScreenOff(true)}
           numericBuffer={numericBuffer}
           catchupChannel={live.catchupChannel}
           setCatchupChannel={live.setCatchupChannel}
