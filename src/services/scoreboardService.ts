@@ -77,7 +77,20 @@ class ScoreboardService {
   private lastFetchTime: number = 0;
   private isFetching: boolean = false;
 
+  /** Normalized names, cached: findScore compares every match with every ESPN game */
+  private normalized = new Map<string, string>();
+
   private normalizeText(str?: string): string {
+    const key = str || '';
+    const hit = this.normalized.get(key);
+    if (hit !== undefined) return hit;
+    const value = this.normalizeRaw(key);
+    if (this.normalized.size > 5000) this.normalized.clear();
+    this.normalized.set(key, value);
+    return value;
+  }
+
+  private normalizeRaw(str: string): string {
     return (str || '')
       .toLowerCase()
       .normalize('NFD')
