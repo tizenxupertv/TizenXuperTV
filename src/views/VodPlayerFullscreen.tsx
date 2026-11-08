@@ -1248,12 +1248,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         <div className="vp-seek-hud">
           <div className="vp-seek-icon">
             {seekHud.delta > 0 ? (
-              <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" />
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true">
+                <path d="m3 6 7 6-7 6V6Z m10 0 7 6-7 6V6Z" />
               </svg>
             ) : (
-              <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                <path d="M11 18V6l-8.5 6 8.5 6zm9 0V6l-8.5 6 8.5 6z" />
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true">
+                <path d="M11 6 4 12l7 6V6Z M21 6l-7 6 7 6V6Z" />
               </svg>
             )}
           </div>
@@ -1343,22 +1343,36 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           <div
             className={`vp-round ${focusArea === 'center' && centerIndex === 0 ? 'is-focused' : ''}`}
             onClick={() => seekBy(-10)}
+            title="Retroceder"
           >
-            <span className="vp-skip">↺</span>
-            <span className="vp-skip-num">10</span>
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor" aria-hidden="true">
+              <path d="M11 6 4 12l7 6V6Z M21 6l-7 6 7 6V6Z" />
+            </svg>
           </div>
           <div
             className={`vp-round vp-play ${focusArea === 'center' && centerIndex === 1 ? 'is-focused' : ''}`}
             onClick={togglePause}
+            title={isPlaying ? 'Pausar' : 'Reproducir'}
           >
-            {isPlaying ? '❚❚' : '▶'}
+            {isPlaying ? (
+              <svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor" aria-hidden="true">
+                <rect x="6" y="4" width="4" height="16" rx="1" />
+                <rect x="14" y="4" width="4" height="16" rx="1" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="38" height="38" fill="currentColor" aria-hidden="true" style={{ marginLeft: 3 }}>
+                <path d="M7 4v16l13-8L7 4Z" />
+              </svg>
+            )}
           </div>
           <div
             className={`vp-round ${focusArea === 'center' && centerIndex === 2 ? 'is-focused' : ''}`}
             onClick={() => seekBy(10)}
+            title="Adelantar"
           >
-            <span className="vp-skip">↻</span>
-            <span className="vp-skip-num">10</span>
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor" aria-hidden="true">
+              <path d="m3 6 7 6-7 6V6Z m10 0 7 6-7 6V6Z" />
+            </svg>
           </div>
         </div>}
 
