@@ -1420,7 +1420,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
                   <span>▶ Ver ahora</span>
                   <span className="vod-next-btn-key">OK</span>
                 </div>
-                <span className="vod-next-cancel-hint">{nextOffer === 'credits' ? 'VOLVER Seguir viendo' : 'VOLVER Salir'}</span>
+                <span className="vod-next-cancel-hint">
+                  <span className="vod-next-hint-key">ATRÁS</span>
+                  {nextOffer === 'credits' ? 'Seguir viendo' : 'Salir'}
+                </span>
               </div>
             </div>
           </div>

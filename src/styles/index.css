@@ -4740,7 +4740,7 @@ html, body {
   position: absolute;
   right: 54px;
   bottom: 140px;
-  width: 480px;
+  width: 560px;
   border-radius: 18px;
   background: rgba(28, 28, 30, 0.96);
   border: 1.5px solid rgba(255, 255, 255, 0.18);
@@ -4823,9 +4823,10 @@ html, body {
 }
 
 .vod-next-timer {
-  font-size: 12px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
 }
 
 .vod-next-title {
@@ -4848,8 +4849,10 @@ html, body {
 .vod-next-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 18px;
+  gap: 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 8px 10px 8px 18px;
   border-radius: 9999px;
   background: #ffffff;
   color: #04141a;
@@ -4860,17 +4863,31 @@ html, body {
 }
 
 .vod-next-btn-key {
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.15);
+  background: #04141a;
+  color: #ffffff;
   font-size: 11px;
   font-weight: 900;
 }
 
 .vod-next-cancel-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
   font-size: 13px;
   font-weight: 600;
-  color: #94a3b8;
+  color: #cbd5e1;
+}
+
+.vod-next-hint-key {
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 /* VOD on the TV: AVPlay renders below the page, so the page must be see-through while it plays */
