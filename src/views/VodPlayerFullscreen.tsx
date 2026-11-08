@@ -429,10 +429,21 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         // "Resolución" of the detail: among the tracks in that language, the preferred quality
         const qPref = QUALITY_OPTIONS[settingsService.get().quality || 0];
         const qWanted = qPref && qPref !== QUALITY_OPTIONS[0] ? qPref.replace('p', '') : '';
+        const qualityRank = (q: string): number => {
+          const s = String(q || '').toUpperCase();
+          if (s.includes('4K') || s.includes('2160')) return 4000;
+          if (s.includes('1080') || s.includes('FHD')) return 1080;
+          if (s.includes('720') || s.includes('HD')) return 720;
+          if (s.includes('480') || s.includes('SD')) return 480;
+          const num = parseInt(s, 10);
+          return isNaN(num) ? 0 : num;
+        };
         const byAudio = tracksNow.filter(t => sameLanguage(t.audio, prefCode));
         const pool = byAudio.length ? byAudio : (qWanted ? tracksNow : []);
+        // In "Auto" quality: prioritize the highest resolution track (1080p / 4K) in the chosen audio
+        const poolSorted = pool.slice().sort((a, b) => qualityRank(b.quality) - qualityRank(a.quality));
         const wanted = pool.length
-          ? (qWanted && pool.find(t => String(t.quality || '').indexOf(qWanted) !== -1)) || pool[0]
+          ? (qWanted && pool.find(t => String(t.quality || '').indexOf(qWanted) !== -1)) || poolSorted[0] || pool[0]
           : undefined;
         if (wanted && wanted.index !== res.trackIndex) {
           console.log('[VodPlayer] preferred audio', prefCode, '-> track', wanted.index, 'instead of', res.trackIndex);
@@ -644,16 +655,13 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     timeRef.current.t = target;
     setCurrentTime(target);
 
-    // If starting a seek burst while playing: pause video immediately so audio doesn't lag/stutter
+    // For HTML5 video in browser: pause video so audio doesn't stutter while seeking
+    // For AVPlay on TV: DO NOT PAUSE! AVPlay natively handles seeking in PLAYING state without state transition freeze
     if (!isSeekingBurstRef.current) {
       isSeekingBurstRef.current = true;
       wasPlayingBeforeSeekRef.current = isPlaying;
-      if (isPlaying) {
-        if (useAvPlayRef.current && window.XuperAVPlay) {
-          window.XuperAVPlay.pause();
-        } else if (videoRef.current) {
-          videoRef.current.pause();
-        }
+      if (isPlaying && !useAvPlayRef.current && videoRef.current) {
+        videoRef.current.pause();
       }
     }
 
@@ -672,21 +680,17 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       const shouldResume = wasPlayingBeforeSeekRef.current;
 
       const onSeekDone = () => {
-        if (shouldResume) {
-          if (useAvPlayRef.current && window.XuperAVPlay) {
-            window.XuperAVPlay.play();
-          } else if (videoRef.current) {
-            videoRef.current.play();
-          }
+        // Only HTML5 video needs explicit play() call after resume; AVPlay continues playing automatically
+        // via onbufferingcomplete once the seeked buffer fills.
+        if (shouldResume && !useAvPlayRef.current && videoRef.current) {
+          videoRef.current.play();
         }
       };
 
       if (useAvPlayRef.current && window.XuperAVPlay) {
         window.XuperAVPlay.seekTo(target, onSeekDone, (err: any) => {
           logPlayback({ kind: 'error', player: 'AVPlay', detail: `seek ${Math.round(target)} s: ${(err && (err.name || err.message)) || err}` });
-          if (shouldResume) {
-            window.XuperAVPlay.play();
-          } else {
+          if (!shouldResume) {
             flash('No se pudo mover el video a ese punto');
           }
         });
@@ -695,7 +699,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         onSeekDone();
       }
       if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + 2500;
-    }, 350);
+    }, 180);
   };
 
   // Player time updates while a seek is pending / settling

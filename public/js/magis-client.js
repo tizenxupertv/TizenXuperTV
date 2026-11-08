@@ -1322,13 +1322,26 @@
         call(att.path, att.bean, function (sErr, sRes) {
           if (sErr) return tryStartLive(sErr);
           var addrList = sRes && sRes.liveAddressList || [];
+          var validAddrs = addrList.filter(function (a) { return a && a.playCode && a.license; });
           var chosen = null;
-          for (var i = 0; i < addrList.length; i++) {
-            if (addrList[i] && addrList[i].playCode && addrList[i].license) {
-              chosen = addrList[i];
+          // Prefer FHD / 1080p definition if available (smart TV selection)
+          for (var i = 0; i < validAddrs.length; i++) {
+            var def = String(validAddrs[i].definition || validAddrs[i].quality || validAddrs[i].name || '').toUpperCase();
+            if (def.indexOf('FHD') !== -1 || def.indexOf('1080') !== -1) {
+              chosen = validAddrs[i];
               break;
             }
           }
+          if (!chosen) {
+            for (var j = 0; j < validAddrs.length; j++) {
+              var def2 = String(validAddrs[j].definition || validAddrs[j].quality || validAddrs[j].name || '').toUpperCase();
+              if (def2.indexOf('HD') !== -1 || def2.indexOf('720') !== -1) {
+                chosen = validAddrs[j];
+                break;
+              }
+            }
+          }
+          if (!chosen && validAddrs[0]) chosen = validAddrs[0];
           if (!chosen && addrList[0]) chosen = addrList[0];
           if (!chosen || !chosen.license) {
             return callback(new Error('Portal did not return live channel license'));
