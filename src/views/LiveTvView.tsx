@@ -71,8 +71,6 @@ export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
     name: 'ESPN',
     url: 'https://barinaslive1.boldmss.com/ESPN/ESPN.isml/ESPN.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
-    now: 'En vivo · ESPN',
-    next: 'Programación deportiva',
     time: 'EN VIVO'
   },
   {
@@ -81,8 +79,6 @@ export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
     name: 'ESPN 2',
     url: 'https://barinaslive1.boldmss.com/ESPN_2/ESPN_2.isml/ESPN_2.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-2-us.png',
-    now: 'En vivo · ESPN 2',
-    next: 'Programación deportiva',
     time: 'EN VIVO'
   },
   {
@@ -91,8 +87,6 @@ export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
     name: 'ESPN 3',
     url: 'https://barinaslive1.boldmss.com/ESPN_3/ESPN_3.isml/ESPN_3.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-3-us.png',
-    now: 'En vivo · ESPN 3',
-    next: 'Programación deportiva',
     time: 'EN VIVO'
   },
   {
@@ -100,9 +94,7 @@ export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
     code: 'wiwy-espn-4',
     name: 'ESPN 4',
     url: 'https://barinaslive1.boldmss.com/ESPN_4/ESPN_4.isml/ESPN_4.m3u8',
-    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-4-us.png',
-    now: 'En vivo · ESPN 4',
-    next: 'Programación deportiva',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
     time: 'EN VIVO'
   },
   {
@@ -111,8 +103,6 @@ export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
     name: 'ESPN 5',
     url: 'https://barinaslive1.boldmss.com/ESPN_5/ESPN_5.isml/ESPN_5.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
-    now: 'En vivo · ESPN 5',
-    next: 'Programación deportiva',
     time: 'EN VIVO'
   },
   {
@@ -121,8 +111,6 @@ export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
     name: 'ESPN 6',
     url: 'https://barinaslive1.boldmss.com/ESPN_6/ESPN_6.isml/ESPN_6.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
-    now: 'En vivo · ESPN 6',
-    next: 'Programación deportiva',
     time: 'EN VIVO'
   },
   {
@@ -131,8 +119,6 @@ export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
     name: 'ESPN 7',
     url: 'https://barinaslive1.boldmss.com/ESPN_7/ESPN_7.isml/ESPN_7.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
-    now: 'En vivo · ESPN 7',
-    next: 'Programación deportiva',
     time: 'EN VIVO'
   }
 ];
