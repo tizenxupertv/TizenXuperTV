@@ -1287,14 +1287,13 @@ html, body {
 
 /* Widescreen 16:9 Video Box */
 .live-grand-preview-box {
-  /* 16:9 like the channels: the height sets it, the width follows (a full-width box was 2.1:1 and the TV
-     stretched the picture into it) */
-  width: auto;
-  height: min(530px, 48vh);
+  /* 16:9 like the channels, as wide as the column; the channel card below only needs its natural height
+     (the portal sends no programme guide), so the picture takes the rest of the column */
+  width: min(100%, calc((100vh - 300px) * 16 / 9));
+  height: auto;
   aspect-ratio: 16 / 9;
-  max-width: 100%;
   align-self: flex-start;
-  max-height: 52vh;
+  flex-shrink: 0;
   border-radius: 16px;
   background: #000000;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1399,14 +1398,14 @@ html, body {
 
 /* Super EPG Details Card */
 .live-super-epg-card {
-  flex: 1;
+  flex: 0 0 auto;
   background: rgba(14, 18, 27, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   padding: 18px 24px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  gap: 12px;
   box-sizing: border-box;
 }
 
