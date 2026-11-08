@@ -1,0 +1,81 @@
+/* Deportes tab (views/SportsView.tsx): live row with scores, sport chips, schedule grid by day */
+.spb-root {
+  position: absolute; left: 0; top: 68px; width: 100%; height: calc(100vh - 68px);
+  padding: 16px min(48px, 2.5vw) 60px; box-sizing: border-box; overflow: hidden;
+}
+/* Drawn inside the card, so a row or grid with overflow hidden never clips it */
+.spb-focus { outline: 3px solid #ffffff; outline-offset: -3px; }
+.spb-track { will-change: transform; }
+
+.spb-chips { display: flex; gap: 12px; flex-wrap: nowrap; overflow: hidden; height: 44px; margin: 6px 0 26px; }
+.spb-chip {
+  display: inline-flex; align-items: center; gap: 10px; padding: 10px 22px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05); color: #cbd5e1; font-size: 17px; font-weight: 700;
+}
+.spb-chip.is-on { background: rgba(56, 189, 248, 0.16); color: #38bdf8; }
+.spb-chip.spb-focus { background: #ffffff; color: #000000; outline: none; }
+.spb-chip-count { font-size: 14px; opacity: 0.7; }
+
+.spb-section { display: flex; align-items: center; gap: 10px; height: 30px; margin: 0 0 14px; font-size: 22px; font-weight: 800; color: #ffffff; }
+.spb-section.is-day { margin-top: 30px; text-transform: capitalize; }
+.spb-section-count { font-size: 15px; font-weight: 700; color: #94a3b8; }
+.spb-dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; display: inline-block; flex-shrink: 0; }
+
+.spb-live-row { height: 202px; overflow: hidden; padding: 4px 0 8px; box-sizing: border-box; }
+.spb-live-track { display: flex; gap: 20px; }
+.spb-live-card {
+  flex: 0 0 420px; height: 190px; box-sizing: border-box; padding: 20px 22px; border-radius: 20px;
+  background: #161a22;
+}
+.spb-live-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px; }
+.spb-league { font-size: 14px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spb-league.is-small { font-size: 12px; margin-bottom: 8px; }
+.spb-live-tag {
+  display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 8px; flex-shrink: 0;
+  background: rgba(239, 68, 68, 0.14); color: #f87171; font-size: 14px; font-weight: 800;
+}
+.spb-team-line { display: flex; align-items: center; gap: 14px; margin: 8px 0; }
+.spb-team-line.is-small { gap: 10px; margin: 5px 0; }
+.spb-team { flex: 1; min-width: 0; font-size: 21px; font-weight: 700; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.is-small .spb-team { font-size: 17px; }
+.spb-score { font-size: 30px; font-weight: 900; color: #ffffff; font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
+.spb-score.is-small { font-size: 18px; min-width: 24px; }
+.spb-meta { margin-top: 12px; font-size: 14px; color: #64748b; }
+
+.spb-crest {
+  position: relative; width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
+  background: rgba(255, 255, 255, 0.08); display: inline-flex; align-items: center; justify-content: center;
+}
+.spb-crest.is-big { width: 40px; height: 40px; }
+.spb-crest img { position: absolute; inset: 3px; width: calc(100% - 6px); height: calc(100% - 6px); object-fit: contain; z-index: 1; }
+.spb-crest-text { font-size: 12px; font-weight: 800; color: #94a3b8; }
+
+.spb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; height: 118px; margin-bottom: 18px; }
+.spb-card {
+  display: flex; gap: 18px; padding: 16px 18px; border-radius: 18px; box-sizing: border-box; height: 118px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+}
+.spb-card.is-done { opacity: 0.6; }
+.spb-card.is-done.spb-focus { opacity: 1; }
+.spb-card-time { display: flex; flex-direction: column; gap: 4px; min-width: 76px; padding-right: 16px; border-right: 1px solid rgba(255, 255, 255, 0.08); }
+.spb-hour { font-size: 22px; font-weight: 800; color: #ffffff; font-variant-numeric: tabular-nums; }
+.spb-when { font-size: 13px; font-weight: 700; color: #38bdf8; }
+.spb-when.is-done { color: #94a3b8; }
+.spb-card-body { flex: 1; min-width: 0; }
+.spb-card.is-skeleton { height: 118px; animation: spb-skeleton 1.6s infinite ease-in-out; }
+/* Opacity only: a scaling skeleton makes the grid wobble */
+@keyframes spb-skeleton { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+.spb-skeleton { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+
+.spb-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 80px 0; text-align: center; }
+.spb-empty-title { font-size: 24px; font-weight: 800; color: #ffffff; }
+.spb-empty-text { font-size: 17px; color: #94a3b8; }
+
+.spb-modal { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.8); }
+.spb-modal-card { width: 640px; text-align: center; padding: 36px 40px; border-radius: 26px; background: #1c1c1e; border: 1px solid rgba(255, 255, 255, 0.14); box-sizing: border-box; }
+.spb-modal-status { display: flex; justify-content: center; margin-top: 26px; }
+.spb-modal-card .spb-streams { margin-top: 26px; }
+.spb-streams { display: flex; flex-direction: column; gap: 10px; }
+.spb-stream { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); font-size: 18px; font-weight: 700; color: #e2e8f0; }
+.spb-stream.spb-focus { background: #ffffff; color: #000000; outline: none; }
+.spb-stream-play { font-size: 15px; opacity: 0.7; }

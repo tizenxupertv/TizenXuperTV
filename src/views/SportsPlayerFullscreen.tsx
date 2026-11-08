@@ -1,0 +1,409 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import '../styles/sportsPlayer.css';
+import { MatchCrest, MatchHeader } from '../components/sports/MatchHeader';
+import { scoreboardService } from '../services/scoreboardService';
+import { SportsEvent, SportsStream } from '../types/sports.ts';
+import { sportsService } from '../services/sportsService.ts';
+
+interface SportsPlayerFullscreenProps {
+  event: SportsEvent;
+  initialStreamIndex: number;
+  streams: SportsStream[];
+  onClose: () => void;
+}
+
+export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
+  event,
+  initialStreamIndex,
+  streams,
+  onClose
+}) => {
+  const [currentStreamIdx, setCurrentStreamIdx] = useState<number>(initialStreamIndex);
+  const [showOsd, setShowOsd] = useState<boolean>(true);
+  const [showServerMenu, setShowServerMenu] = useState<boolean>(false);
+  const [serverMenuIdx, setServerMenuIdx] = useState<number>(initialStreamIndex);
+  const [isBuffering, setIsBuffering] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  // AVPlay draws below the page: the player background must be transparent while it plays
+  const [usingAvplay, setUsingAvplay] = useState(false);
+  // The OK that opened the player must not also open the signal panel
+  const openedAtRef = useRef(Date.now());
+  // Signals that failed in this session, marked in the list
+  const [failed, setFailed] = useState<Set<number>>(() => new Set());
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<any>(null);
+  const shakaRef = useRef<any>(null);
+  const osdTimerRef = useRef<any>(null);
+  const errorRef = useRef<string | null>(null);
+
+  const currentStream = streams[currentStreamIdx] || streams[0];
+  const versus = !!event.away && event.away.trim().toLowerCase() !== event.home.trim().toLowerCase();
+  const score = versus ? scoreboardService.findScore(event.home, event.away) : null;
+
+  const osdVisibleRef = useRef(true);
+  const hideOsd = useCallback(() => {
+    osdVisibleRef.current = false;
+    setShowOsd(false);
+    if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
+  }, []);
+  const triggerOsd = useCallback(() => {
+    osdVisibleRef.current = true;
+    setShowOsd(true);
+    if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
+    osdTimerRef.current = setTimeout(() => {
+      osdVisibleRef.current = false;
+      setShowOsd(false);
+      // The signal list stays open over a failed signal: it is the only way on
+      if (!errorRef.current) setShowServerMenu(false);
+    }, 5000);
+  }, []);
+
+  useEffect(() => {
+    triggerOsd();
+    return () => {
+      if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
+    };
+  }, [triggerOsd]);
+
+  // Clean up playback on unmount or stream switch
+  const cleanupPlayer = useCallback(() => {
+    if (shakaRef.current) {
+      try {
+        shakaRef.current.destroy();
+      } catch {}
+      shakaRef.current = null;
+    }
+    if (hlsRef.current) {
+      try {
+        hlsRef.current.destroy();
+      } catch {}
+      hlsRef.current = null;
+    }
+    const av = (window as any).XuperAVPlay;
+    if (av && av.isActive) {
+      try { if (typeof av.stopLive === 'function') av.stopLive(); else av.stop(); } catch {}
+    }
+    setUsingAvplay(false);
+    const video = videoRef.current;
+    if (video) {
+      try {
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+      } catch {}
+    }
+    document.documentElement.classList.remove('xuper-live-avplay', 'xuper-vod-avplay');
+    (window as any).XuperPlatform?.setScreenSaver?.(true);
+  }, []);
+
+  // Initialize playback for the selected stream
+  useEffect(() => {
+    if (!currentStream || !currentStream.url) {
+      setError('Servidor sin URL disponible');
+      setIsBuffering(false);
+      return;
+    }
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    setError(null);
+    setIsBuffering(true);
+    (window as any).XuperPlatform?.setScreenSaver?.(false);
+
+    const streamUrl = currentStream.url;
+    const isAvPlayAvailable = !!(window as any).webapis?.avplay && !!(window as any).XuperAVPlay;
+    const shaka = (window as any).shaka;
+    const Hls = (window as any).Hls;
+
+    const isDash = streamUrl.includes('.mpd') || streamUrl.includes('dash') || Boolean(currentStream.drmApi);
+    const isHls = streamUrl.includes('.m3u8') || streamUrl.includes('hls');
+
+    if (shaka?.polyfill) {
+      try { shaka.polyfill.installAll(); } catch {}
+    }
+
+    console.log('[SportsPlayer] Starting stream:', currentStream.name, streamUrl, 'isDash:', isDash, 'drmApi:', currentStream.drmApi);
+
+    if (isAvPlayAvailable && !isDash) {
+      // TV, HLS without DRM: hardware AVPlay (the same path as live TV). It draws below the page, so the
+      // player turns transparent while it plays
+      try {
+        setUsingAvplay(true);
+        const av = (window as any).XuperAVPlay;
+        av._nextKind = 'live';
+        video.onplaying = () => setIsBuffering(false);
+        video.onwaiting = () => setIsBuffering(true);
+        video.onerror = () => {
+          setIsBuffering(false);
+          setError(`No se pudo cargar la señal (${currentStream.name})`);
+        };
+        if (av.playStream(streamUrl, currentStream.headers || {}, video) === false) throw new Error('AVPlay did not start');
+      } catch (err: any) {
+        console.error('[SportsPlayer] AVPlay error:', err);
+        setUsingAvplay(false);
+        setError('Error iniciando el reproductor');
+        setIsBuffering(false);
+      }
+    } else if (isDash && shaka && shaka.Player && shaka.Player.isBrowserSupported()) {
+      // Shaka Player for MPEG-DASH & ClearKey DRM (Works in Chrome, Edge, Firefox, Tizen EME)
+      try {
+        const player = new shaka.Player(video);
+        shakaRef.current = player;
+
+        // Configure ClearKey DRM if key is provided
+        if (currentStream.drmApi) {
+          const parts = currentStream.drmApi.split(':');
+          if (parts.length === 2) {
+            const keyIdHex = parts[0].trim().toLowerCase().replace(/-/g, '');
+            const keyHex = parts[1].trim().toLowerCase().replace(/-/g, '');
+            player.configure({
+              drm: {
+                clearKeys: {
+                  [keyIdHex]: keyHex
+                }
+              }
+            });
+          }
+        }
+
+        player.addEventListener('error', (event: any) => {
+          console.error('[SportsPlayer] Shaka error event:', event.detail);
+          setIsBuffering(false);
+          setError(`Error de señal: ${currentStream.name}`);
+        });
+
+        player.addEventListener('buffering', (event: any) => {
+          setIsBuffering(Boolean(event.buffering));
+        });
+
+        player.load(streamUrl).then(() => {
+          console.log('[SportsPlayer] Shaka stream loaded successfully!');
+          setIsBuffering(false);
+          video.play().catch(err => {
+            console.warn('[SportsPlayer] Unmuted autoplay blocked, retrying muted:', err);
+            video.muted = true;
+            video.play().catch(mErr => console.warn('[SportsPlayer] Muted play also blocked:', mErr));
+          });
+        }).catch((err: any) => {
+          console.error('[SportsPlayer] Shaka load failed:', err);
+          setIsBuffering(false);
+          setError(`No se pudo cargar la señal (${currentStream.name})`);
+        });
+      } catch (err: any) {
+        console.error('[SportsPlayer] Shaka init exception:', err);
+        setIsBuffering(false);
+        setError(`Error inicializando reproductor DASH (${currentStream.name})`);
+      }
+    } else if (isHls && Hls && Hls.isSupported()) {
+      // Browser / Hls.js fallback with dev proxy support for local testing
+      const isBrowserEnv = typeof window !== 'undefined' && (
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        (typeof (window as any).tizen === 'undefined' && typeof (window as any).webOS === 'undefined')
+      );
+      const referer = currentStream.headers?.['Referer'] || currentStream.headers?.['referer'] || '';
+      const effectiveHlsUrl = (isBrowserEnv && streamUrl.startsWith('http') && !streamUrl.includes('/stream-proxy'))
+        ? `/stream-proxy?url=${encodeURIComponent(streamUrl)}${referer ? `&referer=${encodeURIComponent(referer)}` : ''}`
+        : streamUrl;
+
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false
+      });
+      hlsRef.current = hls;
+      hls.loadSource(effectiveHlsUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(err => {
+          video.muted = true;
+          video.play().catch(() => {});
+        });
+      });
+      hls.on(Hls.Events.FRAG_LOADED, () => setIsBuffering(false));
+      hls.on(Hls.Events.ERROR, (_: any, data: any) => {
+        if (data.fatal) {
+          setIsBuffering(false);
+          setError(`Error de señal: ${currentStream.name}`);
+        }
+      });
+    } else {
+      video.src = streamUrl;
+      video.play().catch(err => {
+        video.muted = true;
+        video.play().catch(() => {});
+      });
+      video.onplaying = () => setIsBuffering(false);
+      video.onwaiting = () => setIsBuffering(true);
+      video.onerror = () => {
+        setIsBuffering(false);
+        setError(`No se pudo cargar la señal (${currentStream.name})`);
+      };
+    }
+
+    return () => {
+      cleanupPlayer();
+    };
+  }, [currentStreamIdx, currentStream, cleanupPlayer]);
+
+  // A failed signal: mark it and open the list on the next one that has not failed
+  useEffect(() => {
+    errorRef.current = error;
+    if (!error) return;
+    setFailed(prev => new Set(prev).add(currentStreamIdx));
+    if (streams.length > 1) {
+      const next = streams.findIndex((_, i) => i !== currentStreamIdx && !failed.has(i));
+      setServerMenuIdx(next >= 0 ? next : currentStreamIdx);
+      setShowServerMenu(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error]);
+
+  // Key navigation in player
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (Date.now() - openedAtRef.current < 600 && (e.key === 'Enter' || e.key === 'ArrowUp')) return;
+
+      const isBack = e.key === 'Escape' || e.key === 'Backspace' || (e as any).keyCode === 10009;
+
+      // Error card: the other signals as a vertical list
+      if (error) {
+        e.preventDefault();
+        if (showServerMenu && e.key === 'ArrowUp') setServerMenuIdx(i => Math.max(0, i - 1));
+        else if (showServerMenu && e.key === 'ArrowDown') setServerMenuIdx(i => Math.min(streams.length - 1, i + 1));
+        else if (e.key === 'Enter') {
+          if (showServerMenu) { setCurrentStreamIdx(serverMenuIdx); setShowServerMenu(false); }
+          else if (streams.length > 1) setShowServerMenu(true);
+        } else if (isBack) onClose();
+        return;
+      }
+
+      // Watching: the first key only shows the bar; ▲ ▼ move along the signals, OK switches, Back hides the bar
+      if (!osdVisibleRef.current) {
+        if (isBack) { e.preventDefault(); onClose(); return; }
+        e.preventDefault();
+        setServerMenuIdx(currentStreamIdx);
+        triggerOsd();
+        return;
+      }
+      triggerOsd();
+      if (e.key === 'ArrowUp') { e.preventDefault(); setServerMenuIdx(i => Math.max(0, i - 1)); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); setServerMenuIdx(i => Math.min(streams.length - 1, i + 1)); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (serverMenuIdx !== currentStreamIdx) setCurrentStreamIdx(serverMenuIdx); }
+      else if (isBack) { e.preventDefault(); hideOsd(); }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [error, showServerMenu, serverMenuIdx, currentStreamIdx, streams, triggerOsd, onClose]);
+
+  // Signals list, shared by the error card and the side panel
+  const signalList = (
+    <div className="spp-signals">
+      {streams.map((s, idx) => {
+        const isFocused = idx === serverMenuIdx;
+        const isPlaying = idx === currentStreamIdx && !error;
+        const isFailed = failed.has(idx);
+        return (
+          <div
+            key={idx}
+            className={`spp-signal ${isFocused ? 'is-focused' : ''} ${isPlaying ? 'is-playing' : ''} ${isFailed ? 'is-failed' : ''}`}
+            onClick={() => { setCurrentStreamIdx(idx); setShowServerMenu(false); }}
+          >
+            <span className="spp-signal-name">{s.name}</span>
+            {isPlaying && <span className="spp-signal-tag">Viendo</span>}
+            {isFailed && !isPlaying && <span className="spp-signal-tag is-failed">No disponible</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      backgroundColor: usingAvplay ? 'transparent' : '#000',
+      zIndex: 9999,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden'
+    }}>
+      <video
+        ref={videoRef}
+        playsInline
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'contain'
+        }}
+      />
+
+      {/* Connecting: the match and the signal, in the same card as the errors */}
+      {isBuffering && !error && (
+        <div className="spp-error is-loading">
+          <MatchHeader event={event} />
+          <div className="spp-loading"><span className="spp-spinner" />Conectando a {currentStream?.name || 'la señal'}…</div>
+        </div>
+      )}
+
+      {/* The signal failed: what happened and the other signals, in one card */}
+      {error && (
+        <div className="spp-error">
+          <MatchHeader event={event} />
+          <div className="spp-error-msg">Esta señal no está disponible</div>
+          <div className="spp-error-detail">{error}</div>
+          {streams.length > 1 && showServerMenu ? (
+            <>
+              <div className="spp-hint">Elige otra señal · OK para ver · Atrás para salir</div>
+              {signalList}
+            </>
+          ) : (
+            <div className="spp-hint">{streams.length > 1 ? 'OK para elegir otra señal · Atrás para salir' : 'Atrás para salir'}</div>
+          )}
+        </div>
+      )}
+
+      {/* Bottom bar while watching: the match, its score, and the signals (◄ ► and OK) */}
+      {showOsd && !error && (
+        <div className="spp-bar">
+          <div className="spp-bar-match">
+            <MatchCrest src={event.homeLogo || event.leagueLogo} name={event.home} />
+            <div className="spp-bar-titles">
+              <div className="spp-bar-league">
+                <span className="spb-live-tag"><span className="spb-dot" />{score && score.state === 'live' && score.periodDetail ? score.periodDetail : 'EN VIVO'}</span>
+                {event.league}
+              </div>
+              <div className="spp-bar-name">
+                {event.home}
+                {versus && (score ? <span className="spp-bar-score">{score.homeScore} – {score.awayScore}</span> : <span className="spp-bar-vs">vs</span>)}
+                {versus && event.away}
+              </div>
+            </div>
+            {versus && <MatchCrest src={event.awayLogo} name={event.away} />}
+          </div>
+          {streams.length > 1 && (
+            <div className="spp-bar-signals">
+              <div className="spp-bar-label">Señal</div>
+              {streams.map((st, idx) => (
+                <div
+                  key={idx}
+                  className={`spp-chip ${idx === serverMenuIdx ? 'is-focused' : ''} ${idx === currentStreamIdx ? 'is-playing' : ''} ${failed.has(idx) ? 'is-failed' : ''}`}
+                  onClick={() => setCurrentStreamIdx(idx)}
+                >
+                  <span className="spp-chip-name">{st.name}</span>
+                  {idx === currentStreamIdx && <span className="spp-chip-tag">Viendo</span>}
+                  {failed.has(idx) && idx !== currentStreamIdx && <span className="spp-chip-tag is-failed">No disponible</span>}
+                </div>
+              ))}
+              <div className="spp-bar-hint">▲ ▼ · OK para cambiar</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
