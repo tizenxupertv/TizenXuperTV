@@ -675,7 +675,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Unified Single Header Bar (68px) - Hide when in Fullscreen or Detail Screen! */}
-      {!isFullscreenLive && !activeDetailItem && (
+      {!isFullscreenLive && !activeDetailItem && !activeSportsPlayer && (
         <Header
           selectedTab={selectedTab}
           focusedIndex={focusDomain === 'header' ? headerFocusIndex : null}
