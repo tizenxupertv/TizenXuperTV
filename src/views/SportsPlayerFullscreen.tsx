@@ -252,6 +252,8 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         enableWorker: true,
         lowLatencyMode: false,
         maxBufferLength: 30,
+        // Keep only the last 30 s already played: on 1-1.5 GB TVs the rest piles up in memory over a long match
+        backBufferLength: 30,
         maxMaxBufferLength: 60,
         liveSyncDurationCount: 3,
         liveMaxLatencyDurationCount: 6
