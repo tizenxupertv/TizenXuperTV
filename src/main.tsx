@@ -4,6 +4,8 @@ import ReactDOM from 'react-dom/client';
 import { UpdatedNotice, UpdateNotice } from './components/common/UpdateNotice';
 import { App } from './App';
 import { LoginScreen } from './screens/LoginScreen';
+import { ProfilePickerScreen } from './screens/ProfilePickerScreen';
+import { localProfiles } from './lib/localProfiles';
 import { accountService, type UpdateInfo } from './services/accountService';
 import { updateService } from './services/updateService';
 import './styles/index.css';
@@ -18,6 +20,8 @@ const VERIFY_DELAY_MS = 8000;
 /** Sign-in with Telegram is required: the app only mounts with a session */
 const Root: React.FC = () => {
   const [signedIn, setSignedIn] = useState(() => accountService.isSignedIn());
+  // "¿Quién está viendo?" before the app, when the TV has two or more local profiles
+  const [picking, setPicking] = useState(() => localProfiles.needsPicker());
   // A newer version announced by the server, shown once per version
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   // The version this launch runs, when the app updated itself to it (shown once)
@@ -72,6 +76,7 @@ const Root: React.FC = () => {
     (import.meta.env.DEV && testParam === 'updated');
 
   if (!signedIn && !isTestingWelcome) return <LoginScreen onSignedIn={() => setSignedIn(true)} />;
+  if (picking) return <ProfilePickerScreen onDone={() => setPicking(false)} />;
   return (
     <>
       <App />

@@ -17,6 +17,9 @@ import { formatSpeed, runSpeedTest, SpeedResult, streamingVerdict } from '../lib
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
 import { QrCode } from '../components/common/QrCode';
+import { OnScreenKeyboard, KB_INITIAL, KbState, keyAt, moveCursor, pressKey } from '../components/live/OnScreenKeyboard';
+import { ProfileAvatar } from './ProfilePickerScreen';
+import { displayName, localProfiles, MAIN_PROFILE, MAX_NAME, MAX_PROFILES } from '../lib/localProfiles';
 
 /** Perfil › Sobre nosotros: what the self-update is doing on this TV */
 function updateLine(s: UpdateStatus): string {
@@ -51,6 +54,7 @@ interface Cell {
 
 const SECTIONS = [
   { id: 'account', label: 'Mi perfil', icon: '<circle cx="16" cy="10" r="5"/><path d="M6 27c.7-6 4.3-9 10-9s9.3 3 10 9"/>' },
+  { id: 'profiles', label: 'Perfiles', icon: '<circle cx="12" cy="11" r="4"/><path d="M4 26c.5-5 3.4-8 8-8s7.5 3 8 8"/><circle cx="22" cy="10" r="3.4"/><path d="M21 17.6c4 .2 6.4 2.8 7 7.4"/>' },
   { id: 'playback', label: 'Configuración global', icon: '<rect x="4" y="6" width="24" height="20" rx="3"/><path d="M13 11l8 5-8 5z"/>' },
   { id: 'tabs', label: 'Pestañas', icon: '<rect x="4" y="8" width="24" height="18" rx="2"/><path d="M4 13h24M12 8v5M20 8v5"/>' },
   { id: 'parental', label: 'Bloqueo', icon: '<rect x="7" y="14" width="18" height="14" rx="2"/><path d="M11 14V10a5 5 0 0 1 10 0v4"/><path d="M16 19v4"/>' },
@@ -139,6 +143,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   // "Quitar títulos": while on, OK on a title removes it from the list shown
   const [editMode, setEditMode] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  // Perfil › Perfiles: the dialog of the chosen profile (its buttons, or the delete confirmation) and the name editor
+  const [lpMenu, setLpMenu] = useState<{ id: string; choice: number; confirmDelete: boolean } | null>(null);
+  const [lpEditor, setLpEditor] = useState<{ id: string | null; text: string; kb: KbState; error: string } | null>(null);
 
   const rerender = () => setTick(t => t + 1);
 
@@ -293,6 +300,58 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     runDiag().then(() => { if (mountedRef.current) runSpeed(); });
   };
 
+  const profiles = localProfiles.list();
+  const activeProfile = localProfiles.active();
+  // The active profile is fixed for a launch: using another one reloads the app with its data
+  const useProfile = (id: string) => {
+    localProfiles.select(id);
+    localProfiles.markChosen();
+    window.location.reload();
+  };
+  const lpMenuActions = (id: string): Array<{ id: string; label: string; danger?: boolean }> => [
+    ...(id !== activeProfile.id ? [{ id: 'use', label: 'Usar este perfil' }] : []),
+    { id: 'rename', label: 'Cambiar nombre' },
+    ...(id !== MAIN_PROFILE ? [{ id: 'delete', label: 'Eliminar', danger: true }] : [])
+  ];
+  const runLpAction = (id: string, action: string) => {
+    if (action === 'use') useProfile(id);
+    else if (action === 'rename') {
+      const p = profiles.find(x => x.id === id);
+      setLpMenu(null);
+      setLpEditor({ id, text: p ? p.name.toLocaleLowerCase('es') : '', kb: KB_INITIAL, error: '' });
+    } else if (action === 'delete') setLpMenu({ id, choice: 0, confirmDelete: true });
+  };
+  const deleteProfile = (id: string) => {
+    const p = profiles.find(x => x.id === id);
+    const wasActive = id === activeProfile.id;
+    const ok = localProfiles.remove(id);
+    setLpMenu(null);
+    if (ok && wasActive) {
+      useProfile(MAIN_PROFILE);
+      return;
+    }
+    setFocus({ r: 0, c: 0 });
+    setNotice(ok ? { text: `Perfil «${p ? p.name : ''}» eliminado` } : { text: 'No se pudo eliminar el perfil. Inténtalo de nuevo.', error: true });
+  };
+  const saveName = () => {
+    if (!lpEditor) return;
+    const name = displayName(lpEditor.text);
+    if (!name) {
+      setLpEditor({ ...lpEditor, error: 'Escribe un nombre.' });
+      return;
+    }
+    if (lpEditor.id) {
+      const ok = localProfiles.rename(lpEditor.id, name);
+      setNotice(ok ? { text: 'Nombre guardado' } : { text: 'No se pudo guardar el nombre.', error: true });
+    } else {
+      const created = localProfiles.create(name);
+      setNotice(created
+        ? { text: `Perfil «${created.name}» creado. Elígelo y pulsa «Usar este perfil».` }
+        : { text: 'No se pudo crear el perfil.', error: true });
+    }
+    setLpEditor(null);
+  };
+
   // Items shown in "Mi lista"
   const listItems = useMemo(() => {
     if (listTab === 'history') {
@@ -346,6 +405,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       for (let i = 0; i < listItems.length; i += GRID_COLS) {
         r.push(listItems.slice(i, i + GRID_COLS).map(it => ({ id: 'card-' + it.key, onActivate: editMode ? it.remove : it.open })));
       }
+    } else if (id === 'profiles') {
+      r.push([
+        ...profiles.map(p => ({ id: `lp-${p.id}`, onActivate: () => setLpMenu({ id: p.id, choice: 0, confirmDelete: false }) })),
+        ...(profiles.length < MAX_PROFILES
+          ? [{ id: 'lp-add', onActivate: () => setLpEditor({ id: null, text: '', kb: KB_INITIAL, error: '' }) }]
+          : [])
+      ]);
     } else if (id === 'playback') {
       const radio = (group: string, opts: string[], key: 'display' | 'audio' | 'subLang' | 'size' | 'style' | 'textSize') =>
         r.push(opts.map((_, i) => ({ id: `${group}-${i}`, onActivate: () => settingsService.set({ [key]: i }) })));
@@ -418,6 +484,36 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   }, [focusedId]);
 
   useScreenKeys(key => {
+    // Profile name editor: the arrows move on the keyboard, OK types, Back cancels
+    if (lpEditor) {
+      if (key === 'back') setLpEditor(null);
+      else if (key === 'up' || key === 'down' || key === 'left' || key === 'right') {
+        const next = moveCursor(lpEditor.kb, key);
+        if (next) setLpEditor({ ...lpEditor, kb: next });
+      } else if (key === 'enter') {
+        const res = pressKey(keyAt(lpEditor.kb), lpEditor.text, lpEditor.kb, MAX_NAME);
+        if (res.ok) saveName();
+        else setLpEditor({ ...lpEditor, text: res.query, kb: res.state, error: '' });
+      }
+      return;
+    }
+    // A profile's dialog: left/right choose a button, OK runs it, Back closes (or leaves the delete confirmation)
+    if (lpMenu) {
+      const count = lpMenu.confirmDelete ? 2 : lpMenuActions(lpMenu.id).length;
+      if (key === 'left') setLpMenu({ ...lpMenu, choice: Math.max(0, lpMenu.choice - 1) });
+      else if (key === 'right') setLpMenu({ ...lpMenu, choice: Math.min(count - 1, lpMenu.choice + 1) });
+      else if (key === 'back') setLpMenu(lpMenu.confirmDelete ? { ...lpMenu, choice: 0, confirmDelete: false } : null);
+      else if (key === 'enter') {
+        if (lpMenu.confirmDelete) {
+          if (lpMenu.choice === 1) deleteProfile(lpMenu.id);
+          else setLpMenu({ ...lpMenu, choice: 0, confirmDelete: false });
+        } else {
+          const action = lpMenuActions(lpMenu.id)[lpMenu.choice];
+          if (action) runLpAction(lpMenu.id, action.id);
+        }
+      }
+      return;
+    }
     // Clear-history confirmation: left/right choose, OK confirms the choice, Back cancels
     if (confirmClear) {
       if (key === 'left' || key === 'right') setClearChoice(c => (c === 0 ? 1 : 0));
@@ -503,7 +599,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <div className="pf-account-info">
               <div className="pf-account-id">{account ? account.name || 'Usuario de Telegram' : '—'}</div>
               <div className="pf-account-type">
-                Sesión iniciada con Telegram{account && account.username ? ` (@${account.username})` : ''} · tu historial y tu lista se quedan en este TV
+                Sesión iniciada con Telegram{account && account.username ? ` (@${account.username})` : ''}
+                {profiles.length > 1 ? ` · perfil ${activeProfile.name}` : ''} · tu historial y tu lista se quedan en este TV
               </div>
             </div>
             <div className={`pf-btn pf-btn-danger pf-logout ${isF('logout') ? 'is-focused' : ''}`} onClick={tap('logout')}>
@@ -553,6 +650,85 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   <div className={`pf-btn ${clearChoice === 0 ? 'is-focused' : ''}`} onClick={() => setConfirmClear(false)}>Cancelar</div>
                   <div className={`pf-btn pf-btn-danger ${clearChoice === 1 ? 'is-focused' : ''}`} onClick={clearHistory}>Sí, borrar</div>
                 </div>
+              </div>
+            </div>
+          )}
+          {notice && <div className={`pf-toast ${notice.error ? 'is-error' : ''}`}>{notice.text}</div>}
+        </div>
+      );
+    }
+
+    if (id === 'profiles') {
+      const menuProfile = lpMenu ? profiles.find(p => p.id === lpMenu.id) : null;
+      return (
+        <div className="pf-parental">
+          <h2 className="pf-title">Perfiles</h2>
+          <p className="pf-note">
+            Cada perfil tiene su propio historial, Mi lista, canales favoritos, ajustes y pestañas. Con dos o más perfiles,
+            la app pregunta quién está viendo al abrirse. Son solo de este TV y no llevan contraseña.
+          </p>
+          <div className="lp-grid">
+            {profiles.map(p => (
+              <div key={p.id} className={`lp-card ${p.id === activeProfile.id ? 'is-active' : ''} ${isF(`lp-${p.id}`) ? 'is-focused' : ''}`} onClick={tap(`lp-${p.id}`)}>
+                <ProfileAvatar profile={p} size={96} />
+                <div className="lp-card-name">{p.name}</div>
+                <div className="lp-card-tag">{p.id === activeProfile.id ? 'En uso' : ''}</div>
+              </div>
+            ))}
+            {profiles.length < MAX_PROFILES && (
+              <div className={`lp-card ${isF('lp-add') ? 'is-focused' : ''}`} onClick={tap('lp-add')}>
+                <div className="lp-add-circle">+</div>
+                <div className="lp-card-name">Añadir perfil</div>
+                <div className="lp-card-tag" />
+              </div>
+            )}
+          </div>
+          {lpMenu && menuProfile && (
+            <div className="pf-confirm" role="dialog" aria-modal="true">
+              <div className="pf-confirm-card">
+                <div className="lp-dialog-head">
+                  <ProfileAvatar profile={menuProfile} size={64} />
+                  <h2 className="pf-confirm-title">{lpMenu.confirmDelete ? `¿Eliminar «${menuProfile.name}»?` : menuProfile.name}</h2>
+                </div>
+                {lpMenu.confirmDelete ? (
+                  <>
+                    <p className="pf-confirm-text">Se borran su historial, Mi lista, canales favoritos y ajustes en este TV.</p>
+                    <div className="pf-btn-row">
+                      <div className={`pf-btn ${lpMenu.choice === 0 ? 'is-focused' : ''}`} onClick={() => setLpMenu({ ...lpMenu, choice: 0, confirmDelete: false })}>Cancelar</div>
+                      <div className={`pf-btn pf-btn-danger ${lpMenu.choice === 1 ? 'is-focused' : ''}`} onClick={() => deleteProfile(lpMenu.id)}>Sí, eliminar</div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="lp-actions">
+                    {lpMenuActions(lpMenu.id).map((a, i) => (
+                      <div key={a.id} className={`pf-btn ${a.danger ? 'pf-btn-danger' : ''} ${lpMenu.choice === i ? 'is-focused' : ''}`} onClick={() => runLpAction(lpMenu.id, a.id)}>
+                        {a.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {lpEditor && (
+            <div className="pf-confirm" role="dialog" aria-modal="true">
+              <div className="pf-confirm-card lp-name-card">
+                <h2 className="pf-confirm-title">{lpEditor.id ? 'Cambiar nombre' : 'Nuevo perfil'}</h2>
+                <div className={`lp-name-field ${lpEditor.text ? '' : 'is-empty'}`}>
+                  {lpEditor.text ? displayName(lpEditor.text) : 'Nombre'}
+                  <span className="lp-name-caret" />
+                </div>
+                {lpEditor.error && <div className="lp-name-error">{lpEditor.error}</div>}
+                <OnScreenKeyboard
+                  state={lpEditor.kb}
+                  focused
+                  okLabel="Guardar"
+                  onPress={k => {
+                    const res = pressKey(k, lpEditor.text, lpEditor.kb, MAX_NAME);
+                    if (res.ok) saveName();
+                    else setLpEditor({ ...lpEditor, text: res.query, kb: res.state, error: '' });
+                  }}
+                />
               </div>
             </div>
           )}

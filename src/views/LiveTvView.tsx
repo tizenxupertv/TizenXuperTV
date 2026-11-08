@@ -10,6 +10,7 @@ import { ChannelRow, CategoryRow } from '../components/live/LiveRows';
 import { OnScreenKeyboard, KbState, KB_INITIAL } from '../components/live/OnScreenKeyboard';
 import { normalizeText } from '../utils/normalizeText';
 import { getChannelEntry, setChannelEntry } from '../lib/channelCache';
+import { pk } from '../lib/localProfiles';
 
 declare global {
   interface Window {
@@ -206,7 +207,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   }, [isFullscreen, showOsd, tunedChannel]);
   const savedCatIdx = useMemo(() => {
     try {
-      const v = localStorage.getItem('xuper_last_live_cat_idx');
+      const v = localStorage.getItem(pk('xuper_last_live_cat_idx'));
       if (v !== null) {
         const parsed = parseInt(v, 10);
         if (!isNaN(parsed)) return parsed;
@@ -597,7 +598,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     if (channels.length === 0 || tunedChannel) return;
     let saved: LiveChannel | null = null;
     try {
-      const raw = localStorage.getItem('xuper_last_live_ch');
+      const raw = localStorage.getItem(pk('xuper_last_live_ch'));
       if (raw) saved = JSON.parse(raw);
       // Older versions saved filler texts as the programme: they are not data
       if (saved) { saved.now = realText(saved.now); saved.next = realText(saved.next); }
