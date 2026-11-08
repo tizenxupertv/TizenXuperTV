@@ -1,5 +1,6 @@
 /*
- * Perfil › Configuración global › Tamaño del texto: Grande. Only the text people read (titles, cards, EPG,
+ * Perfil › Configuración global › Tamaño del texto: Grande (html.text-lg); Mediano (html.text-md, at the end) sits
+ * halfway. Only the text people read (titles, cards, EPG,
  * synopsis, player info) grows: about 35-40 % the small text, less the big titles; menus, buttons and the grid
  * stay as they are so nothing moves or leaves the screen. The class is set on <html> by services/settingsService.ts.
  */
@@ -78,3 +79,74 @@ html.text-lg .spb-empty-text, html.text-lg .search-empty-desc { font-size: 19px;
 html.text-lg .search-typed-text, html.text-lg .search-placeholder-text { font-size: 19px; }
 html.text-lg .search-popular-title { font-size: 29px; }
 html.text-lg .search-empty-title { font-size: 23px; }
+
+/* Mediano: halfway between Normal and Grande (about 87 % of each Grande size) */
+html.text-md .section-title { font-size: min(26px, 2.4vw); }
+html.text-md .section-sub { font-size: 16px; }
+html.text-md .poster-vignette-title { font-size: 17px; }
+html.text-md .wide-vignette-title { font-size: clamp(20px, 1.7vw, 25px); }
+html.text-md .wide-sub-text { font-size: clamp(14px, 1.15vw, 16px); }
+html.text-md .showcase-title { font-size: 50px; }
+html.text-md .cw-info-text { font-size: 16px; }
+html.text-md .cw-title-row { font-size: 17px; }
+html.text-md .pc-title { font-size: 33px; }
+html.text-md .pi-name { font-size: clamp(21px, 2.6vw, 35px); }
+html.text-md .epg-channel-title { font-size: 26px; }
+html.text-md .epg-program-name { font-size: 17px; }
+html.text-md .epg-prog-time { font-size: 15px; }
+html.text-md .epg-synopsis-text { font-size: 16px; }
+html.text-md .epg-upcoming-label { font-size: 13px; }
+html.text-md .epg-time-badge { font-size: 15px; }
+html.text-md .live-ch-title { font-size: 18px; }
+html.text-md .live-ch-now { font-size: 15px; }
+html.text-md .live-ch-num { font-size: 17px; }
+html.text-md .live-cat-vname { font-size: 17px; }
+html.text-md .vod-detail-title { font-size: 52px; }
+html.text-md .vod-detail-synopsis { font-size: 22px; }
+html.text-md .vod-genre-chip { font-size: 16px; }
+html.text-md .vp-title { font-size: 35px; }
+html.text-md .vp-year { font-size: 21px; }
+html.text-md .vp-time { font-size: 21px; }
+html.text-md .vp-episodes-caption-meta { font-size: 17px; }
+html.text-md .vod-next-title { font-size: 21px; }
+html.text-md .browse-category-name { font-size: 28px; }
+html.text-md .sc-title { font-size: 18px; }
+html.text-md .svc-title { font-size: 17px; }
+html.text-md .svc-meta { font-size: 13px; }
+html.text-md .spb-team { font-size: 22px; }
+html.text-md .spb-league { font-size: 15px; }
+html.text-md .spb-hour { font-size: 23px; }
+html.text-md .spb-when { font-size: 15px; }
+html.text-md .spb-meta { font-size: 16px; }
+html.text-md .spp-bar-name { font-size: 33px; }
+html.text-md .spp-bar-league { font-size: 17px; }
+html.text-md .spp-side-name { font-size: 22px; }
+html.text-md .spp-chip { font-size: 19px; }
+html.text-md .poster-vignette-genre { font-size: 12px; }
+html.text-md .nav-tab-btn { font-size: 15px; }
+html.text-md .screen-header-title { font-size: 23px; }
+html.text-md .screen-header-sub { font-size: 18px; }
+html.text-md .live-header-title, html.text-md .browse-col-title { font-size: 14px; }
+html.text-md .pf-menu-item { font-size: 17px; }
+html.text-md .pf-menu-title, html.text-md .pf-title { font-size: 23px; }
+html.text-md .pf-subtitle { font-size: 17px; }
+html.text-md .pf-note, html.text-md .pf-tab, html.text-md .pf-opt { font-size: 16px; }
+html.text-md .pf-btn { font-size: 17px; }
+html.text-md .pf-row-label, html.text-md .pf-row-desc, html.text-md .pf-diag-card-label, html.text-md .pf-diag-card-sub,
+html.text-md .pf-about-card-text, html.text-md .pf-update-bar-desc, html.text-md .pf-tg-desc, html.text-md .pf-donate-text { font-size: 16px; }
+html.text-md .pf-row-title, html.text-md .pf-iptv-card-name, html.text-md .pf-about-card-title, html.text-md .pf-update-bar-title,
+html.text-md .pf-tg-name { font-size: 19px; }
+html.text-md .pf-card-name { font-size: 15px; }
+html.text-md .pf-card-progress, html.text-md .pf-account-type { font-size: 13px; }
+html.text-md .pf-toast, html.text-md .pf-confirm-text { font-size: 17px; }
+html.text-md .filter-active-chip, html.text-md .filter-side-head { font-size: 16px; }
+html.text-md .filter-side, html.text-md .filter-types { font-size: 109%; }
+html.text-md .filter-results-head { font-size: 18px; }
+html.text-md .vod-quick-label, html.text-md .vp-menu-title { font-size: 16px; }
+html.text-md .spb-chip { font-size: 17px; }
+html.text-md .spb-section { font-size: 22px; }
+html.text-md .spb-stream { font-size: 18px; }
+html.text-md .spb-empty-text, html.text-md .search-empty-desc { font-size: 17px; }
+html.text-md .search-typed-text, html.text-md .search-placeholder-text { font-size: 17px; }
+html.text-md .search-popular-title { font-size: 25px; }
+html.text-md .search-empty-title { font-size: 20px; }
