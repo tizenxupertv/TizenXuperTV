@@ -135,10 +135,29 @@ export class SportsService {
               const html = await pageRes.text();
               const match = html.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>"]*/i);
               if (match) {
+                let streamUrl = match[0];
                 const origin = new URL(pageUrl).origin;
+
+                // On TV or non-local environment, follow 302 redirects proactively so AVPlay
+                // connects directly to the final delivery CDN without losing CUSTOM_MESSAGE headers
+                if (typeof window !== 'undefined' && !isLocal && streamUrl.startsWith('http')) {
+                  try {
+                    const headRes = await fetch(streamUrl, {
+                      method: 'GET',
+                      headers: { 'Referer': `${origin}/` },
+                      redirect: 'follow'
+                    });
+                    if (headRes.ok && headRes.url) {
+                      streamUrl = headRes.url;
+                    }
+                  } catch (redirErr) {
+                    console.warn('[sports] Pre-following redirect error, using initial m3u8:', redirErr);
+                  }
+                }
+
                 return {
                   ...stream,
-                  url: match[0],
+                  url: streamUrl,
                   headers: {
                     ...stream.headers,
                     'Referer': `${origin}/`
