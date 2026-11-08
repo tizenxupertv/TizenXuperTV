@@ -28,10 +28,11 @@ const HeroShowcaseComponent: React.FC<HeroShowcaseProps> = ({
   const bgUrl = import.meta.env.DEV && /^https?:/.test(rawBg)
     ? `${location.origin}/stream-proxy?url=${encodeURIComponent(rawBg)}`
     : rawBg;
-  const genres = item.genres && item.genres.length ? item.genres.slice(0, 3).join(' · ') : 'Película · Acción · Aventura';
-  const year = item.year && item.year !== '—' ? item.year : '2024';
-  const ratingBadge = 'Sin Calificación';
-  const synopsis = item.synopsis || 'La realidad no es lo que parece cuando se enfrenta a los alucinantes poderes de fuerzas desconocidas.';
+  // Only what the catalog knows about the title
+  const genres = item.genres && item.genres.length ? item.genres.slice(0, 3).join(' · ') : '';
+  const year = item.year && item.year !== '—' ? item.year : '';
+  const score = item.score && item.score !== '0' ? item.score : '';
+  const synopsis = item.synopsis || '';
 
   return (
     <div className={`home-showcase apple-showcase ${isDimmed ? 'is-dimmed' : ''}`}>
@@ -42,21 +43,17 @@ const HeroShowcaseComponent: React.FC<HeroShowcaseProps> = ({
       <div className="showcase-gradient" />
 
       <div className="showcase-content">
-        <div className="hero-kicker">
-          <span className="badge-tag brand-pill">XUPER ORIGINAL</span>
-          <span className="hero-kicker-tag">{item.isSeries ? 'SERIE DESTACADA' : 'ESTRENO EXCLUSIVO'}</span>
-        </div>
-
         <h1 className="showcase-title">{item.title || 'Sin título'}</h1>
 
-        <div className="showcase-meta apple-meta">
-          <span className="badge-tag brand-pill">4K HDR</span>
-          <span>{genres}</span>
-          <span className="badge-tag">{ratingBadge}</span>
-          {year && <span>{year}</span>}
-        </div>
+        {(score || genres || year) && (
+          <div className="showcase-meta apple-meta">
+            {score && <span className="badge-tag">★ {score}</span>}
+            {genres && <span>{genres}</span>}
+            {year && <span>{year}</span>}
+          </div>
+        )}
 
-        <p className="showcase-synopsis">{synopsis}</p>
+        {synopsis && <p className="showcase-synopsis">{synopsis}</p>}
 
         <div className="showcase-actions">
           <button

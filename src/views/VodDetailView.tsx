@@ -383,9 +383,10 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   // Range of the episode to continue (marked with a dot in the ranges row)
   const currentEpIdx = episodeStatuses.findIndex(st => !!st && st.isCurrent);
   const currentRange = currentEpIdx >= 0 ? Math.floor(currentEpIdx / EP_RANGE) : -1;
-  const genres = currentItem.genres && currentItem.genres.length ? currentItem.genres : ['Película', 'Acción'];
-  const score = currentItem.score || '8.5';
-  const year = currentItem.year && currentItem.year !== '—' ? currentItem.year : '2024';
+  // Only what the portal sends about the title
+  const genres = currentItem.genres && currentItem.genres.length ? currentItem.genres : [];
+  const score = currentItem.score && currentItem.score !== '0' ? currentItem.score : '';
+  const year = currentItem.year && currentItem.year !== '—' ? currentItem.year : '';
 
   return (
     <div className="vod-detail-screen" ref={rootScrollRef}>
@@ -414,14 +415,11 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
 
           {/* Badges / Rating Row */}
           <div className="vod-detail-badges-row">
-            <span className="badge-rating-star">★ {score}</span>
-            <span className="badge-pill brand">4K ULTRA HD</span>
-            <span className="badge-pill">HDR10+</span>
-            <span className="badge-pill age">16+</span>
-            <span className="badge-meta">{year}</span>
-            <span className="badge-meta">
-              {isSeries ? `${seasons.length || 1} Temporada${seasons.length > 1 ? 's' : ''}` : currentItem.duration}
-            </span>
+            {score && <span className="badge-rating-star">★ {score}</span>}
+            {year && <span className="badge-meta">{year}</span>}
+            {isSeries
+              ? seasons.length > 0 && <span className="badge-meta">{`${seasons.length} Temporada${seasons.length > 1 ? 's' : ''}`}</span>
+              : currentItem.duration && <span className="badge-meta">{currentItem.duration}</span>}
           </div>
 
           {/* Genre Chips */}
@@ -434,9 +432,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
           </div>
 
           {/* Synopsis */}
-          <p className="vod-detail-synopsis">
-            {currentItem.synopsis || 'Sinopsis completa de la producción cinematográfica en alta resolución disponible en Xuper TV.'}
-          </p>
+          {currentItem.synopsis && <p className="vod-detail-synopsis">{currentItem.synopsis}</p>}
 
           {/* Cast & Crew */}
           <div className="vod-detail-crew-row">

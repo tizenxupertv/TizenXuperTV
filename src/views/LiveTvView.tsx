@@ -2,11 +2,10 @@ import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { LiveChannel, LiveCategory } from '../types/channel';
 import { playerService, LiveStatus } from '../services/playerService';
 import { iptvService, IPTV_CATEGORY_PREFIX, IPTV_CATEGORY_LABEL } from '../services/iptvService';
-import { getMockChannelsForCategory } from '../services/mockLiveChannels';
 import { parentalService } from '../services/parentalService';
 import { useRenderCount } from '../debug/renderCount';
 import { useViewProfiler } from '../lib/perfMonitor';
-import { channelKey, isSameChannel, normalizeChannels } from '../lib/channelKey';
+import { channelKey, isSameChannel, normalizeChannels, realText } from '../lib/channelKey';
 import { ChannelRow, CategoryRow } from '../components/live/LiveRows';
 import { OnScreenKeyboard, KbState, KB_INITIAL } from '../components/live/OnScreenKeyboard';
 import { normalizeText } from '../utils/normalizeText';
@@ -105,6 +104,7 @@ const categoryChannelsCache = new Map<string, LiveChannel[]>();
 
 // True only for real schedules like "20:00 - 21:30"; labels such as "EN VIVO" are not times.
 const hasClockTime = (t?: string): boolean => !!t && /\d/.test(t);
+
 
 // Hides channels that belong to a PIN-locked category (so they cannot leak through
 // "Favoritos" or aggregate categories such as "Todos los canales").
@@ -448,8 +448,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             code: c.channelCode || String(c.id || ''),
             url: c.streamUrl || '',
             logo: c.logo || c.channelLogo || '',
-            now: c.now || c.currentProgram || 'Transmisión en directo',
-            next: c.next || c.nextProgram || 'Continuación de programación',
+            now: realText(c.now || c.currentProgram),
+            next: realText(c.next || c.nextProgram),
             time: c.time || 'EN VIVO',
             isFav: !!favMap[channelKey(c)]
           }));
@@ -563,8 +563,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             code: c.channelCode || String(c.id || ''),
             url: c.streamUrl || '',
             logo: c.logo || c.channelLogo || '',
-            now: c.now || c.currentProgram || 'Transmisión en directo',
-            next: c.next || c.nextProgram || 'Continuación de programación',
+            now: realText(c.now || c.currentProgram),
+            next: realText(c.next || c.nextProgram),
             time: c.time || 'EN VIVO',
             isFav: !!favMap[channelKey(c)]
           }));
@@ -577,17 +577,15 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           setChannelEntry(catId, chs);
           if (onChannelsLoaded) onChannelsLoaded(visible);
         } else {
-          // Fallback to local mock channels (essential for desktop browser development / offline)
-          const fallbackList = getMockChannelsForCategory(catId);
-          setChannels(fallbackList);
-          if (onChannelsLoaded) onChannelsLoaded(fallbackList);
+          // No channels from the portal: an empty list (never made-up channels)
+          setChannels([]);
+          if (onChannelsLoaded) onChannelsLoaded([]);
         }
         setIsLoadingChannels(false);
       });
     } else {
-      const fallbackList = getMockChannelsForCategory(catId);
-      setChannels(fallbackList);
-      if (onChannelsLoaded) onChannelsLoaded(fallbackList);
+      setChannels([]);
+      if (onChannelsLoaded) onChannelsLoaded([]);
       setIsLoadingChannels(false);
     }
   }, [activeCategory, favMap, categories, lockTick]);
@@ -601,6 +599,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     try {
       const raw = localStorage.getItem('xuper_last_live_ch');
       if (raw) saved = JSON.parse(raw);
+      // Older versions saved filler texts as the programme: they are not data
+      if (saved) { saved.now = realText(saved.now); saved.next = realText(saved.next); }
     } catch {}
     const foundInCat = saved ? channels.find(c => isSameChannel(c, saved)) : undefined;
     tune(foundInCat || channels[0]);
@@ -631,32 +631,30 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   }, []);
 
   // Dynamic Live Progress percentage based on the current hour (e.g., 20:15 -> 25%)
-  const liveProgPercent = useMemo(() => {
-    const mins = new Date().getMinutes();
-    const cycle = (mins % 60) / 60;
-    return Math.max(12, Math.min(94, Math.round(cycle * 100)));
-  }, [liveClock]);
-
-  const liveStartTime = useMemo(() => {
-    const d = new Date();
-    const h = d.getHours();
-    const h12 = h % 12 || 12;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    return `${h12}:00 ${ampm}`;
-  }, [liveClock]);
-
-  const liveEndTime = useMemo(() => {
-    const d = new Date();
-    const h = (d.getHours() + 1) % 24;
-    const h12 = h % 12 || 12;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    return `${h12}:00 ${ampm}`;
-  }, [liveClock]);
 
   // Which channel is currently under cursor vs which channel is tuned/playing
   const focusedChannel = channels[focus.channelIndex] || tunedChannel || channels[0] || null;
   // The info panel always describes the channel that is playing in the preview
   const displayChannel = tunedChannel || focusedChannel;
+  // Progress of the current programme from its "HH:MM - HH:MM" times; null when the channel does not send them
+  const programProgress = useMemo(() => {
+    const t = displayChannel && displayChannel.time;
+    const m = t && t.match(/(\d{1,2}):(\d{2})\s*(am|pm)?\s*-\s*(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+    if (!m) return null;
+    const mins = (h: string, mm: string, ap?: string) => {
+      let hh = Number(h) % 24;
+      if (ap) hh = (Number(h) % 12) + (/pm/i.test(ap) ? 12 : 0);
+      return hh * 60 + Number(mm);
+    };
+    const start = mins(m[1], m[2], m[3]);
+    let end = mins(m[4], m[5], m[6]);
+    if (end <= start) end += 24 * 60;
+    const d = new Date();
+    let now = d.getHours() * 60 + d.getMinutes();
+    if (now < start) now += 24 * 60;
+    return Math.max(0, Math.min(100, Math.round(((now - start) / (end - start)) * 100)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayChannel && displayChannel.time, liveClock]);
   const isFocusedChannelTuned = isSameChannel(tunedChannel, focusedChannel);
   const isDisplayChannelTuned = isSameChannel(tunedChannel, displayChannel);
   const isDisplayChannelFav = !!(displayChannel && favMap[channelKey(displayChannel)]);
@@ -856,7 +854,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
               <div className="pi-now">
                 {displayChannel.now && !/^en vivo$/i.test(displayChannel.now.trim()) ? displayChannel.now : ''}
               </div>
-              <div className="pi-next">{displayChannel.next ? `Siguiente: ${displayChannel.next}` : 'Continuación de programación'}</div>
+              {displayChannel.next && <div className="pi-next">{`Siguiente: ${displayChannel.next}`}</div>}
               <div className="pi-range">{displayChannel.time || 'EN VIVO'}</div>
 
               <div className="pi-seek">
@@ -985,7 +983,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                           <div className="nm">
                             {ch.name} {isFav && <span style={{ color: '#FFD60A', marginLeft: 8 }}>★</span>}
                           </div>
-                          <div className="epg">{ch.now || 'Transmisión en directo'}</div>
+                          {ch.now && <div className="epg">{ch.now}</div>}
                         </div>
                       </div>
                     );
@@ -1061,31 +1059,25 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Sleek Live Progress Bar matching Fullscreen InfoBar */}
-                  <div className="epg-progress-container">
-                    <div className="epg-progress-labels">
-                      <span className="epg-prog-time">
-                        {hasClockTime(displayChannel.time) ? displayChannel.time!.split('-')[0].trim() : liveStartTime}
-                      </span>
-                      <span className="epg-prog-time">
-                        {hasClockTime(displayChannel.time) && displayChannel.time!.split('-')[1]
-                          ? displayChannel.time!.split('-')[1].trim()
-                          : liveEndTime}
-                      </span>
+                  {/* Progress of the current programme: only when the channel sends its start and end times */}
+                  {programProgress !== null && (
+                    <div className="epg-progress-container">
+                      <div className="epg-progress-labels">
+                        <span className="epg-prog-time">{displayChannel.time!.split('-')[0].trim()}</span>
+                        <span className="epg-prog-time">{displayChannel.time!.split('-')[1].trim()}</span>
+                      </div>
+                      <div className="epg-progress-track">
+                        <div className="epg-progress-fill" style={{ width: `${programProgress}%` }} />
+                      </div>
                     </div>
-                    <div className="epg-progress-track">
-                      <div className="epg-progress-fill" style={{ width: `${liveProgPercent}%` }} />
+                  )}
+
+                  {displayChannel.next && (
+                    <div className="epg-upcoming-row">
+                      <span className="epg-upcoming-label">A CONTINUACIÓN:</span>
+                      <span className="epg-upcoming-title">{displayChannel.next}</span>
                     </div>
-                  </div>
-
-                  <p className="epg-synopsis-text">
-                    Transmisión digital oficial en alta definición. Disfruta de la mejor cobertura en vivo, programación continuada y señales exclusivas en Xuper TV.
-                  </p>
-
-                  <div className="epg-upcoming-row">
-                    <span className="epg-upcoming-label">A CONTINUACIÓN:</span>
-                    <span className="epg-upcoming-title">{displayChannel.next || 'Continuación de programación nocturna'}</span>
-                  </div>
+                  )}
                 </div>
 
               </>

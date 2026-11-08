@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { LiveTvFocus, DEFAULT_LIVE_CATEGORIES } from '../views/LiveTvView';
 import { LiveChannel, LiveCategory } from '../types/channel';
-import { MOCK_CHANNELS_BY_CATEGORY } from '../services/mockLiveChannels';
 import { KbState, KB_INITIAL } from '../components/live/OnScreenKeyboard';
 import { DrawerArea, LiveLocation } from './types';
 import { getChannelEntry } from '../lib/channelCache';
@@ -134,7 +133,7 @@ export function useLiveTv() {
     const listFor = (catId: string | number): LiveChannel[] => {
       const entry = getChannelEntry(catId);
       if (entry && Array.isArray(entry.channels)) return normalizeChannels<LiveChannel>(entry.channels);
-      return MOCK_CHANNELS_BY_CATEGORY[String(catId)] || [];
+      return [];
     };
     const posIn = (i: number): number => {
       const cat = cats[i];
