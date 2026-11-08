@@ -1,0 +1,49 @@
+/*
+ * Perfil › Configuración global › Tamaño del texto: Grande. Only the text people read (titles, cards, EPG,
+ * synopsis, player info) grows, about 20 % (less for the big titles); menus, buttons and the grid stay as they
+ * are so nothing moves or leaves the screen. The class is set on <html> by services/settingsService.ts.
+ */
+html.text-lg .section-title { font-size: min(26px, 2.1vw); }
+html.text-lg .section-sub { font-size: 16px; }
+html.text-lg .poster-vignette-title { font-size: 17px; }
+html.text-lg .wide-vignette-title { font-size: clamp(20px, 1.5vw, 26px); }
+html.text-lg .wide-sub-text { font-size: clamp(14px, 1vw, 16px); }
+html.text-lg .showcase-title { font-size: 55px; }
+html.text-lg .cw-info-text { font-size: 16px; }
+html.text-lg .cw-title-row { font-size: 18px; }
+html.text-lg .pc-title { font-size: 35px; }
+html.text-lg .pi-name { font-size: clamp(22px, 2.4vw, 37px); }
+html.text-lg .epg-channel-title { font-size: 27px; }
+html.text-lg .epg-program-name { font-size: 18px; }
+html.text-lg .epg-prog-time { font-size: 15px; }
+html.text-lg .epg-synopsis-text { font-size: 16px; }
+html.text-lg .epg-upcoming-label { font-size: 14px; }
+html.text-lg .epg-time-badge { font-size: 15px; }
+html.text-lg .live-ch-title { font-size: 18px; }
+html.text-lg .vod-detail-title { font-size: 57px; }
+html.text-lg .vod-detail-synopsis { font-size: 22px; }
+html.text-lg .vod-genre-chip { font-size: 16px; }
+html.text-lg .vp-title { font-size: 37px; }
+html.text-lg .vp-year { font-size: 21px; }
+html.text-lg .vp-time { font-size: 21px; }
+html.text-lg .vp-episodes-caption-meta { font-size: 17px; }
+html.text-lg .vod-next-title { font-size: 21px; }
+html.text-lg .browse-category-name { font-size: 30px; }
+html.text-lg .sc-title { font-size: 19px; }
+html.text-lg .svc-title { font-size: 17px; }
+html.text-lg .svc-meta { font-size: 14px; }
+html.text-lg .spb-team { font-size: 24px; }
+html.text-lg .spb-league { font-size: 16px; }
+html.text-lg .spb-hour { font-size: 25px; }
+html.text-lg .spb-when { font-size: 16px; }
+html.text-lg .spb-meta { font-size: 16px; }
+html.text-lg .spp-bar-name { font-size: 35px; }
+html.text-lg .spp-bar-league { font-size: 18px; }
+html.text-lg .spp-side-name { font-size: 23px; }
+html.text-lg .spp-chip { font-size: 20px; }
+/* Sports cards have a fixed height: one line less of league text keeps them inside */
+html.text-lg .spb-card .spb-league.is-small { margin-bottom: 4px; }
+html.text-lg .spb-card { gap: 14px; padding: 12px 16px; }
+html.text-lg .live-ch-now { font-size: 15px; }
+html.text-lg .live-ch-num { font-size: 17px; }
+html.text-lg .live-cat-vname { font-size: 18px; }

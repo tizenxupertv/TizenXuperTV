@@ -7,6 +7,7 @@ import { LoginScreen } from './screens/LoginScreen';
 import { accountService, type UpdateInfo } from './services/accountService';
 import { updateService } from './services/updateService';
 import './styles/index.css';
+import './styles/textSize.css';
 import { installTvDebug } from './debug/tvDebug';
 
 installTvDebug();
