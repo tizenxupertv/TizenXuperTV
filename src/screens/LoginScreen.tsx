@@ -468,7 +468,7 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
               <div className="tg-login-notice-content">
                 <div className="tg-login-notice-title">No se pudo conectar con el servidor</div>
                 <div className="tg-login-notice-desc">
-                  Si tu red bloquea nuestros servidores, inicia sesión con los datos de tu móvil y luego vuelve a tu Wi-Fi: la sesión queda guardada.
+                  Inicia sesión con los datos de tu móvil y luego vuelve a tu Wi-Fi.
                 </div>
               </div>
             </div>
