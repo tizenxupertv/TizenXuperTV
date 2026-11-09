@@ -65,7 +65,7 @@ interface VodDetailViewProps {
   onOpenSeasonMenu?: () => void;
   onSelectRelated?: (item: VodItem) => void;
   onDetailLoaded?: (counts: { seasonsCount: number; episodesCount: number; relatedCount: number; castCount?: number; isSeries: boolean; hasTrailer?: boolean; choices?: TitleChoices }) => void;
-  onEpisodesChange?: (data: { episodes: VodEpisode[]; seasonId: string; seasonNumber?: number; activeEpisodeIndex?: number }) => void;
+  onEpisodesChange?: (data: { episodes: VodEpisode[]; seasonId: string; seasonNumber?: number; activeEpisodeIndex?: number; seasons?: VodSeason[] }) => void;
   onCastChange?: (cast: PersonDetail[]) => void;
   selectedPerson?: PersonDetail | null;
   onSelectPerson?: (person: PersonDetail) => void;
@@ -303,10 +303,11 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         episodes,
         seasonId: currentSeasonId,
         seasonNumber: currentSeasonNumber,
-        activeEpisodeIndex: activeEpisodeIdx
+        activeEpisodeIndex: activeEpisodeIdx,
+        seasons
       });
     }
-  }, [episodes, currentSeasonId, currentSeasonNumber, activeEpisodeIdx]);
+  }, [episodes, currentSeasonId, currentSeasonNumber, activeEpisodeIdx, seasons]);
 
   // When episodes load for a season, auto-position and focus on the current episode
   const lastPositionedKeyRef = useRef<string>('');
@@ -428,12 +429,25 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
 
   const seriesSectionRef = useRef<HTMLElement>(null);
   const seasonMenuRef = useRef<HTMLDivElement>(null);
-  // Long season lists: the highlighted season stays in view inside the panel
+  // Long season lists: pure container scrollTop calculation without full-window jumping
   useEffect(() => {
     if (focus.area !== 'seasonMenu' || !seasonMenuRef.current) return;
-    const opt = seasonMenuRef.current.querySelector('.vod-action-option.is-focused') as HTMLElement | null;
-    if (opt && opt.scrollIntoView) opt.scrollIntoView({ block: 'nearest' });
-  }, [focus.area, focus.seasonMenuIndex]);
+    const container = seasonMenuRef.current;
+    const targetIdx = focus.seasonMenuIndex ?? focus.seasonIndex;
+    const target = container.children[targetIdx] as HTMLElement | undefined;
+    if (target) {
+      const targetTop = target.offsetTop;
+      const targetHeight = target.offsetHeight;
+      const cTop = container.scrollTop;
+      const cHeight = container.clientHeight;
+      const pad = 12;
+      if (targetTop < cTop + pad) {
+        container.scrollTop = Math.max(0, targetTop - pad);
+      } else if (targetTop + targetHeight > cTop + cHeight - pad) {
+        container.scrollTop = targetTop + targetHeight - cHeight + pad;
+      }
+    }
+  }, [focus.area, focus.seasonMenuIndex, focus.seasonIndex]);
 
   // Ranges row follows the visible range (long series have dozens of ranges)
   const rangesRef = useRef<HTMLDivElement>(null);
@@ -736,44 +750,46 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
             )}
 
             {/* Numbered tiles of the visible range: episodes almost never have their own picture */}
-            <div className="vod-episodes-slider is-tiles" ref={episodesSliderRef}>
-              {(isLoading || seasonLoading) ? (
-                [1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-                  <div key={`ep-skel-${n}`} className="vod-ep-tile is-skeleton skeleton-shimmer" />
-                ))
-              ) : loadError ? (
-                <div className="vod-episodes-empty-card">
-                  <div className="vod-episodes-empty-icon">⚠️</div>
-                  <div className="vod-episodes-empty-text">No se pudieron cargar los episodios. Vuelve a abrir la ficha para reintentar.</div>
-                </div>
-              ) : episodes.length === 0 ? (
-                <div className="vod-episodes-empty-card">
-                  <div className="vod-episodes-empty-icon">📺</div>
-                  <div className="vod-episodes-empty-text">No hay episodios disponibles para esta temporada.</div>
-                </div>
-              ) : (
-                episodes.slice(rangeStart, rangeStart + EP_RANGE).map((ep, j) => {
-                  const epIdx = rangeStart + j;
-                  const isEpFocused = focus.area === 'episodes' && focus.episodeIndex === epIdx;
-                  const st = episodeStatuses[epIdx];
-                  return (
-                    <div
-                      key={ep.id || epIdx}
-                      className={`vod-ep-tile ${isEpFocused ? 'is-focused' : ''} ${st?.isWatched ? 'is-watched' : ''} ${st?.isCurrent ? 'is-current' : ''}`}
-                      onClick={() => onPlay(currentItem, ep)}
-                    >
-                      {st?.isCurrent && <span className="vod-ep-tile-play">▶</span>}
-                      <span className="vod-ep-tile-num">{ep.number || epIdx + 1}</span>
-                      {st?.isWatched && <span className="vod-ep-tile-check">✓</span>}
-                      {st && !st.isWatched && st.progressPercent > 0 && (
-                        <div className="vod-ep-tile-progress">
-                          <div style={{ width: `${st.progressPercent}%` }} />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
+            <div className="vod-episodes-track-clip">
+              <div className="vod-episodes-slider is-tiles" ref={episodesSliderRef}>
+                {(isLoading || seasonLoading) ? (
+                  [1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                    <div key={`ep-skel-${n}`} className="vod-ep-tile is-skeleton skeleton-shimmer" />
+                  ))
+                ) : loadError ? (
+                  <div className="vod-episodes-empty-card">
+                    <div className="vod-episodes-empty-icon">⚠️</div>
+                    <div className="vod-episodes-empty-text">No se pudieron cargar los episodios. Vuelve a abrir la ficha para reintentar.</div>
+                  </div>
+                ) : episodes.length === 0 ? (
+                  <div className="vod-episodes-empty-card">
+                    <div className="vod-episodes-empty-icon">📺</div>
+                    <div className="vod-episodes-empty-text">No hay episodios disponibles para esta temporada.</div>
+                  </div>
+                ) : (
+                  episodes.slice(rangeStart, rangeStart + EP_RANGE).map((ep, j) => {
+                    const epIdx = rangeStart + j;
+                    const isEpFocused = focus.area === 'episodes' && focus.episodeIndex === epIdx;
+                    const st = episodeStatuses[epIdx];
+                    return (
+                      <div
+                        key={ep.id || epIdx}
+                        className={`vod-ep-tile ${isEpFocused ? 'is-focused' : ''} ${st?.isWatched ? 'is-watched' : ''} ${st?.isCurrent ? 'is-current' : ''}`}
+                        onClick={() => onPlay(currentItem, ep)}
+                      >
+                        {st?.isCurrent && <span className="vod-ep-tile-play">▶</span>}
+                        <span className="vod-ep-tile-num">{ep.number || epIdx + 1}</span>
+                        {st?.isWatched && <span className="vod-ep-tile-check">✓</span>}
+                        {st && !st.isWatched && st.progressPercent > 0 && (
+                          <div className="vod-ep-tile-progress">
+                            <div style={{ width: `${st.progressPercent}%` }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             {/* The focused (or current) episode */}

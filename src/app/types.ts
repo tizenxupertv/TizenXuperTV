@@ -1,5 +1,5 @@
 import { Dispatch, SetStateAction } from 'react';
-import { VodItem, VodEpisode } from '../types/vod';
+import { VodItem, VodEpisode, VodSeason } from '../types/vod';
 
 export type Setter<T> = Dispatch<SetStateAction<T>>;
 
@@ -19,6 +19,8 @@ export interface VodPlayerState {
   seasonNumber?: number;
   /** Episodes of that season, used for "next episode" */
   episodes?: VodEpisode[];
+  /** Full list of seasons of the series */
+  seasons?: VodSeason[];
 }
 
 /** Episodes currently shown in the detail screen (the selected season) */
@@ -27,6 +29,7 @@ export interface DetailEpisodes {
   seasonId?: string;
   seasonNumber?: number;
   activeEpisodeIndex?: number;
+  seasons?: VodSeason[];
 }
 
 export interface LiveLocation {
