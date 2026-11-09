@@ -56,7 +56,9 @@ function prefetchUpcomingSegments(manifestText: string, manifestUrl: string, hea
       segUrls.push(resolveSegmentUrl(line, manifestUrl));
     }
   }
-  const toPrefetch = segUrls.slice(0, 4);
+  // HLS.js plays near the live edge (liveSyncDurationCount 3): the newest segments are the ones it asks for next
+  if (manifestText.includes('#EXT-X-ENDLIST')) return;
+  const toPrefetch = segUrls.slice(-3);
   for (const u of toPrefetch) {
     if (!segCache.has(u)) {
       const item: { buffer?: ArrayBuffer; promise?: Promise<ArrayBuffer> } = {};
@@ -86,6 +88,16 @@ function prefetchUpcomingSegments(manifestText: string, manifestUrl: string, hea
   }
 }
 
+/** Load stats for a segment served from the prefetch cache, in the shape HLS.js 1.x reads (stats.loading.first/end) */
+function cachedStats(loader: any, bytes: number): any {
+  const now = performance.now();
+  const stats = loader.stats || { aborted: false, retry: 0, chunkCount: 0, bwEstimate: 0, loading: {}, parsing: {}, buffering: {} };
+  stats.loading = stats.loading || {};
+  stats.loading.start = stats.loading.first = stats.loading.end = now;
+  stats.loaded = stats.total = bytes;
+  return stats;
+}
+
 /** HLS.js playlist and fragment loader that fixes media sequences and prefetches upcoming segments for instant zapping */
 function liveOptimizedLoader(Hls: any): any {
   const fix = createSequenceFixer();
@@ -97,31 +109,13 @@ function liveOptimizedLoader(Hls: any): any {
         const cached = segCache.get(context.url);
         segCache.delete(context.url);
         if (cached?.buffer) {
-          const stats = {
-            trequest: performance.now(),
-            tfirst: performance.now(),
-            tload: performance.now(),
-            loaded: cached.buffer.byteLength,
-            total: cached.buffer.byteLength,
-            bwEstimate: 0,
-            retry: 0
-          };
-          callbacks.onSuccess({ url: context.url, data: cached.buffer, code: 200 }, stats, context, null);
+          callbacks.onSuccess({ url: context.url, data: cached.buffer, code: 200 }, cachedStats(this, cached.buffer.byteLength), context, null);
           return;
         }
         if (cached?.promise) {
           cached.promise.then(buf => {
             if (buf) {
-              const stats = {
-                trequest: performance.now(),
-                tfirst: performance.now(),
-                tload: performance.now(),
-                loaded: buf.byteLength,
-                total: buf.byteLength,
-                bwEstimate: 0,
-                retry: 0
-              };
-              callbacks.onSuccess({ url: context.url, data: buf, code: 200 }, stats, context, null);
+              callbacks.onSuccess({ url: context.url, data: buf, code: 200 }, cachedStats(this, buf.byteLength), context, null);
             } else {
               super.load(context, config, callbacks);
             }
@@ -563,7 +557,7 @@ class PlayerService {
       try {
         const pLoader = liveOptimizedLoader(window.Hls);
         const hls = window.__xuperCreateHls
-          ? window.__xuperCreateHls({ pLoader })
+          ? window.__xuperCreateHls({ pLoader, fLoader: pLoader })
           : new window.Hls({
               enableWorker: false,
               lowLatencyMode: false,
@@ -606,15 +600,19 @@ class PlayerService {
         });
 
         let selfHealingAuth = false;
+        /** Last 401/403 token refresh: within a minute of it, another 401/403 is a real error (geo or ISP block) */
+        let lastAuthRefreshAt = 0;
 
-        hls.on(window.Hls.Events.ERROR, (event: any, data: any) => {
+        const onHlsError = (event: any, data: any) => {
           console.error('[HLS error]', data.type, data.details, data.fatal);
           const httpCode = data.response && data.response.code ? Number(data.response.code) : 0;
           const status = httpCode ? ` ${httpCode}` : '';
 
           // Self-healing token refresh on HTTP 401/403 during live playback
-          if ((httpCode === 401 || httpCode === 403) && code && !selfHealingAuth && window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
+          if ((httpCode === 401 || httpCode === 403) && code && !selfHealingAuth && Date.now() - lastAuthRefreshAt > 60000 &&
+            window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
             selfHealingAuth = true;
+            lastAuthRefreshAt = Date.now();
             console.log('[PlayerService] Live HTTP ' + httpCode + ' detected, refreshing SLB token...');
             window.MagisClient.resolveLive(code, (rErr: any, newMeta: any) => {
               selfHealingAuth = false;
@@ -631,6 +629,9 @@ class PlayerService {
                 currentSource = nextEffective;
                 hls.loadSource(nextEffective);
                 hls.startLoad();
+              } else {
+                // No new token: handle the original error as usual (backups, retries, the error on screen)
+                onHlsError(event, data);
               }
             });
             return;
@@ -701,7 +702,8 @@ class PlayerService {
               hls.recoverMediaError();
             }
           }
-        });
+        };
+        hls.on(window.Hls.Events.ERROR, onHlsError);
         return;
       } catch (err) {
         console.error('[PlayerService] Error creating Hls:', err);

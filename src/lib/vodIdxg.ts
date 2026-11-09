@@ -26,11 +26,13 @@ const TS_PACKET_SIZE = 188;
 const TS_SYNC_BYTE = 0x47;
 
 /**
- * Aligns a byte offset down to the nearest 188-byte MPEG-TS packet boundary.
+ * Aligns a byte offset down to the nearest 188-byte MPEG-TS packet boundary, counted from `base` (the first
+ * indexed packet), so a file whose packets do not start at byte 0 keeps its real boundaries.
  */
-export function alignTsOffset(offset: number): number {
+export function alignTsOffset(offset: number, base = 0): number {
   if (!Number.isFinite(offset) || offset <= 0) return 0;
-  return offset - (offset % TS_PACKET_SIZE);
+  const from = Number.isFinite(base) && base > 0 && base <= offset ? base : 0;
+  return offset - ((offset - from) % TS_PACKET_SIZE);
 }
 
 /**
@@ -195,9 +197,10 @@ export function parseIdxg(input: ArrayBuffer | Uint8Array, mediaTotal?: number):
   const segments: IdxgSegment[] = [];
 
   for (let i = 0; i < entries.length; i++) {
-    const start = alignTsOffset(entries[i].off);
+    const base = entries[0].off;
+    const start = alignTsOffset(entries[i].off, base);
     const rawNext = i + 1 < entries.length ? entries[i + 1].off : finalTotal;
-    const nextOff = alignTsOffset(rawNext);
+    const nextOff = alignTsOffset(rawNext, base);
     const nextTs = i + 1 < entries.length ? entries[i + 1].ts : entries[i].ts + 1000;
     const length = nextOff - start;
     const duration = Math.max(0.1, (nextTs - entries[i].ts) / 1000);

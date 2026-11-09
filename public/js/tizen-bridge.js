@@ -99,7 +99,19 @@
     };
   }
   if (!Array.from) {
-    Array.from = function (obj) { return Array.prototype.slice.call(obj); };
+    // Iterables (Set, Map) and array-likes ({ length: n }), with the optional map function
+    Array.from = function (obj, mapFn, thisArg) {
+      if (obj == null) throw new TypeError('Array.from requires an array-like or iterable');
+      var out = [];
+      if (typeof Symbol !== 'undefined' && Symbol.iterator && typeof obj[Symbol.iterator] === 'function') {
+        var it = obj[Symbol.iterator](), step;
+        while (!(step = it.next()).done) out.push(step.value);
+      } else {
+        var len = Number(obj.length) || 0;
+        for (var i = 0; i < len; i++) out.push(obj[i]);
+      }
+      return typeof mapFn === 'function' ? out.map(mapFn, thisArg) : out;
+    };
   }
   if (!Object.values) {
     Object.values = function (obj) { return Object.keys(obj).map(function (k) { return obj[k]; }); };
@@ -109,21 +121,20 @@
       return typeof n === 'number' && isFinite(n) && Math.floor(n) === n && Math.abs(n) <= 9007199254740991;
     };
   }
+  // As the standard: a string already at or over the length is returned whole, only the padding is cut
+  function padding(s, n, c) {
+    c = c === undefined ? ' ' : String(c);
+    var need = (n >> 0) - s.length;
+    if (need <= 0 || !c) return '';
+    var pad = '';
+    while (pad.length < need) pad += c;
+    return pad.slice(0, need);
+  }
   if (!String.prototype.padStart) {
-    String.prototype.padStart = function (n, c) {
-      var s = String(this);
-      c = String(c || ' ');
-      while (s.length < n) s = c + s;
-      return s.slice(-n);
-    };
+    String.prototype.padStart = function (n, c) { var s = String(this); return padding(s, n, c) + s; };
   }
   if (!String.prototype.padEnd) {
-    String.prototype.padEnd = function (n, c) {
-      var s = String(this);
-      c = String(c || ' ');
-      while (s.length < n) s = s + c;
-      return s.slice(0, n);
-    };
+    String.prototype.padEnd = function (n, c) { var s = String(this); return s + padding(s, n, c); };
   }
   if (!String.prototype.includes) {
     String.prototype.includes = function (v) { return this.indexOf(v) >= 0; };
