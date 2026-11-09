@@ -6,12 +6,11 @@
  * Server: the TizenXuper Bot Worker (TizenXuper Bot/src/tvApi.ts).
  * No relative imports, so test/accountService.test.ts can load this file in Node.
  */
+export const ACCOUNT_API_RELAY = 'https://tizenxuper-tv.pages.dev';
 export const ACCOUNT_API = 'https://tizenxuper-bot.tizenxupertv.workers.dev';
 export const ACCOUNT_API_FALLBACK = 'https://tizenxuper-bot.juliochemoreno.workers.dev';
-/** Same API on pages.dev (TizenXuper Bot/pages-relay), for internet providers that block *.workers.dev */
-export const ACCOUNT_API_RELAY = 'https://tizenxuper-tv.pages.dev';
-/** Addresses of the TV API, tried in this order */
-export const ACCOUNT_APIS = [ACCOUNT_API, ACCOUNT_API_FALLBACK, ACCOUNT_API_RELAY];
+/** Addresses of the TV API, tried in this order (pages.dev relay first to avoid *.workers.dev ISP bans) */
+export const ACCOUNT_APIS = [ACCOUNT_API_RELAY, ACCOUNT_API, ACCOUNT_API_FALLBACK];
 
 const SESSION_KEY = 'xuper_tg_session_v1';
 const DEVICE_KEY = 'xuper_device_id_v1';
@@ -91,7 +90,7 @@ export function createAccountService(deps: AccountDeps) {
     try { cb(); } catch (e) {}
   });
 
-  const endpoints = deps.endpoints || (typeof window !== 'undefined' ? ACCOUNT_APIS : [ACCOUNT_API]);
+  const endpoints = deps.endpoints || (typeof window !== 'undefined' ? ACCOUNT_APIS : [ACCOUNT_API_RELAY]);
 
   function read(key: string): string | null {
     try { return deps.storage().getItem(key); } catch (e) { return null; }

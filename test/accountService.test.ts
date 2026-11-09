@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ACCOUNT_API, ACCOUNT_APIS, ACCOUNT_API_RELAY, createAccountService, formatCode, isNewerVersion } from '../src/services/accountService.ts';
+import { ACCOUNT_API, ACCOUNT_APIS, ACCOUNT_API_RELAY, ACCOUNT_API_FALLBACK, createAccountService, formatCode, isNewerVersion } from '../src/services/accountService.ts';
 
 interface Sent { url: string; init: RequestInit }
 
@@ -45,7 +45,7 @@ test('sign-in: code, pending, linked saves the session', async () => {
   assert.equal(service.isSignedIn(), false);
 
   const login = await service.startLogin();
-  assert.equal(sent[0].url, `${ACCOUNT_API}/tv/login`);
+  assert.equal(sent[0].url, `${ACCOUNT_API_RELAY}/tv/login`);
   assert.deepEqual(body(sent[0]), { deviceId: 'ab'.repeat(16), version: '1.8.2', model: 'UN50U8000FKXZL' });
   assert.equal(login.expiresAt, 1_000_000 + 300_000);
   assert.equal(login.interval, 4);
@@ -144,7 +144,7 @@ test('logout forgets the session even when the server is unreachable', async () 
   service.subscribe(() => changes++);
   await service.logout();
   assert.equal(service.session(), null);
-  assert.equal(sent.at(-1)!.url, `${ACCOUNT_API}/tv/logout`);
+  assert.equal(sent.at(-1)!.url, `${ACCOUNT_API_RELAY}/tv/logout`);
   assert.equal(changes, 1);
 });
 
@@ -157,7 +157,7 @@ test('sendReport posts the report with the session and maps the answers', async 
   ]);
   const report = { app: '1.9.1', events: [] };
   assert.equal(await service.sendReport(report), 'ok');
-  assert.equal(sent.at(-1)!.url, `${ACCOUNT_API}/tv/report`);
+  assert.equal(sent.at(-1)!.url, `${ACCOUNT_API_RELAY}/tv/report`);
   assert.deepEqual(body(sent.at(-1)!), { report });
   assert.equal((sent.at(-1)!.init.headers as Record<string, string>).Authorization, `Bearer ${'t'.repeat(43)}`);
   assert.equal(await service.sendReport(report), 'too_many');
@@ -183,15 +183,15 @@ test('firmware and model code for the report; nothing outside a TV or when a cal
   assert.equal(tvBuildInfo(), '');
 });
 
-test('sign-in reaches the pages.dev relay when both workers.dev addresses are blocked', async () => {
+test('sign-in falls back through endpoints when earlier ones are blocked', async () => {
   const { service, sent } = harness([new Error('blocked'), new Error('blocked'), { status: 200, body: LOGIN }], ACCOUNT_APIS);
   const login = await service.startLogin();
   assert.equal(login.code, 'ABCD2345');
   assert.deepEqual(sent.map(s => new URL(s.url).origin), ACCOUNT_APIS);
-  assert.equal(new URL(sent[2].url).origin, ACCOUNT_API_RELAY);
+  assert.equal(new URL(sent[2].url).origin, ACCOUNT_API_FALLBACK);
 });
 
-test('a 502 from the fallback also moves on to the relay', async () => {
+test('a 502 from the fallback also moves on to the next endpoint', async () => {
   const { service, sent } = harness([new Error('blocked'), { status: 502 }, { status: 200, body: LOGIN }], ACCOUNT_APIS);
   await service.startLogin();
   assert.equal(sent.length, 3);

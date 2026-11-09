@@ -885,10 +885,23 @@
                 console.log('[XuperAVPlay] resume seek before play failed, retrying after buffering:', seekErr);
                 clearTimeout(safety);
                 startNow();
+                setTimeout(function () {
+                  if ((self._gen || 0) === gen && self._initialSeekSec > 0) {
+                    console.log('[XuperAVPlay] initial seek fallback timeout');
+                    self._initialSeekSec = 0;
+                    self._initialSeekDone(false);
+                  }
+                }, 4500);
               });
             } catch (seekEx) {
               clearTimeout(safety);
               startNow();
+              setTimeout(function () {
+                if ((self._gen || 0) === gen && self._initialSeekSec > 0) {
+                  self._initialSeekSec = 0;
+                  self._initialSeekDone(false);
+                }
+              }, 4500);
             }
             return;
           }
