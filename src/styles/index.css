@@ -8204,6 +8204,11 @@ html.xuper-vod-avplay .app-root,
 .pf-update-bar-title { font-size: 19px; font-weight: 800; color: #ffffff; }
 .pf-update-bar-desc { margin-top: 4px; font-size: 15px; color: #94a3b8; }
 .pf-update-bar-actions { display: flex; gap: 12px; flex-shrink: 0; }
+/* Versiones beta: its own row under the update bar, the switch at the right */
+.pf-row.pf-row-wide.pf-beta-row { margin-top: 14px; width: 100%; }
+html.no-flexgap .pf-row-wide .pf-switch { margin-left: 32px; }
+html.no-flexgap .pf-update-bar-actions .pf-btn + .pf-btn { margin-left: 12px; }
+html.no-flexgap .pf-update-bar-actions { margin-left: 24px; }
 
 .pf-about-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1380px; margin-top: 22px; }
 .pf-about-card { padding: 18px 22px; border-radius: 16px; background: rgba(255, 255, 255, 0.04); }

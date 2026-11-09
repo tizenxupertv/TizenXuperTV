@@ -423,13 +423,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         // Restarting is reloading: the loader then starts the downloaded version (public/js/boot.js)
         r.push([
           { id: 'update-check', onActivate: checkUpdates },
-          ...(st.downloaded ? [{ id: 'update-restart', onActivate: () => window.location.reload() }] : []),
-          // Beta testers: pre-releases too, checked right away
-          { id: 'update-beta', onActivate: () => {
-            updateService.setChannel(updateService.channel() === 'beta' ? 'stable' : 'beta');
-            checkUpdates();
-          } }
+          ...(st.downloaded ? [{ id: 'update-restart', onActivate: () => window.location.reload() }] : [])
         ]);
+        // Beta testers: pre-releases too, checked right away. A row of its own with a switch, like the +18 one
+        r.push([{ id: 'update-beta', onActivate: () => {
+          updateService.setChannel(updateService.channel() === 'beta' ? 'stable' : 'beta');
+          checkUpdates();
+        } }]);
       }
     } else if (id === 'donate') {
       r.push([{ id: 'donate-qr', onActivate: () => {} }]);
@@ -919,15 +919,24 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   Reiniciar para actualizar
                 </div>
               )}
-              <div className={`pf-btn ${isF('update-beta') ? 'is-focused' : ''}`} onClick={tap('update-beta')}>
-                {updateService.channel() === 'beta' ? 'Versiones beta: Sí' : 'Versiones beta: No'}
-              </div>
             </div>
           )}
-          {updateService.status().canSelfUpdate && updateService.channel() === 'beta' && (
-            <div className="pf-note">Recibes las versiones de prueba antes que nadie; pueden tener fallos. Cuéntalos en el grupo Beta de Telegram.</div>
-          )}
         </div>
+        {updateService.status().canSelfUpdate && (
+          <div className={`pf-row pf-row-wide pf-beta-row ${isF('update-beta') ? 'is-focused' : ''}`} onClick={tap('update-beta')}>
+            <div className="pf-row-label">
+              <div className="pf-row-title">Versiones beta</div>
+              <div className="pf-row-desc">
+                {updateService.channel() === 'beta'
+                  ? 'Activadas: recibes las versiones de prueba antes que nadie; pueden tener fallos. Cuéntalos en el grupo Beta de Telegram.'
+                  : 'Desactivadas: solo recibes las versiones estables.'}
+              </div>
+            </div>
+            <div className={`pf-switch ${updateService.channel() === 'beta' ? 'on' : 'off'}`}>
+              <span className="pf-switch-knob" />
+            </div>
+          </div>
+        )}
       </div>
     );
   };
