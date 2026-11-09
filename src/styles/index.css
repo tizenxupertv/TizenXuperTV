@@ -8157,7 +8157,7 @@ html.xuper-vod-avplay .app-root,
 
 /* Perfil › Sobre nosotros: update actions and the Telegram QR codes */
 .pf-about-actions { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
-.pf-tg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1380px; margin-top: 16px; }
+.pf-tg-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 1440px; margin-top: 16px; }
 .pf-tg-card {
   display: flex;
   align-items: center;
