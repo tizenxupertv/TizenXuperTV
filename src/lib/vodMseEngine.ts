@@ -8,6 +8,7 @@
  * AVPlay stays as the fallback (the player switches to it when anything here fails).
  */
 import { buildVodTsPlaylist, groupIdxgSegments, parseContentRangeTotal, parseIdxg } from './vodIdxg.ts';
+import { backBufferFor } from './tvMemory.ts';
 
 /** Fake address of the generated playlist: the playlist loader answers it from memory */
 export const MSE_PLAYLIST_URL = 'https://xuper-vod.invalid/playlist.m3u8';
@@ -118,14 +119,14 @@ export function playlistLoader(Hls: any, playlist: string): any {
   };
 }
 
-/** hls.js settings for VOD on TVs: ~20 s ahead, ~20 s kept behind (the rest is freed), resume at `startAt` */
+/** hls.js settings for VOD on TVs: ~20 s ahead, ~20 s kept behind (10 s on 1 GB TVs; the rest is freed), resume at `startAt` */
 export function mseHlsConfig(Hls: any, playlist: string, startAt: number): Record<string, unknown> {
   return {
     pLoader: playlistLoader(Hls, playlist),
     startPosition: startAt > 5 ? startAt : -1,
     maxBufferLength: 20,
     maxMaxBufferLength: 30,
-    backBufferLength: 20,
+    backBufferLength: backBufferFor(20),
     fragLoadingTimeOut: 15000,
     fragLoadingMaxRetry: 4
   };
