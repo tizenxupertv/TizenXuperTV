@@ -233,7 +233,10 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
 
   return (
     <div className="tg-login">
-      <div className="tg-login-brand"><BrandLogo /></div>
+      <div className="tg-login-brand">
+        <BrandLogo />
+        <span className="tg-login-version">Versión {__APP_VERSION__}</span>
+      </div>
       <div className="tg-login-body">
         {/* Left Column: QR Card, Placeholder Skeleton, or Error/Expired Card */}
         <div className="tg-login-left-col">
