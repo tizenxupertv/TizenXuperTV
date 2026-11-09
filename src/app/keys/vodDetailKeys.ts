@@ -1,15 +1,14 @@
 import { TvKey } from '../../hooks/useTvRemote';
 import { favoritesService } from '../../services/favoritesService';
-import { settingsService, subtitleChoiceIndex, applySettingChoice, SETTINGS_ROW, QUALITY_OPTIONS } from '../../services/settingsService';
-import { VodDetailFocus, AUDIO_OPTIONS, SUB_OPTIONS, EP_RANGE } from '../../views/VodDetailView';
-import { VodItem, VodEpisode, PersonDetail, parseCastFromVodItem } from '../../types/vod';
+import { settingsService, subtitleChoiceIndex, applySettingChoice, SETTINGS_ROW, QUALITY_OPTIONS, PREFERRED_LANGUAGES } from '../../services/settingsService';
+import { VodDetailFocus, VodItem, VodEpisode, PersonDetail, parseCastFromVodItem, EP_RANGE } from '../../types/vod';
 import { DetailCounts } from '../useVodDetail';
 import { Setter, VodPlayerState, DetailEpisodes } from '../types';
 import { effectiveChoice, titleChoices, type TitleChoices } from '../../lib/titleOptions';
 
 /** What the settings list offers: the title's own options, or all of them while they are unknown */
 export function settingChoices(counts: DetailCounts): TitleChoices {
-  return counts.choices || titleChoices(null, AUDIO_OPTIONS.length, QUALITY_OPTIONS, { matches: () => false, name: () => '' });
+  return counts.choices || titleChoices(null, PREFERRED_LANGUAGES.length, QUALITY_OPTIONS, { matches: () => false, name: () => '' });
 }
 
 /** Position, inside the options shown for `col`, of the choice that applies now (the first one when the profile's is missing) */
@@ -63,16 +62,70 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
     return false; // let PersonDetailModal useScreenKeys handle other navigation
   }
 
-  // When SynopsisModal is active, navigate cast or close with back
+  // When SynopsisModal is active, navigate between close button, text, and cast grid
   if (detailFocus.showSynopsisModal) {
     if (key === 'back') {
-      setDetailFocus(prev => ({ ...prev, showSynopsisModal: false, area: 'quick', quickIndex: 1 }));
+      setDetailFocus(prev => ({
+        ...prev,
+        showSynopsisModal: false,
+        synopsisModalArea: undefined,
+        area: 'quick',
+        quickIndex: 1
+      }));
       return true;
     }
 
     const pool = detailCast.length > 0 ? detailCast : parseCastFromVodItem(activeDetailItem);
     const totalCast = pool.length;
+    const modalArea: 'close' | 'text' | 'cast' = detailFocus.synopsisModalArea || (totalCast > 0 ? 'cast' : 'text');
 
+    if (modalArea === 'close') {
+      if (key === 'down') {
+        setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'text' }));
+        return true;
+      }
+      if (key === 'enter') {
+        setDetailFocus(prev => ({
+          ...prev,
+          showSynopsisModal: false,
+          synopsisModalArea: undefined,
+          area: 'quick',
+          quickIndex: 1
+        }));
+        return true;
+      }
+      return true;
+    }
+
+    if (modalArea === 'text') {
+      if (key === 'up') {
+        setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'close' }));
+        return true;
+      }
+      if (key === 'down') {
+        if (totalCast > 0) {
+          setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'cast', castIndex: 0 }));
+        }
+        return true;
+      }
+      if (key === 'enter') {
+        if (totalCast > 0) {
+          setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'cast', castIndex: 0 }));
+        } else {
+          setDetailFocus(prev => ({
+            ...prev,
+            showSynopsisModal: false,
+            synopsisModalArea: undefined,
+            area: 'quick',
+            quickIndex: 1
+          }));
+        }
+        return true;
+      }
+      return true;
+    }
+
+    // modalArea === 'cast'
     if (totalCast > 0) {
       const ci = Math.min(totalCast - 1, Math.max(0, detailFocus.castIndex ?? 0));
       const COLS = 3;
@@ -88,11 +141,18 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
       if (key === 'up') {
         if (ci >= COLS) {
           setDetailFocus(prev => ({ ...prev, castIndex: Math.max(0, ci - COLS) }));
+        } else {
+          // Top row: go back up to synopsis text
+          setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'text' }));
         }
         return true;
       }
       if (key === 'down') {
-        setDetailFocus(prev => ({ ...prev, castIndex: Math.min(totalCast - 1, ci + COLS) }));
+        if (ci + COLS < totalCast) {
+          setDetailFocus(prev => ({ ...prev, castIndex: ci + COLS }));
+        } else if (ci < totalCast - 1 && Math.floor(ci / COLS) < Math.floor((totalCast - 1) / COLS)) {
+          setDetailFocus(prev => ({ ...prev, castIndex: totalCast - 1 }));
+        }
         return true;
       }
       if (key === 'enter') {
@@ -103,8 +163,18 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
         return true;
       }
     } else {
+      if (key === 'up') {
+        setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'close' }));
+        return true;
+      }
       if (key === 'enter') {
-        setDetailFocus(prev => ({ ...prev, showSynopsisModal: false, area: 'quick', quickIndex: 1 }));
+        setDetailFocus(prev => ({
+          ...prev,
+          showSynopsisModal: false,
+          synopsisModalArea: undefined,
+          area: 'quick',
+          quickIndex: 1
+        }));
         return true;
       }
     }
@@ -190,7 +260,12 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
       return true;
     }
     if (key === 'enter') {
-      setDetailFocus(prev => ({ ...prev, showSynopsisModal: true, castIndex: 0 }));
+      setDetailFocus(prev => ({
+        ...prev,
+        showSynopsisModal: true,
+        synopsisModalArea: 'text',
+        castIndex: 0
+      }));
       return true;
     }
     return true;
@@ -254,7 +329,15 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
     if (key === 'enter') {
       const q = quick[qi];
       if (q === 'fav') favoritesService.toggleFavorite(activeDetailItem.id, activeDetailItem);
-      else if (q === 'info') setDetailFocus(prev => ({ ...prev, showSynopsisModal: true, castIndex: 0 }));
+      else if (q === 'info') {
+        const pool = detailCast.length > 0 ? detailCast : parseCastFromVodItem(activeDetailItem);
+        setDetailFocus(prev => ({
+          ...prev,
+          showSynopsisModal: true,
+          synopsisModalArea: pool.length > 0 ? 'cast' : 'text',
+          castIndex: 0
+        }));
+      }
       else if (q === 'settings') setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: 0 }));
       else if (q === 'trailer') playFromDetail(activeDetailItem, undefined, true);
       return true;
