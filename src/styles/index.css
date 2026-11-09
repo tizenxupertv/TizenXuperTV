@@ -8982,3 +8982,7 @@ html.xuper-vod-avplay .app-root,
   .filter-grid .svc-poster-wrap { height: auto; padding-top: 0; }
   .filter-grid .svc-poster-wrap .svc-poster { position: static; }
 }
+
+/* The splash in index.html uses inset (Chromium 87+): older engines get the same box from the app's styles, which
+   travel in the self-update (index.html is part of the installed shell) */
+#xuper-splash { top: 0; right: 0; bottom: 0; left: 0; }
