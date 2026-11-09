@@ -371,6 +371,8 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     setMedia(null);
     const client = (window as any).MagisClient;
     if (!playableId || !client || typeof client.mediaOptions !== 'function') return;
+    // The CDN token too, so Play finds everything ready
+    if (typeof client.warmSlb === 'function') client.warmSlb();
     let cancelled = false;
     client.mediaOptions(playableId, playableSeries, (err: any, m: TitleMedia) => {
       if (!cancelled && !err && m) setMedia(m);

@@ -746,22 +746,36 @@
   }
 
   var slbCache = null;
+  var slbWaiters = null;
   function getSlb(callback) {
     if (slbCache && Date.now() < slbCache.at + SLB_TTL) {
       return callback(null, slbCache.slb);
     }
+    // A request already on its way (warmSlb, or resolve asking early): wait for it instead of asking again
+    if (slbWaiters) return slbWaiters.push(callback);
+    slbWaiters = [callback];
+    function done(err, slb) {
+      var waiters = slbWaiters || [];
+      slbWaiters = null;
+      for (var i = 0; i < waiters.length; i++) waiters[i](err, slb);
+    }
     call('v15/getSlbInfo', slbBean(), function (err1, res1) {
       if (!err1 && vodCdns(res1).length) {
         slbCache = { at: Date.now(), slb: res1 };
-        return callback(null, res1);
+        return done(null, res1);
       }
       call('v14/getSlbInfo', slbBean(), function (err2, res2) {
-        if (err2) return callback(err2);
-        if (!vodCdns(res2).length) return callback(new Error('No free VOD CDN found'));
+        if (err2) return done(err2);
+        if (!vodCdns(res2).length) return done(new Error('No free VOD CDN found'));
         slbCache = { at: Date.now(), slb: res2 };
-        callback(null, res2);
+        done(null, res2);
       });
     });
+  }
+
+  /** Asks the CDN token ahead (on a title's page), so pressing Play waits only for the title itself */
+  function warmSlb() {
+    getSlb(function () {});
   }
 
   function collectTracks(episode) {
@@ -930,6 +944,8 @@
     }
     opts = opts || {};
 
+    // The CDN token does not depend on the title: ask it now, while the title loads
+    warmSlb();
     loadPlay(contentId, seriesContentId, function (err, res) {
       if (err) return callback(err);
       var play = res.play;
@@ -2208,6 +2224,7 @@
   window.MagisClient = {
     ensureSession: ensureSession,
     resolve: resolve,
+    warmSlb: warmSlb,
     mediaInfo: mediaInfo,
     mediaOptions: mediaOptions,
     detail: detail,

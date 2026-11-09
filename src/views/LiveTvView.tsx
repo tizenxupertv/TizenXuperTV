@@ -336,7 +336,20 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   useEffect(() => {
     const box = previewBoxRef.current;
     const av = (window as any).XuperAVPlay;
-    if (!box || !av || typeof (window as any).ResizeObserver !== 'function') return;
+    if (!box || !av) return;
+    if (typeof (window as any).ResizeObserver !== 'function') {
+      // Older TVs: check the box once a second instead
+      let last = '';
+      const poll = setInterval(() => {
+        const r = box.getBoundingClientRect();
+        const now = `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`;
+        if (now !== last) {
+          last = now;
+          if (av.isPreviewActive) av.syncDisplayRect();
+        }
+      }, 1000);
+      return () => clearInterval(poll);
+    }
     let frame = 0;
     const ro = new (window as any).ResizeObserver(() => {
       cancelAnimationFrame(frame);

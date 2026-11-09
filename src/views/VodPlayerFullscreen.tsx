@@ -159,6 +159,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   // Resuming at the saved position: until the TV confirms that seek, its time (0:00, 0:10…) is not the
   // viewer's and must never be saved over the saved position
   const resumePendingRef = useRef(false);
+  /** When this play started and when the portal answered, to log how long the first frame took */
+  const startTimingRef = useRef<{ at: number; resolvedAt: number; logged: boolean } | null>(null);
   const lastTokenRenewalRef = useRef<number>(Date.now());
   /** How long a seek may take before the timeline shows the TV's time again */
   const SEEK_SAFETY_MS = 6000;
@@ -468,6 +470,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       video.onplaying = () => {
         console.log('[VodPlayer] AVPlay playing');
         if (!isCurrent()) return;
+        const timing = startTimingRef.current;
+        if (timing && !timing.logged && !isTrailer) {
+          timing.logged = true;
+          const now = Date.now();
+          logPlayback({ kind: 'start', player: 'AVPlay', detail: `inicio ${now - timing.at} ms (portal ${timing.resolvedAt - timing.at} ms, TV ${now - timing.resolvedAt} ms)` });
+        }
         setIsBuffering(false);
         setIsPlaying(true);
       };
@@ -512,6 +520,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
     const onResolved = (err: any, res: any) => {
       if (!isCurrent()) return; // the user already left or chose another episode
+      if (startTimingRef.current && !startTimingRef.current.resolvedAt) startTimingRef.current.resolvedAt = Date.now();
       if (err || !res || !res.url) {
         failed((err && err.message) || 'No se pudo obtener el video del portal.');
         return;
@@ -578,6 +587,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       }
     };
 
+    startTimingRef.current = { at: Date.now(), resolvedAt: 0, logged: false };
     window.MagisClient.resolve(contentId, seasonId, { trackIndex: portalTrackRef.current }, onResolved);
 
     return () => {
@@ -796,7 +806,11 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         // The timeline keeps the target until the TV confirms the seek (it can take several seconds on older
         // TVs); with a fixed 2.5 s it jumped back to the old position while the TV was still seeking
         if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + SEEK_SAFETY_MS;
+        const seekAt = Date.now();
         window.XuperAVPlay.seekTo(target, () => {
+          // Slow seeks go to the playback log, to compare TVs
+          const took = Date.now() - seekAt;
+          if (took > 1500) logPlayback({ kind: 'stall', player: 'AVPlay', detail: `seek ${Math.round(target)} s tardó ${took} ms` });
           if (pendingSeekRef.current && pendingSeekRef.current.target === target) pendingSeekRef.current.until = Date.now() + 2000;
           onSeekDone();
         }, (err: any) => {
