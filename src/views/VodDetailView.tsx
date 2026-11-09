@@ -381,7 +381,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   ];
   const hasTrailer = Boolean(currentItem.trailerUrl || (currentItem as any).trailer);
   // Round buttons after Reproducir, in the same row
-  const quickItems: ('fav' | 'settings' | 'trailer')[] = ['fav', 'settings', ...(hasTrailer ? ['trailer' as const] : [])];
+  const quickItems: ('fav' | 'info' | 'settings' | 'trailer')[] = ['fav', 'info', 'settings', ...(hasTrailer ? ['trailer' as const] : [])];
 
   // Parent callbacks are new functions on every render: keep the latest in refs so the
   // effects below only fire when the data changes (otherwise they loop forever)
@@ -397,7 +397,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         seasonsCount: seasons.length || (isSeries ? 1 : 0),
         episodesCount: episodes.length,
         relatedCount: relatedItems.length,
-        castCount: effectiveCast.length,
+        castCount: 0,
         isSeries,
         hasTrailer,
         choices
@@ -660,6 +660,25 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                 </div>
               );
             }
+            if (q === 'info') {
+              return (
+                <button
+                  key={q}
+                  className={`vod-quick-btn ${focused ? 'is-focused' : ''}`}
+                  onClick={() => setLocalSynopsisModal(true)}
+                  aria-label="Informacion y Reparto"
+                >
+                  <span className="vod-quick-circle">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </span>
+                  {focused && <span className="vod-quick-label">Info</span>}
+                </button>
+              );
+            }
             if (q === 'fav') {
               return (
                 <button
@@ -803,59 +822,6 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
           </section>
         )}
 
-        {/* Cast & Crew Section */}
-        {effectiveCast.length > 0 && (
-          <section className="vod-detail-cast-section" ref={castSectionRef}>
-            <h2 className="section-title">Reparto y Equipo</h2>
-            <div className="vod-cast-slider" ref={castSliderRef}>
-              {effectiveCast.map((p, pIdx) => {
-                const isCastFocused = focus.area === 'cast' && (focus.castIndex ?? 0) === pIdx;
-                return (
-                  <div
-                    key={p.puId || `${p.name}-${pIdx}`}
-                    className={`poster-card apple-poster-card vod-cast-card ${isCastFocused ? 'is-focused' : ''}`}
-                    tabIndex={0}
-                    role="button"
-                    onClick={() => {
-                      if (onSelectPerson) onSelectPerson(p);
-                      else setSelectedPerson(p);
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        if (onSelectPerson) onSelectPerson(p);
-                        else setSelectedPerson(p);
-                      }
-                    }}
-                  >
-                    <div className="poster-card-img">
-                      {p.icon ? (
-                        <img
-                          className="poster-card-img-element is-loaded"
-                          src={p.icon}
-                          alt={p.name}
-                          loading="lazy"
-                          onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
-                        />
-                      ) : null}
-                      <div className="vod-cast-poster-placeholder">
-                        <svg className="vod-cast-person-icon" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                          <circle cx="12" cy="7" r="4" />
-                        </svg>
-                      </div>
-                      <div className="poster-bottom-vignette">
-                        <div className="poster-vignette-title">{p.name}</div>
-                        <div className="poster-vignette-genre">{p.personType === 1 ? 'Director' : 'Reparto'}</div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
         {/* Recommended / Similar Titles Row */}
         {relatedItems && relatedItems.length > 0 && (
           <section className="vod-detail-related-section">
@@ -946,6 +912,52 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                 </div>
                 <div className="synopsis-modal-body">
                   <p className="synopsis-modal-text">{currentItem.synopsis}</p>
+
+                  {/* Reparto y Equipo inside the dialog */}
+                  {effectiveCast.length > 0 && (
+                    <div className="synopsis-modal-cast-section">
+                      <h3 className="synopsis-modal-cast-title">Reparto y Equipo</h3>
+                      <div className="synopsis-modal-cast-grid">
+                        {effectiveCast.map((p, pIdx) => (
+                          <div
+                            key={p.puId || `${p.name}-${pIdx}`}
+                            className="synopsis-modal-cast-card"
+                            role="button"
+                            onClick={() => {
+                              if (onSelectPerson) onSelectPerson(p);
+                              else setSelectedPerson(p);
+                            }}
+                          >
+                            <div className="synopsis-modal-cast-avatar">
+                              {p.icon ? (
+                                <img
+                                  src={p.icon}
+                                  alt={p.name}
+                                  loading="lazy"
+                                  onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                                />
+                              ) : null}
+                              <svg className="synopsis-modal-cast-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                <circle cx="12" cy="7" r="4" />
+                              </svg>
+                            </div>
+                            <div className="synopsis-modal-cast-meta">
+                              <span className="synopsis-modal-cast-name">{p.name}</span>
+                              <span className="synopsis-modal-cast-role">{p.personType === 1 ? 'Director' : 'Reparto'}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {effectiveCast.length === 0 && (currentItem.director || currentItem.actors) && (
+                    <div className="synopsis-modal-crew-text">
+                      {currentItem.director && <div><span className="crew-label">Director:</span> {currentItem.director}</div>}
+                      {currentItem.actors && <div><span className="crew-label">Reparto:</span> {currentItem.actors}</div>}
+                    </div>
+                  )}
                 </div>
                 <div className="synopsis-modal-footer">
                   <span>Presiona <b>[Atrás]</b> o <b>[OK]</b> para cerrar</span>
