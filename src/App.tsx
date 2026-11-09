@@ -223,7 +223,7 @@ export const App: React.FC = () => {
       return;
     }
     const entry = historyService.getEntry(item.id);
-    const { episodes, seasonId, seasonNumber } = detailEpisodes;
+    const { episodes, seasonId, seasonNumber, seasons } = detailEpisodes;
     const target = episode
       ? { episode, startAt: startAtForEpisode(episode, entry) }
       : getResumeTarget(item, episodes, entry, seasonNumber, seasonId);
@@ -233,7 +233,8 @@ export const App: React.FC = () => {
       startAt: target.startAt,
       seriesId: seasonId,
       seasonNumber,
-      episodes
+      episodes,
+      seasons: seasons || item.seasons || []
     });
   };
 
@@ -962,7 +963,13 @@ export const App: React.FC = () => {
           seriesId={activeVodPlayer.seriesId}
           seasonNumber={activeVodPlayer.seasonNumber}
           episodes={activeVodPlayer.episodes}
-          onPlayEpisode={ep => setActiveVodPlayer(prev => (prev ? { ...prev, episode: ep, startAt: 0 } : prev))}
+          seasons={activeVodPlayer.seasons}
+          onPlayEpisode={(ep, newSeasonNum) => setActiveVodPlayer(prev => (prev ? {
+            ...prev,
+            episode: ep,
+            seasonNumber: newSeasonNum !== undefined ? newSeasonNum : prev.seasonNumber,
+            startAt: 0
+          } : prev))}
           onClose={() => setActiveVodPlayer(null)}
         />
       )}

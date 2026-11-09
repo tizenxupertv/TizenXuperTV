@@ -5282,6 +5282,19 @@ html.xuper-vod-avplay .app-root,
   font-size: 15px;
   font-weight: 700;
   color: #ffffff;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.vp-episodes-season-pill.is-focused {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #000000 !important;
+  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.4);
+}
+
+.vp-episodes-season-pill.is-focused .vp-episodes-season-arrow {
+  color: #000000 !important;
+  opacity: 1 !important;
 }
 
 .vp-episodes-season-arrow {
@@ -5295,21 +5308,28 @@ html.xuper-vod-avplay .app-root,
   gap: 10px;
   font-size: 17px;
   color: #ffffff;
+  max-width: 60%;
+  overflow: hidden;
 }
 
 .vp-episodes-caption-num {
   font-weight: 800;
   color: rgba(255, 255, 255, 0.9);
+  flex-shrink: 0;
 }
 
 .vp-episodes-caption-title {
   font-weight: 600;
   color: #ffffff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .vp-episodes-caption-meta {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
 }
 
 .vp-episodes .vod-ep-ranges-clip {
@@ -5353,19 +5373,26 @@ html.xuper-vod-avplay .app-root,
   overflow: hidden;
   padding: 4px 0 6px;
   box-sizing: border-box;
+  position: relative;
 }
 
 .vp-episodes-track .vod-episodes-slider.is-tiles {
   display: flex;
   gap: 12px;
-  padding: 0;
+  padding: 4px 0 6px !important;
   transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1);
   box-sizing: border-box;
+  width: max-content !important;
+  min-width: 100%;
+  flex-wrap: nowrap;
 }
 
 .vp-episodes .vod-ep-tile {
-  flex: 0 0 132px;
-  width: 132px;
+  flex: 0 0 132px !important;
+  min-width: 132px !important;
+  max-width: 132px !important;
+  width: 132px !important;
+  flex-shrink: 0 !important;
   height: 80px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.08);
@@ -6876,9 +6903,33 @@ html.xuper-vod-avplay .app-root,
 
 /* Long lists (seasons) scroll inside the dropdown */
 .vod-action-menu.is-scrollable {
-  max-height: 60vh;
+  max-height: 380px;
   overflow-y: auto;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+  z-index: 100;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
+}
+
+.vod-action-menu.is-scrollable::-webkit-scrollbar {
+  width: 6px;
+  display: block;
+}
+
+.vod-action-menu.is-scrollable::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.vod-action-menu.is-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+}
+
+.vod-episodes-track-clip {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
 }
 
 /* ⚙ settings list of the detail (two levels) */
