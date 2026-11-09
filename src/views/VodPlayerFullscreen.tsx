@@ -930,7 +930,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         return;
       }
       if (isFastForward || isRewind) {
-        holdSeek(isFastForward ? 1 : -1, e.repeat);
+        setFocusArea('center');
+        setCenterIndex(isFastForward ? 2 : 0);
+        seekBy(isFastForward ? 10 : -10);
+        triggerOsd();
         return;
       }
 
@@ -995,8 +998,9 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           return;
         }
         if (isLeft || isRight) {
-          setFocusArea('timeline');
-          holdSeek(isRight ? 1 : -1, e.repeat);
+          triggerOsd();
+          setFocusArea('center');
+          setCenterIndex(isLeft ? 0 : 2);
           return;
         }
         setFocusArea('center');
@@ -1236,10 +1240,16 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         return;
       }
 
-      // Focus Area 3: Timeline Progress Bar (Direct scrubbing with ◄ ►)
+      // Focus Area 3: Timeline Progress Bar (Select on-screen jump buttons with ◄ ►)
       if (focusArea === 'timeline') {
-        if (isLeft || isRight) {
-          holdSeek(isRight ? 1 : -1, e.repeat);
+        if (isLeft) {
+          setFocusArea('center');
+          setCenterIndex(0);
+          return;
+        }
+        if (isRight) {
+          setFocusArea('center');
+          setCenterIndex(2);
           return;
         }
         if (isEnter) {
@@ -1412,11 +1422,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           <div
             className={`vp-round ${focusArea === 'center' && centerIndex === 0 ? 'is-focused' : ''}`}
             onClick={() => seekBy(-10)}
-            title="Retroceder"
+            title="Retroceder 10s"
           >
-            <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true">
               <path d="M11 6 4 12l7 6V6Z M21 6l-7 6 7 6V6Z" />
             </svg>
+            <span style={{ fontSize: 13, fontWeight: 800, marginTop: 2 }}>-10s</span>
           </div>
           <div
             className={`vp-round vp-play ${focusArea === 'center' && centerIndex === 1 ? 'is-focused' : ''}`}
@@ -1437,11 +1448,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           <div
             className={`vp-round ${focusArea === 'center' && centerIndex === 2 ? 'is-focused' : ''}`}
             onClick={() => seekBy(10)}
-            title="Adelantar"
+            title="Adelantar 10s"
           >
-            <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true">
               <path d="m3 6 7 6-7 6V6Z m10 0 7 6-7 6V6Z" />
             </svg>
+            <span style={{ fontSize: 13, fontWeight: 800, marginTop: 2 }}>+10s</span>
           </div>
         </div>}
 

@@ -66,7 +66,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
   // When SynopsisModal is active, back or enter closes it
   if (detailFocus.showSynopsisModal) {
     if (key === 'back' || key === 'enter') {
-      setDetailFocus(prev => ({ ...prev, showSynopsisModal: false, area: 'synopsis' }));
+      setDetailFocus(prev => ({ ...prev, showSynopsisModal: false, area: 'quick', quickIndex: 1 }));
       return true;
     }
     return true;
@@ -79,9 +79,9 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
   const relatedCount = currentRelatedItems.length;
   const castCount = detailCast.length || detailCounts.castCount || 0;
   const hasTrailer = Boolean(detailCounts.hasTrailer || activeDetailItem.trailerUrl || (activeDetailItem as any).trailer);
-  // One row: Reproducir ('actions'), then the round buttons ('quick'): Mi lista, Ajustes, Tráiler
-  const quick: ('fav' | 'settings' | 'trailer')[] = ['fav', 'settings', ...(hasTrailer ? ['trailer' as const] : [])];
-  const SETTINGS_QUICK = 1;
+  // One row: Reproducir ('actions'), then the round buttons ('quick'): Mi lista, Info, Ajustes, Tráiler
+  const quick: ('fav' | 'info' | 'settings' | 'trailer')[] = ['fav', 'info', 'settings', ...(hasTrailer ? ['trailer' as const] : [])];
+  const SETTINGS_QUICK = 2;
   const rangeCount = Math.ceil(episodesCount / EP_RANGE);
 
   // Settings list under the ⚙ button: first level Audio / Subtítulos / Resolución, then their options
@@ -215,6 +215,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
     if (key === 'enter') {
       const q = quick[qi];
       if (q === 'fav') favoritesService.toggleFavorite(activeDetailItem.id, activeDetailItem);
+      else if (q === 'info') setDetailFocus(prev => ({ ...prev, showSynopsisModal: true }));
       else if (q === 'settings') setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: 0 }));
       else if (q === 'trailer') playFromDetail(activeDetailItem, undefined, true);
       return true;
