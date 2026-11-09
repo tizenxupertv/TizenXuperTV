@@ -1422,12 +1422,11 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           <div
             className={`vp-round ${focusArea === 'center' && centerIndex === 0 ? 'is-focused' : ''}`}
             onClick={() => seekBy(-10)}
-            title="Retroceder 10s"
+            title="Retroceder"
           >
-            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor" aria-hidden="true">
               <path d="M11 6 4 12l7 6V6Z M21 6l-7 6 7 6V6Z" />
             </svg>
-            <span style={{ fontSize: 13, fontWeight: 800, marginTop: 2 }}>-10s</span>
           </div>
           <div
             className={`vp-round vp-play ${focusArea === 'center' && centerIndex === 1 ? 'is-focused' : ''}`}
@@ -1448,12 +1447,11 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           <div
             className={`vp-round ${focusArea === 'center' && centerIndex === 2 ? 'is-focused' : ''}`}
             onClick={() => seekBy(10)}
-            title="Adelantar 10s"
+            title="Adelantar"
           >
-            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor" aria-hidden="true">
               <path d="m3 6 7 6-7 6V6Z m10 0 7 6-7 6V6Z" />
             </svg>
-            <span style={{ fontSize: 13, fontWeight: 800, marginTop: 2 }}>+10s</span>
           </div>
         </div>}
 
