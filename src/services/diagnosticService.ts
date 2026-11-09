@@ -350,11 +350,11 @@ export async function runLoginDiagnostic(deps?: LoginDiagDeps): Promise<LoginDia
   } else if (!workersOk && !relayOk) {
     verdict = 'all-blocked';
     headline = 'Bloqueo de servidores por tu proveedor de internet';
-    recommendation = 'Tu operador bloquea los servidores de Cloudflare o la resolución DNS. Ve a Configuración › General › Red › Estado de la red › Configuración de IP, cambia la DNS a manual y escribe 1.1.1.1 u 8.8.8.8.';
+    recommendation = 'Tu operador bloquea los servidores de Cloudflare o la resolución DNS. Ve a Configuración › General › Red › Estado de la red › Configuración de IP, cambia la DNS a manual y escribe 1.1.1.1 u 8.8.8.8. Otra opción: inicia sesión una vez con los datos del móvil (Zona Wi-Fi personal) y después vuelve a tu Wi-Fi: la sesión queda guardada en la TV.';
   } else if (!dohOk) {
     verdict = 'workers-blocked';
     headline = 'Filtro o bloqueo DNS detectado';
-    recommendation = 'El servidor DNS de tu proveedor está filtrando peticiones. Te recomendamos cambiar el DNS de la TV a 1.1.1.1 en Configuración de red.';
+    recommendation = 'El servidor DNS de tu proveedor está filtrando peticiones. Te recomendamos cambiar el DNS de la TV a 1.1.1.1 en Configuración de red. Otra opción: inicia sesión una vez con los datos del móvil (Zona Wi-Fi personal) y después vuelve a tu Wi-Fi: la sesión queda guardada en la TV.';
   }
 
   return {
