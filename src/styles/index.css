@@ -8986,3 +8986,27 @@ html.xuper-vod-avplay .app-root,
 /* The splash in index.html uses inset (Chromium 87+): older engines get the same box from the app's styles, which
    travel in the self-update (index.html is part of the installed shell) */
 #xuper-splash { top: 0; right: 0; bottom: 0; left: 0; }
+
+/* Sign-in screen on engines without flex gap (html.no-flexgap, set by public/js/tizen-bridge.js on Tizen 6.0 and
+   older): the same spacing as margins, so the card, the steps, the notice and the buttons do not touch */
+html.no-flexgap .tg-login-body > * + * { margin-left: 64px; }
+html.no-flexgap .tg-login-left-col > * + * { margin-top: 14px; }
+html.no-flexgap .tg-login-placeholder-card > * + * { margin-top: 18px; }
+html.no-flexgap .tg-login-skeleton-card > * + * { margin-top: 20px; }
+html.no-flexgap .tg-login-timer > * + * { margin-left: 8px; }
+html.no-flexgap .tg-login-timeline-item > * + * { margin-left: 16px; }
+html.no-flexgap .tg-login-notice-content > * + * { margin-top: 3px; }
+html.no-flexgap .tg-login-notice-desc > * { margin-right: 8px; }
+html.no-flexgap .tg-login-btn-row > * + * { margin-left: 16px; }
+html.no-flexgap .tg-login-help-steps > * + * { margin-top: 18px; }
+html.no-flexgap .tg-login-help-item > * + * { margin-left: 16px; }
+html.no-flexgap .tg-login-diag-checks > * + * { margin-top: 10px; }
+html.no-flexgap .tg-login-diag-check-item > * + * { margin-left: 14px; }
+html.no-flexgap .tg-login-diag-check-info > * + * { margin-top: 2px; }
+html.no-flexgap .tg-login-diag-verdict-box > * + * { margin-top: 6px; }
+html.no-flexgap .tg-login-diag-verdict-title > * + * { margin-left: 8px; }
+html.no-flexgap .tg-login-diag-footer > * + * { margin-left: 14px; }
+
+/* Version on the sign-in screen: support can tell at a glance what a TV runs, even before it signs in */
+.tg-login-brand { position: relative; }
+.tg-login-version { position: absolute; top: 34px; right: 48px; font-size: 15px; font-weight: 600; color: var(--text-dim); }
