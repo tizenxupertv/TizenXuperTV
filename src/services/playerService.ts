@@ -35,17 +35,113 @@ const REFRESH_RETRY_MS = 1500;
 /** Refresh retries count within this window, so a server that keeps failing ends up on the backups */
 const REFRESH_WINDOW_MS = 60000;
 
-/** HLS.js playlist loader that renumbers live playlists whose server shifts the media sequence (src/lib/mediaSequence.ts) */
-function sequenceFixingLoader(Hls: any): any {
+const segCache = new Map<string, { buffer?: ArrayBuffer; promise?: Promise<ArrayBuffer> }>();
+
+function resolveSegmentUrl(uri: string, baseUrl: string): string {
+  try {
+    return new URL(uri, baseUrl).href;
+  } catch {
+    const base = baseUrl.slice(0, baseUrl.lastIndexOf('/') + 1);
+    return base + uri;
+  }
+}
+
+function prefetchUpcomingSegments(manifestText: string, manifestUrl: string, headers?: Record<string, string>) {
+  if (typeof fetch === 'undefined') return;
+  const lines = manifestText.split('\n');
+  const segUrls: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line && !line.startsWith('#')) {
+      segUrls.push(resolveSegmentUrl(line, manifestUrl));
+    }
+  }
+  const toPrefetch = segUrls.slice(0, 4);
+  for (const u of toPrefetch) {
+    if (!segCache.has(u)) {
+      const item: { buffer?: ArrayBuffer; promise?: Promise<ArrayBuffer> } = {};
+      item.promise = fetch(u, { headers: headers || {}, cache: 'no-store' })
+        .then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.arrayBuffer();
+        })
+        .then(buf => {
+          item.buffer = buf;
+          delete item.promise;
+          return buf;
+        })
+        .catch(() => {
+          segCache.delete(u);
+          return undefined;
+        });
+      segCache.set(u, item);
+    }
+  }
+  if (segCache.size > 8) {
+    const it = segCache.keys();
+    while (segCache.size > 8) {
+      const k = it.next().value;
+      if (k) segCache.delete(k);
+    }
+  }
+}
+
+/** HLS.js playlist and fragment loader that fixes media sequences and prefetches upcoming segments for instant zapping */
+function liveOptimizedLoader(Hls: any): any {
   const fix = createSequenceFixer();
   const Base = Hls.DefaultConfig.loader;
   return class extends Base {
     load(context: any, config: any, callbacks: any) {
+      const isSegment = context.type === 'fragment' || context.type === 'segment' || context.frag != null;
+      if (isSegment && segCache.has(context.url)) {
+        const cached = segCache.get(context.url);
+        segCache.delete(context.url);
+        if (cached?.buffer) {
+          const stats = {
+            trequest: performance.now(),
+            tfirst: performance.now(),
+            tload: performance.now(),
+            loaded: cached.buffer.byteLength,
+            total: cached.buffer.byteLength,
+            bwEstimate: 0,
+            retry: 0
+          };
+          callbacks.onSuccess({ url: context.url, data: cached.buffer, code: 200 }, stats, context, null);
+          return;
+        }
+        if (cached?.promise) {
+          cached.promise.then(buf => {
+            if (buf) {
+              const stats = {
+                trequest: performance.now(),
+                tfirst: performance.now(),
+                tload: performance.now(),
+                loaded: buf.byteLength,
+                total: buf.byteLength,
+                bwEstimate: 0,
+                retry: 0
+              };
+              callbacks.onSuccess({ url: context.url, data: buf, code: 200 }, stats, context, null);
+            } else {
+              super.load(context, config, callbacks);
+            }
+          }).catch(() => {
+            super.load(context, config, callbacks);
+          });
+          return;
+        }
+      }
+
       const onSuccess = callbacks.onSuccess;
       super.load(context, config, {
         ...callbacks,
         onSuccess: (response: any, stats: any, ctx: any, networkDetails: any) => {
-          if (response && typeof response.data === 'string') response.data = fix(response.data);
+          if (response && typeof response.data === 'string') {
+            response.data = fix(response.data);
+            if (response.data.includes('#EXTINF:')) {
+              prefetchUpcomingSegments(response.data, ctx.url, context.headers);
+            }
+          }
           onSuccess(response, stats, ctx, networkDetails);
         }
       });
@@ -183,6 +279,7 @@ class PlayerService {
   }
 
   private destroyHls() {
+    segCache.clear();
     if (window.__xuperPreviewHls) {
       try {
         window.__xuperPreviewHls.stopLoad();
@@ -464,10 +561,21 @@ class PlayerService {
 
     if (window.__xuperCreateHls || (window.Hls && window.Hls.isSupported())) {
       try {
-        const pLoader = sequenceFixingLoader(window.Hls);
+        const pLoader = liveOptimizedLoader(window.Hls);
         const hls = window.__xuperCreateHls
           ? window.__xuperCreateHls({ pLoader })
-          : new window.Hls({ enableWorker: false, lowLatencyMode: false, backBufferLength: 15, pLoader });
+          : new window.Hls({
+              enableWorker: false,
+              lowLatencyMode: false,
+              backBufferLength: 15,
+              maxBufferLength: 15,
+              maxMaxBufferLength: 30,
+              nudgeOffset: 0.1,
+              nudgeMaxRetry: 5,
+              liveSyncDurationCount: 3,
+              pLoader,
+              fLoader: pLoader
+            });
         window.__xuperPreviewHls = hls;
 
         let backupIdx = 0;
@@ -497,9 +605,36 @@ class PlayerService {
           });
         });
 
+        let selfHealingAuth = false;
+
         hls.on(window.Hls.Events.ERROR, (event: any, data: any) => {
           console.error('[HLS error]', data.type, data.details, data.fatal);
-          const status = data.response && data.response.code ? ` ${data.response.code}` : '';
+          const httpCode = data.response && data.response.code ? Number(data.response.code) : 0;
+          const status = httpCode ? ` ${httpCode}` : '';
+
+          // Self-healing token refresh on HTTP 401/403 during live playback
+          if ((httpCode === 401 || httpCode === 403) && code && !selfHealingAuth && window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
+            selfHealingAuth = true;
+            console.log('[PlayerService] Live HTTP ' + httpCode + ' detected, refreshing SLB token...');
+            window.MagisClient.resolveLive(code, (rErr: any, newMeta: any) => {
+              selfHealingAuth = false;
+              if (window.__xuperPreviewHls !== hls || this.activeChannelCode !== code) return;
+              if (!rErr && newMeta && newMeta.url) {
+                window.__xuperCurrentStreamMeta = newMeta;
+                segCache.clear();
+                let nextEffective = newMeta.url;
+                if (isBrowserEnv && newMeta.url.startsWith('http') && !newMeta.url.includes('/stream-proxy')) {
+                  const auth = newMeta?.headers?.['Content-Auth'] || '';
+                  const license = newMeta?.headers?.['Content-License'] || '';
+                  nextEffective = `/stream-proxy?url=${encodeURIComponent(newMeta.url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}`;
+                }
+                currentSource = nextEffective;
+                hls.loadSource(nextEffective);
+                hls.startLoad();
+              }
+            });
+            return;
+          }
           // What the server sent instead of a playlist (an ISP block page, a portal error): links removed
           let body = '';
           if (/Parsing|Load/i.test(String(data.details || ''))) {
