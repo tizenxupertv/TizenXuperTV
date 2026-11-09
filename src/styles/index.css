@@ -7788,26 +7788,7 @@ html.xuper-vod-avplay .app-root,
   color: #000;
   box-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
 }
-.tg-login-btn-help {
-  border: 2px solid rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
-}
-.tg-login-btn-help.is-focused {
-  background: #38bdf8;
-  color: #0b1020;
-  border-color: #38bdf8;
-  box-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
-}
-.tg-login-btn-diag {
-  border: 2px solid rgba(168, 85, 247, 0.45);
-  color: #c084fc;
-}
-.tg-login-btn-diag.is-focused {
-  background: #a855f7;
-  color: #080b11;
-  border-color: #a855f7;
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.55);
-}
+/* The sign-in buttons share the app's neutral button style (.pf-btn): no per-button colours */
 
 /* Keyframe Animations */
 @keyframes tg-shimmer {
