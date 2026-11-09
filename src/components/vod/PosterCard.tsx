@@ -1,6 +1,7 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { VodItem } from '../../types/vod';
-import { useCardImage, isImagePrecached, markImageLoaded } from '../../lib/imageCache';
+import { useCardImage, isImagePrecached, markImageLoaded, markImageFailed } from '../../lib/imageCache';
+import { collectPosterAlternates } from '../../lib/searchArtwork';
 import { startImageTracking } from '../../lib/perfMonitor';
 
 interface PosterCardProps {
@@ -21,21 +22,33 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
   showImage = true,
   onActivate
 }) => {
-  const posterUrl = isWide
-    ? (item.landscape || item.backdrop || item.poster || 'assets/placeholder_landscape.png')
-    : (item.poster || item.landscape || item.backdrop || 'assets/placeholder_vertical.png');
+  const candidates = useMemo(() => {
+    return isWide
+      ? collectPosterAlternates(item.landscape, item.backdrop, item.poster, item.posterAlternates)
+      : collectPosterAlternates(item.poster, item.posterAlternates, item.landscape, item.backdrop);
+  }, [isWide, item.poster, item.landscape, item.backdrop, item.posterAlternates]);
+
+  const [altIndex, setAltIndex] = useState(0);
+  const [allFailed, setAllFailed] = useState(false);
+
+  useEffect(() => {
+    setAltIndex(0);
+    setAllFailed(false);
+  }, [item.id, isWide, candidates]);
+
+  const activeRawUrl = !allFailed && candidates.length > 0
+    ? candidates[Math.min(altIndex, candidates.length - 1)]
+    : '';
 
   // Card-size copy of the portal image; the placeholder shows under it until it is ready
   const placeholder = isWide ? 'assets/placeholder_landscape.png' : 'assets/placeholder_vertical.png';
-  const cardSrc = useCardImage(posterUrl, isWide ? 484 : 230, isWide ? 340 : 340, showImage);
+  const cardSrc = useCardImage(activeRawUrl, isWide ? 484 : 230, isWide ? 340 : 340, showImage && !!activeRawUrl);
 
   const isCached = !!cardSrc && isImagePrecached(cardSrc);
   const [imgLoaded, setImgLoaded] = useState(isCached);
 
   useEffect(() => {
-    if (cardSrc && isImagePrecached(cardSrc)) {
-      setImgLoaded(true);
-    }
+    setImgLoaded(!!cardSrc && isImagePrecached(cardSrc));
   }, [cardSrc]);
 
   const trackingRef = useRef<(() => void) | null>(null);
@@ -45,9 +58,29 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
     }
   }, [showImage, cardSrc]);
 
-  const handleImgDone = () => {
+  const handleImgLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const imgEl = e.currentTarget;
+    if (imgEl && imgEl.naturalWidth === 0) {
+      handleImgError();
+      return;
+    }
     if (cardSrc) markImageLoaded(cardSrc);
     setImgLoaded(true);
+    if (trackingRef.current) {
+      trackingRef.current();
+      trackingRef.current = null;
+    }
+  };
+
+  const handleImgError = () => {
+    if (cardSrc) markImageFailed(cardSrc);
+    if (altIndex + 1 < candidates.length) {
+      setImgLoaded(false);
+      setAltIndex(prev => prev + 1);
+      return;
+    }
+    setImgLoaded(false);
+    setAllFailed(true);
     if (trackingRef.current) {
       trackingRef.current();
       trackingRef.current = null;
@@ -77,14 +110,14 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
           alt=""
           loading="eager"
         />
-        {showImage && cardSrc && (
+        {showImage && cardSrc && !allFailed && (
           <img
             className={`poster-card-img-element ${imgLoaded ? 'is-loaded' : ''}`}
             src={cardSrc}
             decoding="async"
             loading="lazy"
-            onLoad={handleImgDone}
-            onError={handleImgDone}
+            onLoad={handleImgLoad}
+            onError={handleImgError}
             alt=""
           />
         )}

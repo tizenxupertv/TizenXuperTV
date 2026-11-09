@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback, useReducer } 
 import { VodItem } from '../types/vod';
 import { PortalColumn, portalRootId, getPortalColumns, getPortalColumnPage } from '../services/catalogService';
 import { parentalService } from '../services/parentalService';
+import { historyService } from '../services/historyService';
 import { isAdultLabel } from '../lib/catalogOrganizer';
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { PosterCard } from '../components/vod/PosterCard';
@@ -442,19 +443,26 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
     d.loading = true;
     d.error = false;
     const page = d.pages + 1;
-    getPortalColumnPage(colId, page, PAGE_SIZE).then(
+    const isAdultRoot = root === 'adult';
+    getPortalColumnPage(colId, page, PAGE_SIZE, { restricted: isAdultRoot }).then(
       res => {
-        d.items = d.items.concat(res.items);
+        const items = isAdultRoot
+          ? res.items.map(it => ({ ...it, restricted: true, privateContent: true, category: 'adult' }))
+          : res.items;
+        if (isAdultRoot && items.length) {
+          historyService.markPrivate(items);
+        }
+        d.items = d.items.concat(items);
         d.pages = page;
         // An empty page ends the column even if the total says otherwise
-        d.total = res.items.length ? Math.max(res.total, d.items.length) : d.items.length;
+        d.total = items.length ? Math.max(res.total, d.items.length) : d.items.length;
       },
       () => { d.error = true; }
     ).then(() => {
       d.loading = false;
       if (aliveRef.current) bumpData();
     });
-  }, []);
+  }, [root]);
 
   // ---------- Offline pool (bundled / saved catalog) for the app's own categories
   const { fullPool, allPool } = useMemo(() => {
@@ -685,7 +693,15 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
         else if (gridIndex < lastRowStart) setGridIndex(total - 1);
       } else if (key === 'enter') {
         const it = gridItems[gridIndex];
-        if (it) onOpenVod(it);
+        if (it) {
+          if (root === 'adult') {
+            const marked = { ...it, restricted: true, privateContent: true, category: 'adult' };
+            historyService.markPrivate(marked);
+            onOpenVod(marked);
+          } else {
+            onOpenVod(it);
+          }
+        }
       }
       return;
     }
@@ -803,7 +819,15 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
                       item={item}
                       isFocused={area === 'grid' && idx === gridIndex}
                       showImage={cardRow <= maxLoadedRow}
-                      onActivate={onOpenVod}
+                      onActivate={it => {
+                        if (root === 'adult') {
+                          const marked = { ...it, restricted: true, privateContent: true, category: 'adult' };
+                          historyService.markPrivate(marked);
+                          onOpenVod(marked);
+                        } else {
+                          onOpenVod(it);
+                        }
+                      }}
                     />
                   );
                 })}

@@ -7,6 +7,8 @@ import { OnScreenKeyboard, KbState, KB_INITIAL, pressKey, moveCursor, keyAt } fr
 import { normalizeText } from '../../utils/normalizeText';
 import { normalizeChannels } from '../../lib/channelKey';
 import { allChannelEntries } from '../../lib/channelCache';
+import { enrichSearchItems, collectPosterAlternates } from '../../lib/searchArtwork';
+import { markImageFailed } from '../../lib/imageCache';
 import { ScreenHeader, CloseIcon } from '../layout/Header';
 
 export interface SearchModalProps {
@@ -156,8 +158,13 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           setRemoteState('failed');
           return;
         }
-        setRemoteVod((res.items || []).map((it: any) => ({ ...it, isSeries: it.type === 'teleplay' || it.kind === 'serie' })));
-        setRemoteTotal(res.total || (res.items || []).length);
+        const mapped = (res.items || []).map((it: any) => ({
+          ...it,
+          isSeries: it.type === 'teleplay' || it.kind === 'serie',
+          posterAlternates: collectPosterAlternates(it.poster, it.posterAlternates, it.landscape, it.backdrop)
+        }));
+        setRemoteVod(enrichSearchItems(mapped, allVodItems, true));
+        setRemoteTotal(res.total || mapped.length);
         setRemoteState('done');
       }, { pageSize: 60 });
     }, 200);
@@ -206,7 +213,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     const local = localHaystacks.filter(h => h.title.includes(q) || h.rest.includes(q)).map(h => h.item);
     const seen = new Set(local.map(it => it.id));
     const remote = remoteVod.filter(it => !seen.has(it.id));
-    return local.concat(remote).slice(0, 120);
+    return enrichSearchItems(local.concat(remote).slice(0, 120), allVodItems, true);
   }, [isTvSearch, submittedQuery, allVodItems, localHaystacks, remoteVod, popular]);
 
   const totalResults = isTvSearch ? filteredChannels.length : filteredVod.length;
@@ -559,10 +566,20 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                     <div className="svc-poster-wrap">
                       <img
                         className="svc-poster"
-                        src={item.poster}
+                        src={item.poster || 'assets/placeholder_vertical.png'}
                         alt={item.title}
+                        data-alt-idx="0"
                         onError={e => {
-                          (e.target as HTMLImageElement).src = 'assets/placeholder_vertical.png';
+                          const img = e.target as HTMLImageElement;
+                          markImageFailed(img.currentSrc || img.src);
+                          const alts = collectPosterAlternates(item.poster, item.posterAlternates, item.landscape, item.backdrop);
+                          const nextIdx = (parseInt(img.getAttribute('data-alt-idx') || '0', 10) || 0) + 1;
+                          if (nextIdx < alts.length) {
+                            img.setAttribute('data-alt-idx', String(nextIdx));
+                            img.src = alts[nextIdx];
+                          } else if (!img.src.endsWith('assets/placeholder_vertical.png')) {
+                            img.src = 'assets/placeholder_vertical.png';
+                          }
                         }}
                       />
                       {item.score && item.score !== '0' && <div className="svc-score-badge">★ {item.score}</div>}

@@ -22,7 +22,18 @@ export function isAdultLabel(value: string | undefined | null): boolean {
 /** Detects if a VOD item contains adult/restricted content */
 export function isAdultItem(item: VodItem | undefined | null): boolean {
   if (!item) return false;
-  const rating = normalizeCatalogText((item as any).contentRating || (item as any).ageRating || (item as any).classification || item.score || '');
+  const raw = item as any;
+  if (
+    raw.restricted === true ||
+    raw.restricted === '1' ||
+    raw.privateContent === true ||
+    raw.isAdult === true ||
+    String(raw.columnId || '') === '76300'
+  ) {
+    return true;
+  }
+
+  const rating = normalizeCatalogText(raw.contentRating || raw.ageRating || raw.classification || item.score || '');
   if (/(^| )(18|18 plus|r18|nc 17)( |$)/.test(rating)) return true;
 
   const labels = [item.category, item.row, item.kind, ...(item.genres || [])];

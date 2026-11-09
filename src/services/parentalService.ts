@@ -1,9 +1,10 @@
 import SHA256 from 'crypto-js/sha256';
-import { isAdultLabel } from '../lib/catalogOrganizer';
+import { isAdultLabel } from '../lib/catalogOrganizer.ts';
 
 const KEY = 'xuper_parental_v1';
+const LOCK_KEY = 'xuper_parental_lock_v1';
 const MAX_FAILS = 5;
-const COOLDOWN_MS = 30000;
+const COOLDOWN_MS = 60000;
 
 /** The PIN only guards adult content: the +18 section and the adult live category */
 interface ParentalState {
@@ -23,6 +24,40 @@ class ParentalService {
   private sessionUnlocked = false;
   private fails = 0;
   private cooldownUntil = 0;
+
+  constructor() {
+    this.readLockState();
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) this.lockSession();
+      });
+    }
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('pagehide', () => this.lockSession());
+    }
+  }
+
+  private readLockState() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const raw = localStorage.getItem(LOCK_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        this.fails = Math.max(0, Number(parsed?.fails) || 0);
+        this.cooldownUntil = Math.max(0, Number(parsed?.cooldownUntil) || 0);
+      }
+    } catch (e) {}
+  }
+
+  private writeLockState() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(LOCK_KEY, JSON.stringify({
+        fails: this.fails,
+        cooldownUntil: this.cooldownUntil
+      }));
+    } catch (e) {}
+  }
 
   private read(): ParentalState {
     try {
@@ -68,7 +103,25 @@ class ParentalService {
     return this.sessionUnlocked;
   }
 
+  /** Locks the current adult session (e.g. when app goes to background or profile switches) */
+  public lockSession(): void {
+    if (this.sessionUnlocked) {
+      this.sessionUnlocked = false;
+      this.emit();
+    }
+  }
+
+  public failedAttempts(): number {
+    this.readLockState();
+    return this.fails;
+  }
+
+  public maxAttempts(): number {
+    return MAX_FAILS;
+  }
+
   public cooldownSeconds(): number {
+    this.readLockState();
     return Math.max(0, Math.ceil((this.cooldownUntil - Date.now()) / 1000));
   }
 
@@ -78,6 +131,8 @@ class ParentalService {
     if (!state.pinHash) return 'ok';
     if (hashPin(pin) === state.pinHash) {
       this.fails = 0;
+      this.cooldownUntil = 0;
+      this.writeLockState();
       if (!this.sessionUnlocked) {
         this.sessionUnlocked = true;
         this.emit();
@@ -88,20 +143,28 @@ class ParentalService {
     if (this.fails >= MAX_FAILS) {
       this.fails = 0;
       this.cooldownUntil = Date.now() + COOLDOWN_MS;
+      this.writeLockState();
       return 'cooldown';
     }
+    this.writeLockState();
     return 'bad';
   }
 
   public setPin(pin: string) {
     const state = this.read();
     state.pinHash = hashPin(pin);
+    this.fails = 0;
+    this.cooldownUntil = 0;
+    this.writeLockState();
     this.sessionUnlocked = true;
     this.write(state);
   }
 
   public clear() {
     this.sessionUnlocked = false;
+    this.fails = 0;
+    this.cooldownUntil = 0;
+    this.writeLockState();
     this.write({});
   }
 

@@ -22,4 +22,7 @@ export interface HistoryItem {
   duration: number;   // total seconds
   updatedAt: number;  // timestamp ms
   watchedEpisodes?: Record<string, EpisodePlaybackRecord>;
+  category?: string;
+  restricted?: boolean;
+  privateContent?: boolean;
 }

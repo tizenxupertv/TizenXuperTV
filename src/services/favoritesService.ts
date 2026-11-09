@@ -1,5 +1,7 @@
-import { withoutFavorite } from '../lib/profileHistory';
-import { pk } from '../lib/localProfiles';
+import { withoutFavorite } from '../lib/profileHistory.ts';
+import { pk } from '../lib/localProfiles.ts';
+import { isAdultItem } from '../lib/catalogOrganizer.ts';
+import { historyService } from './historyService.ts';
 
 const PROFILE_KEY = pk('xuper_local_profile_v1');
 
@@ -11,12 +13,16 @@ export interface FavoriteInfo {
 
 /** What a favorite keeps from the title (a VodItem or the portal's detail) */
 export interface FavoriteSource {
+  id?: string | number;
   title?: string;
   poster?: string;
   landscape?: string;
   backdrop?: string;
   isSeries?: boolean;
   kind?: string;
+  category?: string;
+  restricted?: boolean;
+  privateContent?: boolean;
 }
 
 function infoOf(item: FavoriteSource): FavoriteInfo {
@@ -61,6 +67,7 @@ class FavoritesService {
   }
 
   public isFavorite(id: string | number): boolean {
+    if (historyService.isRestricted({ id })) return false;
     const profile = this.getProfile();
     return !!(profile.favs && profile.favs[String(id)]);
   }
@@ -70,9 +77,24 @@ class FavoritesService {
    * titles that are not in the loaded catalog (older favorites saved only `true`)
    */
   public toggleFavorite(id: string | number, item?: FavoriteSource): boolean {
+    const key = String(id);
+    if (
+      historyService.isRestricted({ id: key, ...(item || {}) }) ||
+      (item && (isAdultItem(item as any) || item.restricted || item.privateContent))
+    ) {
+      historyService.markPrivate({ id: key });
+      const profile = this.getProfile();
+      if (profile.favs && profile.favs[key]) {
+        delete profile.favs[key];
+        try {
+          localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+        } catch (e) {}
+        this.notify();
+      }
+      return false;
+    }
     const profile = this.getProfile();
     if (!profile.favs) profile.favs = {};
-    const key = String(id);
     const newState = !profile.favs[key];
     if (newState) {
       profile.favs[key] = item ? infoOf(item) : true;
@@ -117,7 +139,14 @@ class FavoritesService {
 
   public getFavoriteIds(): string[] {
     const profile = this.getProfile();
-    return profile.favs ? Object.keys(profile.favs).filter(k => profile.favs[k]) : [];
+    return profile.favs
+      ? Object.keys(profile.favs).filter(k => {
+          const val = profile.favs[k];
+          if (!val) return false;
+          if (typeof val === 'object') return !historyService.isRestricted({ id: k, ...val });
+          return !historyService.isRestricted({ id: k });
+        })
+      : [];
   }
 
   public subscribe(cb: () => void): () => void {

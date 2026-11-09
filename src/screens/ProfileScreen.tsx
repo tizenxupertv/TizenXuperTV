@@ -191,6 +191,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     const now = new Date();
     const local = `${now.getHours() < 10 ? '0' : ''}${now.getHours()}:${now.getMinutes() < 10 ? '0' : ''}${now.getMinutes()}`;
     const build = tvBuildInfo();
+    const imgDiag = report?.images
+      ? `Local: ${report.images.local.detail} · Póster (${report.images.vertical.host}): ${report.images.vertical.detail} · Fondo (${report.images.horizontal.host}): ${report.images.horizontal.detail} · Caché: ${report.images.cacheLoaded} OK / ${report.images.cacheFailed} err`
+      : '';
     accountService.sendReport({
       app: version,
       model,
@@ -201,6 +204,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         ...playbackEvents(),
         ...(build ? [{ at: now.getTime(), local, kind: 'info', channel: 'Televisor', detail: build }] : []),
         ...(caps ? [{ at: now.getTime(), local, kind: 'info', channel: 'Formatos del reproductor', detail: caps }] : []),
+        ...(imgDiag ? [{ at: now.getTime(), local, kind: 'info', channel: 'Carátulas / CDN', detail: imgDiag }] : []),
         ...(speed ? [{
           at: now.getTime(), local, kind: 'info', channel: 'Velocidad de internet',
           detail: `${formatSpeed(speed.mbps)}${speed.latencyMs !== null ? ` · latencia ${speed.latencyMs} ms` : ''}`
@@ -254,7 +258,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const runDiag = (): Promise<void> => {
     if (diagRunning) return Promise.resolve();
     setDiagRunning(true);
-    return diagnosticService.run()
+    const sample = catalogItems.find(it => it && it.poster && !it.poster.includes('placeholder')) || catalogItems[0];
+    return diagnosticService.run(sample)
       .then(r => setReport(r))
       .catch(() => setReport({ verdict: 'portal-down', hosts: [], portalMs: null, cdns: 0 }))
       .then(() => setDiagRunning(false));
@@ -713,6 +718,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const hostsOk = report ? report.hosts.filter(h => h.ok).length : 0;
       const hostsFailed = report ? report.hosts.filter(h => !h.ok).map(h => h.host) : [];
       const speedClass = speedRunning ? '' : speedError ? 'bad' : speed ? streamingVerdict(speed.mbps).cls : '';
+      const imgRep = report?.images;
+      const imgRemoteOk = imgRep ? (imgRep.vertical.ok && imgRep.horizontal.ok) : false;
+      const imgAnyOk = imgRep ? (imgRep.vertical.ok || imgRep.horizontal.ok) : false;
       const cards: Array<{ label: string; value: string; sub: string; cls: string }> = [
         {
           label: 'Internet y DNS seguro',
@@ -731,6 +739,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           value: reached && report!.portalMs !== null ? String(report!.cdns) : '—',
           sub: reached && report!.portalMs !== null ? (report!.cdns > 0 ? 'Disponibles' : 'Ninguno disponible') : tested ? 'No se pudo probar' : 'Sin analizar',
           cls: reached && report!.portalMs !== null ? (report!.cdns > 0 ? 'ok' : 'warn') : ''
+        },
+        {
+          label: 'Carátulas e imágenes',
+          value: tested && imgRep ? (imgRemoteOk ? 'OK' : imgAnyOk ? 'Parcial' : 'Sin carga') : '—',
+          sub: tested && imgRep
+            ? `${imgRep.vertical.host} (${imgRep.vertical.ok ? '✓' : '✗'}) · Caché ${imgRep.cacheLoaded} OK`
+            : 'Sin analizar',
+          cls: tested && imgRep ? (imgRemoteOk ? 'ok' : imgAnyOk ? 'warn' : 'bad') : ''
         },
         {
           label: 'Velocidad de internet',
