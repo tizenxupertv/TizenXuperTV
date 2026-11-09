@@ -1105,8 +1105,8 @@ html, body {
 
 /* Columna 1: Categorías Verticales */
 .live-col-categories {
-  flex: 0 0 clamp(190px, 16vw, 260px);
-  width: clamp(190px, 16vw, 260px);
+  flex: 0 0 clamp(220px, 17vw, 300px);
+  width: clamp(220px, 17vw, 300px);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -1295,7 +1295,8 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 24px;
+  padding: 24px 84px;
+  box-sizing: border-box;
   text-align: center;
   background: rgba(7, 9, 14, 0.86);
   pointer-events: none;
@@ -1429,6 +1430,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1437,6 +1439,7 @@ html, body {
 .live-fav-icon {
   color: var(--color-gold);
   font-size: 13px;
+  flex-shrink: 0;
 }
 
 .live-ch-now {
@@ -1488,6 +1491,9 @@ html, body {
 }
 
 .live-preview-video {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1888,8 +1894,17 @@ html, body {
   background: rgba(0, 229, 255, 0.2);
   color: #00e5ff;
   border: 1px solid rgba(0, 229, 255, 0.5);
-  margin-left: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
   letter-spacing: 0.5px;
+}
+
+.live-ch-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 
