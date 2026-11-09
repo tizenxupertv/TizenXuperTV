@@ -159,8 +159,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   // Resuming at the saved position: until the TV confirms that seek, its time (0:00, 0:10…) is not the
   // viewer's and must never be saved over the saved position
   const resumePendingRef = useRef(false);
-  /** How long a seek may take before the timeline shows the TV's time again (the bridge gives up at 18 s) */
-  const SEEK_SAFETY_MS = 25000;
+  /** How long a seek may take before the timeline shows the TV's time again */
+  const SEEK_SAFETY_MS = 6000;
   const toastTimerRef = useRef<any>(null);
   const [, setSettingsTick] = useState(0); // re-render after a setting changes
   const settings = settingsService.get();
@@ -255,7 +255,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const saveProgress = useCallback(() => {
     if (isTrailer) return;
     const { t, d } = timeRef.current;
-    if (t < 1 || resumePendingRef.current) return;
+    if (t < 1) return;
+    if (resumePendingRef.current && t < 3) return;
     historyService.savePlayback(item, t, d, episode, false, { id: seriesId, number: seasonNumber });
   }, [isTrailer, item, episode, seriesId, seasonNumber]);
 
@@ -373,12 +374,17 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       resumePendingRef.current = startedAtRef.current > 5;
       if (resumePendingRef.current) {
         pendingSeekRef.current = { target: startedAtRef.current, until: Date.now() + SEEK_SAFETY_MS };
+        setTimeout(() => {
+          if (isCurrent()) {
+            resumePendingRef.current = false;
+          }
+        }, 4000);
       }
       (video as any).onresumeseek = (ok: boolean) => {
         if (!isCurrent()) return;
         resumePendingRef.current = false;
         if (ok) {
-          if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + 2000;
+          if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + 1500;
         } else {
           pendingSeekRef.current = null;
           flash('No se pudo continuar donde lo dejaste');
@@ -418,6 +424,9 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         if (!isCurrent()) return;
         const t = window.XuperAVPlay.currentTimeSec || 0;
         if (!acceptTimeRef.current(t)) return;
+        if (t > 2 && resumePendingRef.current) {
+          resumePendingRef.current = false;
+        }
         timeRef.current.t = t;
         setCurrentTime(t);
       };
@@ -766,10 +775,11 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const acceptTime = (t: number): boolean => {
     const pending = pendingSeekRef.current;
     if (!pending) return true;
-    const reached = Math.abs(t - pending.target) < 3;
+    const reached = Math.abs(t - pending.target) <= 8;
     const expired = pending.until > 0 && Date.now() > pending.until;
     if (reached || expired) {
       pendingSeekRef.current = null;
+      resumePendingRef.current = false;
       return true;
     }
     return false;
