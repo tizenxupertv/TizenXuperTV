@@ -77,6 +77,7 @@ interface VodDetailViewProps {
   onCloseAudioModal?: () => void;
   onSelectAudioOption?: (audio: string) => void;
   onSelectSubOption?: (sub: string) => void;
+  onOpenSynopsisModal?: () => void;
   onCloseSynopsisModal?: () => void;
 }
 
@@ -103,6 +104,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   onSelectAudioOption,
   onSelectSubOption,
   onSelectSetting,
+  onOpenSynopsisModal,
   onCloseSynopsisModal
 }) => {
   useViewProfiler('Detalle VOD');
@@ -121,6 +123,16 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   const [persons, setPersons] = useState<PersonResult>({ directors: [], actors: [] });
   const [selectedPerson, setSelectedPerson] = useState<PersonDetail | null>(null);
   const [localSynopsisModal, setLocalSynopsisModal] = useState<boolean>(false);
+  const activeCastRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if ((focus.showSynopsisModal || localSynopsisModal) && activeCastRef.current) {
+      activeCastRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+      });
+    }
+  }, [focus.showSynopsisModal, localSynopsisModal, focus.castIndex]);
 
   useEffect(() => {
     let alive = true;
@@ -556,7 +568,10 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                 <button
                   type="button"
                   className={`vod-synopsis-more-btn ${focus.area === 'synopsis' ? 'is-focused' : ''}`}
-                  onClick={() => setLocalSynopsisModal(true)}
+                  onClick={() => {
+                    if (onOpenSynopsisModal) onOpenSynopsisModal();
+                    else setLocalSynopsisModal(true);
+                  }}
                 >
                   Ver más
                 </button>
@@ -665,7 +680,10 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                 <button
                   key={q}
                   className={`vod-quick-btn ${focused ? 'is-focused' : ''}`}
-                  onClick={() => setLocalSynopsisModal(true)}
+                  onClick={() => {
+                    if (onOpenSynopsisModal) onOpenSynopsisModal();
+                    else setLocalSynopsisModal(true);
+                  }}
                   aria-label="Informacion y Reparto"
                 >
                   <span className="vod-quick-circle">
@@ -918,36 +936,41 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                     <div className="synopsis-modal-cast-section">
                       <h3 className="synopsis-modal-cast-title">Reparto y Equipo</h3>
                       <div className="synopsis-modal-cast-grid">
-                        {effectiveCast.map((p, pIdx) => (
-                          <div
-                            key={p.puId || `${p.name}-${pIdx}`}
-                            className="synopsis-modal-cast-card"
-                            role="button"
-                            onClick={() => {
-                              if (onSelectPerson) onSelectPerson(p);
-                              else setSelectedPerson(p);
-                            }}
-                          >
-                            <div className="synopsis-modal-cast-avatar">
-                              {p.icon ? (
-                                <img
-                                  src={p.icon}
-                                  alt={p.name}
-                                  loading="lazy"
-                                  onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
-                                />
-                              ) : null}
-                              <svg className="synopsis-modal-cast-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                <circle cx="12" cy="7" r="4" />
-                              </svg>
+                        {effectiveCast.map((p, pIdx) => {
+                          const isCastFocused = (focus.showSynopsisModal || localSynopsisModal) && (focus.castIndex ?? 0) === pIdx;
+                          return (
+                            <div
+                              key={p.puId || `${p.name}-${pIdx}`}
+                              ref={isCastFocused ? activeCastRef : null}
+                              className={`synopsis-modal-cast-card ${isCastFocused ? 'is-focused' : ''}`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                if (onSelectPerson) onSelectPerson(p);
+                                else setSelectedPerson(p);
+                              }}
+                            >
+                              <div className="synopsis-modal-cast-avatar">
+                                {p.icon ? (
+                                  <img
+                                    src={p.icon}
+                                    alt={p.name}
+                                    loading="lazy"
+                                    onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                                  />
+                                ) : null}
+                                <svg className="synopsis-modal-cast-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                  <circle cx="12" cy="7" r="4" />
+                                </svg>
+                              </div>
+                              <div className="synopsis-modal-cast-meta">
+                                <span className="synopsis-modal-cast-name">{p.name}</span>
+                                <span className="synopsis-modal-cast-role">{p.personType === 1 ? 'Director' : 'Reparto'}</span>
+                              </div>
                             </div>
-                            <div className="synopsis-modal-cast-meta">
-                              <span className="synopsis-modal-cast-name">{p.name}</span>
-                              <span className="synopsis-modal-cast-role">{p.personType === 1 ? 'Director' : 'Reparto'}</span>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -960,7 +983,11 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                   )}
                 </div>
                 <div className="synopsis-modal-footer">
-                  <span>Presiona <b>[Atrás]</b> o <b>[OK]</b> para cerrar</span>
+                  {effectiveCast.length > 0 ? (
+                    <span>Navega con <b>[◀ ▲ ▼ ▶]</b> · Presiona <b>[OK]</b> para ver más sobre el actor · <b>[Atrás]</b> para salir</span>
+                  ) : (
+                    <span>Presiona <b>[Atrás]</b> o <b>[OK]</b> para cerrar</span>
+                  )}
                 </div>
               </div>
             </div>

@@ -2751,7 +2751,7 @@ html, body {
 }
 .synopsis-modal-cast-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
 .synopsis-modal-cast-card {
@@ -2763,11 +2763,26 @@ html, body {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: all 0.15s ease;
+  outline: none;
 }
 .synopsis-modal-cast-card:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(56, 189, 248, 0.4);
+}
+.synopsis-modal-cast-card.is-focused {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.6), 0 4px 16px rgba(56, 189, 248, 0.35);
+  transform: scale(1.03);
+}
+.synopsis-modal-cast-card.is-focused .synopsis-modal-cast-name {
+  color: #38bdf8;
+  font-weight: 800;
+}
+.synopsis-modal-cast-card.is-focused .synopsis-modal-cast-avatar {
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
 }
 .synopsis-modal-cast-avatar {
   width: 44px;
