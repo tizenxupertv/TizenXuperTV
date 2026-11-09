@@ -1,5 +1,6 @@
 import { LiveChannel } from '../types/channel';
 import { isRegionBlocked } from '../lib/portalErrors';
+import { backBufferFor } from '../lib/tvMemory';
 import { normalizeChannel } from '../lib/channelKey';
 import { hostOf, isIspBlockPage, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSequenceFixer } from '../lib/mediaSequence';
@@ -559,11 +560,11 @@ class PlayerService {
       try {
         const pLoader = liveOptimizedLoader(window.Hls);
         const hls = window.__xuperCreateHls
-          ? window.__xuperCreateHls({ pLoader, fLoader: pLoader })
+          ? window.__xuperCreateHls({ pLoader, fLoader: pLoader, backBufferLength: backBufferFor(15) })
           : new window.Hls({
               enableWorker: false,
               lowLatencyMode: false,
-              backBufferLength: 15,
+              backBufferLength: backBufferFor(15),
               maxBufferLength: 15,
               maxMaxBufferLength: 30,
               nudgeOffset: 0.1,
