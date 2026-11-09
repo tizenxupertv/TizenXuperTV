@@ -2695,6 +2695,14 @@ html, body {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.synopsis-modal-close-btn.is-focused {
+  background: rgba(56, 189, 248, 0.35);
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px #38bdf8, 0 0 20px rgba(56, 189, 248, 0.7);
+  transform: scale(1.15);
+  color: #ffffff;
+}
+
 .synopsis-modal-title {
   margin: 0;
   font-size: 32px;
@@ -2728,6 +2736,32 @@ html, body {
   overflow-y: auto;
   padding-right: 12px;
   scrollbar-width: thin;
+}
+
+.synopsis-modal-text-wrap {
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  outline: none;
+}
+
+.synopsis-modal-text-wrap.is-focused {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.4);
+}
+
+.synopsis-modal-nav-hint {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
 }
 
 .synopsis-modal-text {
@@ -2771,10 +2805,10 @@ html, body {
   border-color: rgba(56, 189, 248, 0.4);
 }
 .synopsis-modal-cast-card.is-focused {
-  background: rgba(56, 189, 248, 0.22);
+  background: rgba(56, 189, 248, 0.28);
   border-color: #38bdf8;
-  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.6), 0 4px 16px rgba(56, 189, 248, 0.35);
-  transform: scale(1.03);
+  box-shadow: 0 0 0 3px #38bdf8, 0 4px 20px rgba(56, 189, 248, 0.5);
+  transform: scale(1.04);
 }
 .synopsis-modal-cast-card.is-focused .synopsis-modal-cast-name {
   color: #38bdf8;

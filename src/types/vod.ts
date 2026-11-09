@@ -68,6 +68,35 @@ export interface PersonResult {
   actors: PersonDetail[];
 }
 
+export type SettingsCol = 'menu' | 'audio' | 'subs' | 'quality';
+
+export type DetailFocusArea = 'back' | 'synopsis' | 'actions' | 'quick' | 'seasons' | 'seasonMenu' | 'epRanges' | 'episodes' | 'cast' | 'related' | 'audioModal';
+
+export type SynopsisModalArea = 'close' | 'text' | 'cast';
+
+export interface VodDetailFocus {
+  area: DetailFocusArea;
+  actionIndex: number;
+  seasonIndex: number;
+  episodeIndex: number;
+  relatedIndex: number;
+  castIndex?: number;
+  showSynopsisModal?: boolean;
+  synopsisModalArea?: SynopsisModalArea;
+  /** Small buttons under the big ones: Mi lista, Ajustes, Tráiler */
+  quickIndex?: number;
+  /** Season highlighted in the open season list (the season loads only when picked) */
+  seasonMenuIndex?: number;
+  /** Range of 20 episodes focused in the ranges row ("1-20", "21-40"…) */
+  rangeIndex?: number;
+  /** Settings list: 'menu' (Audio / Subtítulos / Resolución) or the options of one of them */
+  modalCol?: SettingsCol;
+  modalIndex?: number;
+}
+
+/** Episodes per range, as the official app: long series stay light and quick to cross */
+export const EP_RANGE = 20;
+
 export function parseCastFromVodItem(item: VodItem): PersonDetail[] {
   const dirs: PersonDetail[] = (item.director || '')
     .split(/[,;/]+/)
