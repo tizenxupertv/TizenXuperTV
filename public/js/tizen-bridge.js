@@ -255,6 +255,21 @@
     };
   }
 
+  // 3b. Flex gap (Chromium 84+, Tizen 6.5 and newer): older TVs ignore it and everything touches. Their pages get
+  // html.no-flexgap, and the styles give those boxes margins instead (src/styles/index.css)
+  try {
+    var probe = document.createElement('div');
+    probe.style.display = 'flex';
+    probe.style.flexDirection = 'column';
+    probe.style.rowGap = '1px';
+    probe.appendChild(document.createElement('div'));
+    probe.appendChild(document.createElement('div'));
+    document.documentElement.appendChild(probe);
+    var flexGap = probe.scrollHeight === 1;
+    probe.parentNode.removeChild(probe);
+    if (!flexGap) document.documentElement.className += ' no-flexgap';
+  } catch (_) {}
+
   // 4. Universal resolution auto-scaler (720p, 1366x768, 1080p, 4K)
   function fitResolution() {
     try {
