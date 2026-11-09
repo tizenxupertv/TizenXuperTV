@@ -8,6 +8,7 @@ import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
 import { buildVodPlaylist, canPlayVodWithMse, mseHlsConfig, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
+import { friendlyPortalError } from '../lib/portalErrors';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
   SubtitleTrack,
@@ -528,7 +529,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       if (!isCurrent()) return; // the user already left or chose another episode
       if (startTimingRef.current && !startTimingRef.current.resolvedAt) startTimingRef.current.resolvedAt = Date.now();
       if (err || !res || !res.url) {
-        failed((err && err.message) || 'No se pudo obtener el video del portal.');
+        // Region blocks and portal codes in plain Spanish, never the portal's Chinese text
+        failed(friendlyPortalError(err));
         return;
       }
       // The portal returns its first track (often Portuguese): switch to the preferred audio
