@@ -7789,6 +7789,18 @@ html.xuper-vod-avplay .app-root,
   box-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
 }
 /* The sign-in buttons share the app's neutral button style (.pf-btn): no per-button colours */
+/* Error state: two rows of two buttons of the same width */
+.tg-login-btn-row + .tg-login-btn-row { margin-top: 14px; }
+.tg-login-btn-row.is-pair > .tg-login-btn { flex: 1; min-width: 0; text-align: center; }
+
+/* Sign-in report: the QR for the phone at the left, the steps and the TV's data at the right */
+.tg-login-report-body { display: flex; align-items: center; gap: 32px; margin-bottom: 24px; }
+.tg-login-report-qr { padding: 12px; border-radius: 16px; background: #ffffff; line-height: 0; flex-shrink: 0; }
+.tg-login-report-wait { width: 230px; height: 230px; display: flex; align-items: center; justify-content: center; color: #0f1422; }
+.tg-login-report-info { min-width: 0; flex: 1; }
+.tg-login-report-steps { font-size: 17px; line-height: 1.7; color: #e2e8f0; }
+.tg-login-report-data { margin-top: 18px; padding: 14px 18px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); font-size: 15px; line-height: 1.7; color: var(--text-muted); }
+.tg-login-report-data b { color: #ffffff; }
 
 /* Keyframe Animations */
 @keyframes tg-shimmer {
@@ -8992,6 +9004,7 @@ html.no-flexgap .tg-login-diag-check-info > * + * { margin-top: 2px; }
 html.no-flexgap .tg-login-diag-verdict-box > * + * { margin-top: 6px; }
 html.no-flexgap .tg-login-diag-verdict-title > * + * { margin-left: 8px; }
 html.no-flexgap .tg-login-diag-footer > * + * { margin-left: 14px; }
+html.no-flexgap .tg-login-report-body > * + * { margin-left: 32px; }
 
 /* Version on the sign-in screen: support can tell at a glance what a TV runs, even before it signs in */
 .tg-login-brand { position: relative; }
