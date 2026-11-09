@@ -22,6 +22,40 @@ export interface RangeProbeResponse {
 }
 
 const TAIL_PROBE_MAX = 8 * 1024 * 1024;
+const TS_PACKET_SIZE = 188;
+const TS_SYNC_BYTE = 0x47;
+
+/**
+ * Aligns a byte offset down to the nearest 188-byte MPEG-TS packet boundary.
+ */
+export function alignTsOffset(offset: number): number {
+  if (!Number.isFinite(offset) || offset <= 0) return 0;
+  return offset - (offset % TS_PACKET_SIZE);
+}
+
+/**
+ * Aligns an MPEG-TS buffer so it starts on a valid 0x47 sync byte and has a length
+ * that is an exact multiple of 188 bytes, preventing demuxer sync loss on legacy Tizen TVs.
+ */
+export function alignTsPacketBuffer(input: ArrayBuffer | Uint8Array): Uint8Array {
+  const buf = toUint8(input);
+  if (buf.byteLength < TS_PACKET_SIZE) return new Uint8Array(0);
+  let start = 0;
+  const maxSearch = Math.min(buf.byteLength - TS_PACKET_SIZE, TS_PACKET_SIZE * 4);
+  for (let i = 0; i <= maxSearch; i++) {
+    if (
+      buf[i] === TS_SYNC_BYTE &&
+      (i + TS_PACKET_SIZE >= buf.byteLength || buf[i + TS_PACKET_SIZE] === TS_SYNC_BYTE)
+    ) {
+      start = i;
+      break;
+    }
+  }
+  const usable = buf.byteLength - start;
+  const alignedLen = usable - (usable % TS_PACKET_SIZE);
+  if (alignedLen <= 0) return new Uint8Array(0);
+  return buf.subarray(start, start + alignedLen);
+}
 
 function toUint8(input: ArrayBuffer | Uint8Array): Uint8Array {
   return input instanceof Uint8Array ? input : new Uint8Array(input);
@@ -161,8 +195,9 @@ export function parseIdxg(input: ArrayBuffer | Uint8Array, mediaTotal?: number):
   const segments: IdxgSegment[] = [];
 
   for (let i = 0; i < entries.length; i++) {
-    const start = entries[i].off;
-    const nextOff = i + 1 < entries.length ? entries[i + 1].off : finalTotal;
+    const start = alignTsOffset(entries[i].off);
+    const rawNext = i + 1 < entries.length ? entries[i + 1].off : finalTotal;
+    const nextOff = alignTsOffset(rawNext);
     const nextTs = i + 1 < entries.length ? entries[i + 1].ts : entries[i].ts + 1000;
     const length = nextOff - start;
     const duration = Math.max(0.1, (nextTs - entries[i].ts) / 1000);

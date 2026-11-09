@@ -14,7 +14,9 @@ import {
   groupIdxgSegments,
   buildVodTsPlaylist,
   parseContentRangeTotal,
-  recoverVodMediaSize
+  recoverVodMediaSize,
+  alignTsOffset,
+  alignTsPacketBuffer
 } from '../src/lib/vodIdxg.ts';
 import {
   markImageLoaded,
@@ -232,6 +234,21 @@ describe('Point 3: VOD .idxg Parser & Media Size Recovery', () => {
       return { status: 416, byteLength: 0, contentRange: null };
     });
     assert.equal(sizeExactEnd, 564000);
+  });
+
+  it('aligns offsets and buffers to 188-byte MPEG-TS packet boundaries', () => {
+    assert.equal(alignTsOffset(188050), 188000);
+    assert.equal(alignTsOffset(376), 376);
+    assert.equal(alignTsOffset(-10), 0);
+
+    // Create buffer with 5 garbage bytes, then 2 valid 188-byte packets starting with 0x47, plus 10 trailing bytes
+    const raw = new Uint8Array(5 + 188 * 2 + 10);
+    raw[5] = 0x47;
+    raw[5 + 188] = 0x47;
+    const aligned = alignTsPacketBuffer(raw);
+    assert.equal(aligned.byteLength, 376);
+    assert.equal(aligned[0], 0x47);
+    assert.equal(aligned[188], 0x47);
   });
 });
 

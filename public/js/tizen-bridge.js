@@ -28,6 +28,207 @@
     } catch (e) {}
   }
 
+  // 1. Polyfill HTMLMediaElement.play() for Tizen 3.0 WebKit (returns undefined instead of a Promise)
+  if (typeof window !== 'undefined' && window.HTMLMediaElement) {
+    try {
+      var origPlay = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () {
+        try {
+          var r = origPlay.apply(this, arguments);
+          if (r && typeof r.then === 'function') return r;
+          return Promise.resolve();
+        } catch (e) {
+          return Promise.resolve();
+        }
+      };
+    } catch (_) {}
+  }
+
+  // 2. Protect SourceBuffer against QuotaExceededError on memory-constrained Tizen 3.0 / 4.0 TVs
+  if (typeof window !== 'undefined' && window.SourceBuffer) {
+    try {
+      var origAppendBuffer = SourceBuffer.prototype.appendBuffer;
+      SourceBuffer.prototype.appendBuffer = function (buf) {
+        try {
+          return origAppendBuffer.call(this, buf);
+        } catch (err) {
+          if (err && (err.name === 'QuotaExceededError' || err.code === 22)) {
+            console.warn('[SourceBuffer] QuotaExceededError caught, trimming buffer...');
+            try {
+              if (this.buffered && this.buffered.length > 0 && !this.updating) {
+                var start = this.buffered.start(0);
+                var end = this.buffered.end(0);
+                if (end - start > 10) {
+                  this.remove(start, start + 8);
+                }
+              }
+            } catch (_) {}
+          }
+          throw err;
+        }
+      };
+    } catch (_) {}
+  }
+
+  // 3. Legacy Tizen 3.0 / 4.0 DOM & ES5 Shims (WebKit 538.1 / Chromium 56)
+  if (typeof globalThis === 'undefined') {
+    window.globalThis = window;
+  }
+  if (!window.crypto) window.crypto = {};
+  if (!window.crypto.getRandomValues) {
+    window.crypto.getRandomValues = function (arr) {
+      for (var i = 0; i < arr.length; i++) {
+        arr[i] = Math.floor(Math.random() * 256);
+      }
+      return arr;
+    };
+  }
+  if (typeof Object.assign !== 'function') {
+    Object.assign = function (target) {
+      if (target == null) throw new TypeError('Target is null');
+      var t = Object(target);
+      for (var i = 1; i < arguments.length; i++) {
+        var s = arguments[i];
+        if (s != null) {
+          for (var k in Object(s)) {
+            if (Object.prototype.hasOwnProperty.call(s, k)) t[k] = s[k];
+          }
+        }
+      }
+      return t;
+    };
+  }
+  if (!Array.from) {
+    Array.from = function (obj) { return Array.prototype.slice.call(obj); };
+  }
+  if (!Object.values) {
+    Object.values = function (obj) { return Object.keys(obj).map(function (k) { return obj[k]; }); };
+  }
+  if (!Number.isSafeInteger) {
+    Number.isSafeInteger = function (n) {
+      return typeof n === 'number' && isFinite(n) && Math.floor(n) === n && Math.abs(n) <= 9007199254740991;
+    };
+  }
+  if (!String.prototype.padStart) {
+    String.prototype.padStart = function (n, c) {
+      var s = String(this);
+      c = String(c || ' ');
+      while (s.length < n) s = c + s;
+      return s.slice(-n);
+    };
+  }
+  if (!String.prototype.padEnd) {
+    String.prototype.padEnd = function (n, c) {
+      var s = String(this);
+      c = String(c || ' ');
+      while (s.length < n) s = s + c;
+      return s.slice(0, n);
+    };
+  }
+  if (!String.prototype.includes) {
+    String.prototype.includes = function (v) { return this.indexOf(v) >= 0; };
+  }
+  if (!String.prototype.startsWith) {
+    String.prototype.startsWith = function (v) { return this.slice(0, v.length) === v; };
+  }
+  if (!String.prototype.endsWith) {
+    String.prototype.endsWith = function (v) { return this.slice(-v.length) === v; };
+  }
+  if (!Array.prototype.includes) {
+    Array.prototype.includes = function (v) { return this.indexOf(v) >= 0; };
+  }
+  if (!Array.prototype.find) {
+    Array.prototype.find = function (fn, thisArg) {
+      for (var i = 0; i < this.length; i++) {
+        if (fn.call(thisArg, this[i], i, this)) return this[i];
+      }
+      return undefined;
+    };
+  }
+  if (!Array.prototype.findIndex) {
+    Array.prototype.findIndex = function (fn, thisArg) {
+      for (var i = 0; i < this.length; i++) {
+        if (fn.call(thisArg, this[i], i, this)) return i;
+      }
+      return -1;
+    };
+  }
+  if (typeof Element !== 'undefined') {
+    if (!Element.prototype.matches) {
+      Element.prototype.matches =
+        Element.prototype.webkitMatchesSelector ||
+        Element.prototype.mozMatchesSelector ||
+        Element.prototype.msMatchesSelector ||
+        function (s) {
+          var matches = (this.document || this.ownerDocument).querySelectorAll(s);
+          var i = matches.length;
+          while (--i >= 0 && matches.item(i) !== this) {}
+          return i > -1;
+        };
+    }
+    if (!Element.prototype.closest) {
+      Element.prototype.closest = function (s) {
+        var el = this;
+        do {
+          if (el.matches && el.matches(s)) return el;
+          el = el.parentElement || el.parentNode;
+        } while (el !== null && el.nodeType === 1);
+        return null;
+      };
+    }
+  }
+  if (!window.AbortController) {
+    window.AbortController = function () {
+      var signal = (this.signal = {
+        aborted: false,
+        listeners: [],
+        addEventListener: function (e, fn) { if (e === 'abort') this.listeners.push(fn); },
+        removeEventListener: function (e, fn) { this.listeners = this.listeners.filter(function (x) { return x !== fn; }); }
+      });
+      this.abort = function () {
+        signal.aborted = true;
+        signal.listeners.forEach(function (fn) { fn(); });
+      };
+    };
+  }
+
+  // 4. Universal resolution auto-scaler (720p, 1366x768, 1080p, 4K)
+  function fitResolution() {
+    try {
+      var sw = window.innerWidth || (document.documentElement && document.documentElement.clientWidth) || 1920;
+      var sh = window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 1080;
+      var root = document.getElementById('root');
+      if (!root) return;
+
+      if (sw !== 1920 || sh !== 1080) {
+        var scaleX = sw / 1920;
+        var scaleY = sh / 1080;
+        var scale = Math.min(scaleX, scaleY);
+        root.style.transform = 'scale(' + scale + ')';
+        root.style.transformOrigin = '0 0';
+        root.style.width = '1920px';
+        root.style.height = '1080px';
+        root.style.position = 'absolute';
+        root.style.left = Math.max(0, (sw - 1920 * scale) / 2) + 'px';
+        root.style.top = Math.max(0, (sh - 1080 * scale) / 2) + 'px';
+      } else {
+        root.style.transform = '';
+        root.style.position = 'relative';
+        root.style.left = '0px';
+        root.style.top = '0px';
+      }
+    } catch (e) {
+      console.warn('[fitResolution err]', e);
+    }
+  }
+
+  window.addEventListener('resize', fitResolution);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', fitResolution);
+  } else {
+    fitResolution();
+  }
+
   // ---- Key mapping ----
   if (isTizen) {
     if (window.tizen && tizen.tvinputdevice) {
@@ -699,6 +900,19 @@
             if ((self._gen || 0) !== gen) { self._recovering = false; return; }
             if (!err && newMeta && newMeta.url) {
               window.__xuperCurrentStreamMeta = newMeta;
+              reopen(newMeta.url, newMeta.headers);
+            } else {
+              reopen(self._lastUrl, self._lastHeaders);
+            }
+          });
+          return;
+        }
+        if (self.kind === 'vod' && meta && meta.contentId && window.MagisClient && typeof window.MagisClient.resolve === 'function') {
+          console.log('[XuperAVPlay] VOD stream dropped, refreshing SLB token before reopen...');
+          window.MagisClient.resolve(meta.contentId, meta.seasonId, { trackIndex: meta.trackIndex }, function (err, newMeta) {
+            if ((self._gen || 0) !== gen) { self._recovering = false; return; }
+            if (!err && newMeta && newMeta.url) {
+              window.__xuperCurrentStreamMeta = Object.assign({}, meta, newMeta);
               reopen(newMeta.url, newMeta.headers);
             } else {
               reopen(self._lastUrl, self._lastHeaders);

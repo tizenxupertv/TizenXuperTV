@@ -159,6 +159,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   // Resuming at the saved position: until the TV confirms that seek, its time (0:00, 0:10…) is not the
   // viewer's and must never be saved over the saved position
   const resumePendingRef = useRef(false);
+  const lastTokenRenewalRef = useRef<number>(Date.now());
   /** How long a seek may take before the timeline shows the TV's time again */
   const SEEK_SAFETY_MS = 6000;
   const toastTimerRef = useRef<any>(null);
@@ -266,6 +267,39 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     }, SAVE_EVERY_MS);
     return () => clearInterval(timer);
   }, [isPlaying, saveProgress]);
+
+  // Preventive SLB token renewal at ~14.5 minutes (870s) to prevent cutoffs at minute 17
+  useEffect(() => {
+    if (isTrailer || !isPlaying) return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      if (now - lastTokenRenewalRef.current >= 870_000) {
+        const contentId = String(episode?.id || item.id || '');
+        const seasonId = episode ? String(seriesId || item.id || '') : null;
+        if (window.MagisClient && typeof window.MagisClient.resolve === 'function' && contentId) {
+          console.log('[VodPlayer] Proactively renewing SLB token before 17-minute expiration...');
+          window.MagisClient.resolve(contentId, seasonId, { trackIndex: portalTrackRef.current }, (err: any, newRes: any) => {
+            if (!err && newRes && newRes.url) {
+              lastTokenRenewalRef.current = Date.now();
+              window.__xuperCurrentStreamMeta = {
+                ...newRes,
+                contentId,
+                seasonId,
+                trackIndex: portalTrackRef.current,
+                startedAt: Date.now()
+              };
+              if (window.XuperAVPlay) {
+                window.XuperAVPlay._lastHeaders = newRes.headers;
+                window.XuperAVPlay._lastUrl = newRes.url;
+              }
+              console.log('[VodPlayer] SLB token renewed successfully.');
+            }
+          });
+        }
+      }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [isTrailer, isPlaying, episode, item.id, seriesId]);
 
   const handleEnded = useCallback(() => {
     if (!isTrailer) {
@@ -444,6 +478,13 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           setIsBuffering(false);
           setError('No se pudo reproducir este contenido.');
         }
+      };
+      window.__xuperCurrentStreamMeta = {
+        ...res,
+        contentId,
+        seasonId,
+        trackIndex: portalTrackRef.current,
+        startedAt: Date.now()
       };
       const ok = window.XuperAVPlay.playStream(res.url, res.headers, video, startedAtRef.current);
       console.log('[VodPlayer] playStream returned', ok);
