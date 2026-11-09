@@ -1471,6 +1471,9 @@ html, body {
 .live-grand-preview-box {
   /* 16:9 like the channels, as wide as the column; the channel card below only needs its natural height
      (the portal sends no programme guide), so the picture takes the rest of the column */
+  /* Old engines (no min() before Chromium 79): the same width, capped by the column */
+  width: calc((100vh - 300px) * 16 / 9);
+  max-width: 100%;
   width: min(100%, calc((100vh - 300px) * 16 / 9));
   height: auto;
   aspect-ratio: 16 / 9;
@@ -8937,3 +8940,13 @@ html.xuper-vod-avplay .app-root,
 .upd-done-qr { flex-shrink: 0; padding: 10px; border-radius: 14px; background: #fff; line-height: 0; }
 .upd-done-news-text { font-size: 18px; line-height: 1.5; color: #94a3b8; }
 .upd-done-news-title { font-size: 21px; font-weight: 800; color: #ffffff; margin-bottom: 4px; }
+
+/* Engines without aspect-ratio (Chromium < 88: Tizen 6.5 and older) gave these boxes no height at all */
+@supports not (aspect-ratio: 1 / 1) {
+  .live-grand-preview-box { height: calc(100vh - 300px); }
+  .synopsis-modal-poster-wrap { height: 345px; }
+  .svc-poster-wrap { height: 0; padding-top: 150%; }
+  .svc-poster-wrap .svc-poster { position: absolute; top: 0; left: 0; }
+  .filter-grid .svc-poster-wrap { height: auto; padding-top: 0; }
+  .filter-grid .svc-poster-wrap .svc-poster { position: static; }
+}

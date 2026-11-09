@@ -201,6 +201,58 @@
         signal.listeners.forEach(function (fn) { fn(); });
       };
     };
+    // fetch on these engines ignores a signal: make abort() reject it, so timeouts (sign-in, updates) fire
+    if (typeof window.fetch === 'function') {
+      var nativeFetch = window.fetch;
+      var abortError = function () {
+        try { return new DOMException('The operation was aborted.', 'AbortError'); } catch (_) {
+          var e = new Error('The operation was aborted.'); e.name = 'AbortError'; return e;
+        }
+      };
+      window.fetch = function (input, init) {
+        var signal = init && init.signal;
+        var request = nativeFetch.call(window, input, init);
+        if (!signal || typeof signal.addEventListener !== 'function') return request;
+        if (signal.aborted) return Promise.reject(abortError());
+        return new Promise(function (resolve, reject) {
+          signal.addEventListener('abort', function () { reject(abortError()); });
+          request.then(resolve, reject);
+        });
+      };
+    }
+  }
+  if (!Array.prototype.flat) {
+    Array.prototype.flat = function (depth) {
+      var d = depth === undefined ? 1 : Number(depth) || 0;
+      var out = [];
+      (function add(list, level) {
+        for (var i = 0; i < list.length; i++) {
+          if (Array.isArray(list[i]) && level > 0) add(list[i], level - 1);
+          else if (i in list) out.push(list[i]);
+        }
+      })(this, d);
+      return out;
+    };
+  }
+  if (!Array.prototype.flatMap) {
+    Array.prototype.flatMap = function (fn, thisArg) { return Array.prototype.map.call(this, fn, thisArg).flat(); };
+  }
+  if (!String.prototype.trimStart) String.prototype.trimStart = function () { return String(this).replace(/^\s+/, ''); };
+  if (!String.prototype.trimEnd) String.prototype.trimEnd = function () { return String(this).replace(/\s+$/, ''); };
+  if (!Object.fromEntries) {
+    Object.fromEntries = function (entries) {
+      var out = {};
+      Array.from(entries).forEach(function (pair) { out[pair[0]] = pair[1]; });
+      return out;
+    };
+  }
+  if (typeof Promise !== 'undefined' && !Promise.prototype.finally) {
+    Promise.prototype.finally = function (fn) {
+      return this.then(
+        function (v) { return Promise.resolve(fn()).then(function () { return v; }); },
+        function (e) { return Promise.resolve(fn()).then(function () { throw e; }); }
+      );
+    };
   }
 
   // 4. Universal resolution auto-scaler (720p, 1366x768, 1080p, 4K)
