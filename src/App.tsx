@@ -945,6 +945,8 @@ export const App: React.FC = () => {
             applySettingChoice(col, index);
             setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: SETTINGS_ROW[col] }));
           }}
+          onOpenSynopsisModal={() => setDetailFocus(prev => ({ ...prev, showSynopsisModal: true, castIndex: 0 }))}
+          onCloseSynopsisModal={() => setDetailFocus(prev => ({ ...prev, showSynopsisModal: false, area: 'quick', quickIndex: 1 }))}
         />
       )}
 

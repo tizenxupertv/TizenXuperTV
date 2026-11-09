@@ -63,11 +63,50 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
     return false; // let PersonDetailModal useScreenKeys handle other navigation
   }
 
-  // When SynopsisModal is active, back or enter closes it
+  // When SynopsisModal is active, navigate cast or close with back
   if (detailFocus.showSynopsisModal) {
-    if (key === 'back' || key === 'enter') {
+    if (key === 'back') {
       setDetailFocus(prev => ({ ...prev, showSynopsisModal: false, area: 'quick', quickIndex: 1 }));
       return true;
+    }
+
+    const pool = detailCast.length > 0 ? detailCast : parseCastFromVodItem(activeDetailItem);
+    const totalCast = pool.length;
+
+    if (totalCast > 0) {
+      const ci = Math.min(totalCast - 1, Math.max(0, detailFocus.castIndex ?? 0));
+      const COLS = 3;
+
+      if (key === 'left') {
+        setDetailFocus(prev => ({ ...prev, castIndex: Math.max(0, ci - 1) }));
+        return true;
+      }
+      if (key === 'right') {
+        setDetailFocus(prev => ({ ...prev, castIndex: Math.min(totalCast - 1, ci + 1) }));
+        return true;
+      }
+      if (key === 'up') {
+        if (ci >= COLS) {
+          setDetailFocus(prev => ({ ...prev, castIndex: Math.max(0, ci - COLS) }));
+        }
+        return true;
+      }
+      if (key === 'down') {
+        setDetailFocus(prev => ({ ...prev, castIndex: Math.min(totalCast - 1, ci + COLS) }));
+        return true;
+      }
+      if (key === 'enter') {
+        const p = pool[ci] || pool[0];
+        if (p && setSelectedPerson) {
+          setSelectedPerson(p);
+        }
+        return true;
+      }
+    } else {
+      if (key === 'enter') {
+        setDetailFocus(prev => ({ ...prev, showSynopsisModal: false, area: 'quick', quickIndex: 1 }));
+        return true;
+      }
     }
     return true;
   }
@@ -151,7 +190,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
       return true;
     }
     if (key === 'enter') {
-      setDetailFocus(prev => ({ ...prev, showSynopsisModal: true }));
+      setDetailFocus(prev => ({ ...prev, showSynopsisModal: true, castIndex: 0 }));
       return true;
     }
     return true;
@@ -215,7 +254,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
     if (key === 'enter') {
       const q = quick[qi];
       if (q === 'fav') favoritesService.toggleFavorite(activeDetailItem.id, activeDetailItem);
-      else if (q === 'info') setDetailFocus(prev => ({ ...prev, showSynopsisModal: true }));
+      else if (q === 'info') setDetailFocus(prev => ({ ...prev, showSynopsisModal: true, castIndex: 0 }));
       else if (q === 'settings') setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: 'menu', modalIndex: 0 }));
       else if (q === 'trailer') playFromDetail(activeDetailItem, undefined, true);
       return true;
