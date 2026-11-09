@@ -421,7 +421,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const st = updateService.status();
       if (st.canSelfUpdate) {
         // Restarting is reloading: the loader then starts the downloaded version (public/js/boot.js)
-        r.push([{ id: 'update-check', onActivate: checkUpdates }, ...(st.downloaded ? [{ id: 'update-restart', onActivate: () => window.location.reload() }] : [])]);
+        r.push([
+          { id: 'update-check', onActivate: checkUpdates },
+          ...(st.downloaded ? [{ id: 'update-restart', onActivate: () => window.location.reload() }] : []),
+          // Beta testers: pre-releases too, checked right away
+          { id: 'update-beta', onActivate: () => {
+            updateService.setChannel(updateService.channel() === 'beta' ? 'stable' : 'beta');
+            checkUpdates();
+          } }
+        ]);
       }
     } else if (id === 'donate') {
       r.push([{ id: 'donate-qr', onActivate: () => {} }]);
@@ -911,7 +919,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   Reiniciar para actualizar
                 </div>
               )}
+              <div className={`pf-btn ${isF('update-beta') ? 'is-focused' : ''}`} onClick={tap('update-beta')}>
+                {updateService.channel() === 'beta' ? 'Versiones beta: Sí' : 'Versiones beta: No'}
+              </div>
             </div>
+          )}
+          {updateService.status().canSelfUpdate && updateService.channel() === 'beta' && (
+            <div className="pf-note">Recibes las versiones de prueba antes que nadie; pueden tener fallos. Cuéntalos en el grupo Beta de Telegram.</div>
           )}
         </div>
       </div>
