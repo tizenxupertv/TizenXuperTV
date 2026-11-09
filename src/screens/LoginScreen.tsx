@@ -468,7 +468,7 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
               <div className="tg-login-notice-content">
                 <div className="tg-login-notice-title">No se pudo conectar con el servidor</div>
                 <div className="tg-login-notice-desc">
-                  Revisa la conexión a internet de la TV o consulta las soluciones sugeridas.
+                  Si tu red bloquea nuestros servidores, inicia sesión con los datos de tu móvil y luego vuelve a tu Wi-Fi: la sesión queda guardada.
                 </div>
               </div>
             </div>
@@ -710,20 +710,21 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
               <div className="tg-login-help-item">
                 <div className="tg-login-help-num">1</div>
                 <div className="tg-login-help-info">
-                  <div className="tg-login-help-name">Fija la IP y el DNS en 1.1.1.1 o 8.8.8.8 (Recomendado)</div>
+                  <div className="tg-login-help-name">Inicia sesión con los datos de tu móvil (lo más rápido)</div>
                   <div className="tg-login-help-sub">
-                    Muchos operadores de internet bloquean dominios de video o Cloudflare.
-                    En tu TV ve a: <b>Configuración › General › Red › Estado de la red › Configuración de IP</b>,
-                    pasa la IP y la <b>Configuración de DNS</b> a <b>Ingresar manualmente</b> y escribe <b>1.1.1.1</b> o <b>8.8.8.8</b>.
+                    Activa la <b>Zona Wi-Fi personal</b> del teléfono, conecta la TV a esa red y escanea el código QR.
+                    Cuando la TV entre, vuelve a tu Wi-Fi de casa: <b>la sesión queda guardada en la TV</b> aunque tu red bloquee nuestros servidores.
                   </div>
                 </div>
               </div>
               <div className="tg-login-help-item">
                 <div className="tg-login-help-num">2</div>
                 <div className="tg-login-help-info">
-                  <div className="tg-login-help-name">Prueba compartiendo datos desde tu celular</div>
+                  <div className="tg-login-help-name">Fija la IP y el DNS en 1.1.1.1 o 8.8.8.8</div>
                   <div className="tg-login-help-sub">
-                    Activa la <b>Zona Wi-Fi personal</b> de tu teléfono celular y conecta la TV temporalmente. Si el código carga de inmediato, el bloqueo proviene de tu módem o proveedor de internet de hogar.
+                    Muchos operadores de internet bloquean dominios de video o Cloudflare.
+                    En tu TV ve a: <b>Configuración › General › Red › Estado de la red › Configuración de IP</b>,
+                    pasa la IP y la <b>Configuración de DNS</b> a <b>Ingresar manualmente</b> y escribe <b>1.1.1.1</b> o <b>8.8.8.8</b>.
                   </div>
                 </div>
               </div>
