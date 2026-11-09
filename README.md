@@ -129,6 +129,43 @@ to the `.wgt`: the bot Worker serves them to the TVs (`/tv/update`). To try an u
 
 ---
 
+## 🌐 Community & Beta Testing
+
+TizenXuper TV has a three-tier Telegram community:
+
+| Space | Purpose | Link |
+|---|---|---|
+| **Canal TizenXuper TV** | Official announcements and release posts | [@TizenXuperTV](https://t.me/TizenXuperTV) |
+| **Comunidad / Soporte** | General user support and discussion | [@TizenXuperTVSoporte](https://t.me/TizenXuperTVSoporte) |
+| **TizenXuper TV Beta** | Segmented beta testing by TV generation | [Invite link](https://t.me/+CTPQE5XuzFA3MDkx) |
+
+### Beta Group Topics
+
+The Beta group is a Telegram forum with dedicated topics per TV generation:
+
+| Topic | Thread ID | Purpose |
+|---|---|---|
+| **Legacy** (Tizen 4.0–4.5) | 7 | Tests on Tizen 4.0–4.5 TVs (2017–2018) |
+| **Mid-Gen** (Tizen 5.0–5.5) | 8 | Tests on Tizen 5.0–5.5 TVs (2019–2020) |
+| **Moderno** (Tizen 6.0+) | 9 | Tests on Tizen 6.0+ TVs (2021 and later) |
+| **Instalacion y Certificados** | 16 | Installation, signing, and certificate help |
+| **Reporte de Fallos y Canales** | 17 | Bug reports and broken channel reports |
+| **Sugerencias e Ideas** | 18 | Feature requests and improvement suggestions |
+| **Anuncios y Pruebas** | 19 | Beta announcements and test builds |
+
+### Bot Commands for Beta Members
+
+The [@TizenXuperBot](https://t.me/TizenXuperBot) provides direct deep-links into the correct topic:
+
+- `/mitv [model]` — classifies your TV by generation and links the matching topic  
+  Example: `mitv UE55RU7400` → Mid-Gen topic
+- `/beta` — full beta group info and topic directory
+- `/tizen` — Tizen generation reference table (4.0 to 9.0+)
+
+Join the beta group: `https://t.me/+CTPQE5XuzFA3MDkx`
+
+---
+
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
