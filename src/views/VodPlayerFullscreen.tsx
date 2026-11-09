@@ -7,6 +7,7 @@ import { getEpisodeStatus } from '../lib/vodResume';
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
+import { buildVodPlaylist, canPlayVodWithMse, mseHlsConfig, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
   SubtitleTrack,
@@ -132,6 +133,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
   const [streamInfoText, setStreamInfoText] = useState<string>('');
   const [browserUrl, setBrowserUrl] = useState<string | null>(null);
+  /** Title played through MSE (hls.js + the .idxg index) instead of AVPlay */
+  const [mseRes, setMseRes] = useState<any>(null);
+  /** MSE failed in this player: the rest of the session (retries, audio changes) uses AVPlay */
+  const mseFailedRef = useRef(false);
   const [avMode, setAvMode] = useState(false);
 
   // Audio / subtitles chosen from the player menus (bottom-right buttons)
@@ -384,6 +389,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     setError(null);
     setIsBuffering(true);
     setBrowserUrl(null);
+    setMseRes(null);
     startedAtRef.current = retryTick > 0 ? timeRef.current.t : startAt;
 
     // The live preview shares the single AVPlay instance: stop it first
@@ -573,7 +579,11 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         const audioInPref = sameLanguage(res.audio, pref);
         setSubIndex(settings.subtitle && !audioInPref ? subs.findIndex(sb => sameLanguage(sb.lang, pref)) : -1);
       }
-      if (hasAvPlay()) {
+      if (hasAvPlay() && !isTrailer && !mseFailedRef.current && canPlayVodWithMse(res)) {
+        // Indexed .ts on a TV with MSE: pieces by byte range, instant seeks inside the buffer
+        window.__xuperCurrentStreamMeta = { ...res, contentId, seasonId, trackIndex: portalTrackRef.current, startedAt: Date.now() };
+        setMseRes(res);
+      } else if (hasAvPlay()) {
         playOnTv(res);
       } else if (res.mime === 'video/mp2t' || /\.ts(\?|$)/i.test(res.url)) {
         // Desktop Chrome cannot play MPEG-TS files; the TV plays them with AVPlay
@@ -659,6 +669,109 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       } catch {}
     };
   }, [browserUrl]);
+
+  // MSE playback: the .idxg index becomes a byte-range playlist for hls.js on the page's <video>
+  useEffect(() => {
+    const video = videoRef.current;
+    const Hls = (window as any).Hls;
+    if (!video || !mseRes || !Hls) return;
+    useAvPlayRef.current = false;
+    setAvMode(false);
+    document.documentElement.classList.remove('xuper-vod-avplay');
+    let hls: any = null;
+    let alive = true;
+    let recoveredMedia = false;
+
+    // Anything wrong here: play the same title with AVPlay from where it is
+    const fallBack = (why: string) => {
+      if (!alive) return;
+      alive = false;
+      console.warn('[VodPlayer] MSE -> AVPlay:', why);
+      logPlayback({ kind: 'error', player: 'MSE', detail: `vuelve a AVPlay: ${why}` });
+      mseFailedRef.current = true;
+      if (video.currentTime > 5) timeRef.current.t = video.currentTime;
+      setMseRes(null);
+      setRetryTick(t => t + 1);
+    };
+
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onTimeUpdate = () => {
+      if (!acceptTimeRef.current(video.currentTime)) return;
+      timeRef.current.t = video.currentTime;
+      setCurrentTime(video.currentTime);
+    };
+    const onLoadedMetadata = () => {
+      timeRef.current.d = video.duration || 0;
+      setDuration(video.duration || 0);
+    };
+    const onPlaying = () => {
+      setIsBuffering(false);
+      setIsPlaying(true);
+      const timing = startTimingRef.current;
+      if (timing && !timing.logged) {
+        timing.logged = true;
+        const now = Date.now();
+        logPlayback({ kind: 'start', player: 'MSE', detail: `inicio ${now - timing.at} ms (portal ${timing.resolvedAt - timing.at} ms, TV ${now - timing.resolvedAt} ms)` });
+      }
+    };
+    const onWaiting = () => setIsBuffering(true);
+    const onEnded = () => handleEndedRef.current();
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+    video.addEventListener('timeupdate', onTimeUpdate);
+    video.addEventListener('loadedmetadata', onLoadedMetadata);
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('ended', onEnded);
+
+    buildVodPlaylist(mseRes)
+      .then(({ playlist, pieces }) => {
+        if (!alive) return;
+        console.log('[VodPlayer] MSE playlist', pieces, 'pieces, start at', Math.round(startedAtRef.current));
+        hls = (window as any).__xuperCreateHls(mseHlsConfig(Hls, playlist, startedAtRef.current));
+        if (!hls) return fallBack('hls.js no disponible');
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(() => {
+            video.muted = true;
+            video.play().catch(() => {});
+          });
+        });
+        hls.on(Hls.Events.ERROR, (_e: any, data: any) => {
+          if (!data || !data.fatal) return;
+          // One media recovery (a decoder hiccup); network errors were already retried by hls.js
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !recoveredMedia) {
+            recoveredMedia = true;
+            hls.recoverMediaError();
+            return;
+          }
+          const code = data.response && data.response.code ? ` ${data.response.code}` : '';
+          fallBack(`${data.type}/${data.details}${code}`);
+        });
+        hls.loadSource(MSE_PLAYLIST_URL);
+        hls.attachMedia(video);
+      })
+      .catch((err: any) => fallBack((err && err.message) || String(err)));
+
+    return () => {
+      alive = false;
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('loadedmetadata', onLoadedMetadata);
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('ended', onEnded);
+      if (hls) {
+        try { hls.destroy(); } catch {}
+      }
+      try {
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+      } catch {}
+    };
+  }, [mseRes]);
 
   // Back from background / network reconnect: reopen at the same position
   useEffect(() => {
