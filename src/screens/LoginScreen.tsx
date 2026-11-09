@@ -4,6 +4,7 @@ import { runLoginDiagnostic, LoginDiagResult } from '../services/diagnosticServi
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { BrandLogo } from '../components/common/BrandLogo';
 import { QrCode } from '../components/common/QrCode';
+import { diagQrUrl } from '../lib/diagQr';
 
 type Phase =
   | { name: 'loading'; retryCount?: number }
@@ -24,6 +25,25 @@ function countdown(ms: number): string {
   return `${Math.floor(s / 60)}:${r < 10 ? '0' : ''}${r}`;
 }
 
+/** Buttons of the error screen as the D-pad walks them: two rows of two */
+type Action = 'retry' | 'diag' | 'report' | 'help';
+const ERROR_ACTIONS: Action[][] = [
+  ['retry', 'diag'],
+  ['report', 'help']
+];
+/** Buttons of the diagnostic window, left to right */
+type DiagAction = 'retry' | 'report' | 'help' | 'close';
+const DIAG_ACTIONS: DiagAction[] = ['retry', 'report', 'help', 'close'];
+
+const VERDICT_TITLE: Record<LoginDiagResult['verdict'], string> = {
+  ok: 'Todo listo para conectar',
+  'clock-wrong': 'Atención: Fecha y hora desfasadas',
+  'no-internet': 'Sin conexión a internet',
+  'relay-only': 'Servidor principal filtrado (Relay listo)',
+  'all-blocked': 'Bloqueo DNS detectado',
+  'workers-blocked': 'Filtro DNS en red'
+};
+
 /** Bot username from the t.me deep link, for the "send the code" alternative */
 function botName(url: string): string {
   const m = url.match(/t\.me\/([A-Za-z0-9_]+)/);
@@ -31,27 +51,29 @@ function botName(url: string): string {
 }
 
 export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }) => {
-  // Support ?test=error | loading | expired | help | diag in local browser for easy visual testing
+  // Support ?test=error | loading | expired | help | diag | report in local browser for easy visual testing
   const testParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('test') : null;
 
   const [phase, setPhase] = useState<Phase>(() => {
-    if (testParam === 'error' || testParam === 'help' || testParam === 'diag') return { name: 'error' };
+    if (testParam === 'error' || testParam === 'help' || testParam === 'diag' || testParam === 'report') return { name: 'error' };
     if (testParam === 'expired') return { name: 'expired' };
     if (testParam === 'done') return { name: 'done', userName: 'Ana' };
     return { name: 'loading', retryCount: 0 };
   });
   const [attempt, setAttempt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
-  const [activeAction, setActiveAction] = useState<'retry' | 'diag' | 'help'>(() => {
+  const [activeAction, setActiveAction] = useState<Action>(() => {
     if (testParam === 'diag') return 'diag';
     if (testParam === 'help') return 'help';
+    if (testParam === 'report') return 'report';
     return 'retry';
   });
   const [showHelpModal, setShowHelpModal] = useState(() => testParam === 'help');
   const [showDiagModal, setShowDiagModal] = useState(() => testParam === 'diag');
+  const [showReportModal, setShowReportModal] = useState(() => testParam === 'report');
   const [diagResult, setDiagResult] = useState<LoginDiagResult | null>(null);
   const [diagRunning, setDiagRunning] = useState(false);
-  const [diagAction, setDiagAction] = useState<'retry' | 'help' | 'close'>('retry');
+  const [diagAction, setDiagAction] = useState<DiagAction>('retry');
 
   // The sign-in screen is a first screen too: a downloaded update that got this far is good (public/js/boot.js)
   useEffect(() => {
@@ -131,9 +153,7 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
     return () => clearInterval(t);
   }, [phase.name]);
 
-  const handleOpenDiag = () => {
-    setShowDiagModal(true);
-    setDiagAction('retry');
+  const runDiag = () => {
     setDiagRunning(true);
     runLoginDiagnostic().then(
       res => {
@@ -153,32 +173,56 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
     );
   };
 
+  const handleOpenDiag = () => {
+    setShowDiagModal(true);
+    setDiagAction('retry');
+    runDiag();
+  };
+
+  // The report needs the diagnostic: reuse the last one, or run it while the window opens
+  const handleOpenReport = () => {
+    setShowDiagModal(false);
+    setShowReportModal(true);
+    if (!diagResult && !diagRunning) runDiag();
+  };
+
+  const closeReport = () => {
+    setShowReportModal(false);
+    setActiveAction('report');
+  };
+
   useEffect(() => {
-    if (testParam === 'diag') {
-      handleOpenDiag();
-    }
+    if (testParam === 'diag') handleOpenDiag();
+    if (testParam === 'report') runDiag();
   }, [testParam]);
 
   const retry = () => {
     setActiveAction('retry');
     setShowHelpModal(false);
     setShowDiagModal(false);
+    setShowReportModal(false);
     setAttempt(a => a + 1);
   };
 
   const canRetry = phase.name === 'expired' || phase.name === 'error';
 
   useScreenKeys(key => {
+    if (showReportModal) {
+      if (key === 'enter' || key === 'back') closeReport();
+      return;
+    }
+
     if (showDiagModal) {
-      if (key === 'left') {
-        if (diagAction === 'close') setDiagAction('help');
-        else if (diagAction === 'help') setDiagAction('retry');
-      } else if (key === 'right') {
-        if (diagAction === 'retry') setDiagAction('help');
-        else if (diagAction === 'help') setDiagAction('close');
+      const i = DIAG_ACTIONS.indexOf(diagAction);
+      if (key === 'left' && i > 0) {
+        setDiagAction(DIAG_ACTIONS[i - 1]);
+      } else if (key === 'right' && i < DIAG_ACTIONS.length - 1) {
+        setDiagAction(DIAG_ACTIONS[i + 1]);
       } else if (key === 'enter') {
         if (diagAction === 'retry') {
           retry();
+        } else if (diagAction === 'report') {
+          handleOpenReport();
         } else if (diagAction === 'help') {
           setShowDiagModal(false);
           setShowHelpModal(true);
@@ -202,19 +246,29 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
     }
 
     if (canRetry) {
-      if (key === 'left') {
-        if (phase.name === 'error') {
-          if (activeAction === 'help') setActiveAction('diag');
-          else if (activeAction === 'diag') setActiveAction('retry');
-        } else {
-          setActiveAction('retry');
+      // Expired: only "Generar nuevo código". Error: a 2x2 grid of buttons
+      const grid: Action[][] = phase.name === 'error' ? ERROR_ACTIONS : [['retry']];
+      let r = 0;
+      let c = 0;
+      grid.forEach((row, ri) => {
+        if (row.indexOf(activeAction) !== -1) {
+          r = ri;
+          c = row.indexOf(activeAction);
         }
-      } else if (key === 'right' && phase.name === 'error') {
-        if (activeAction === 'retry') setActiveAction('diag');
-        else if (activeAction === 'diag') setActiveAction('help');
+      });
+      if (key === 'left' && c > 0) {
+        setActiveAction(grid[r][c - 1]);
+      } else if (key === 'right' && c < grid[r].length - 1) {
+        setActiveAction(grid[r][c + 1]);
+      } else if (key === 'up' && r > 0) {
+        setActiveAction(grid[r - 1][Math.min(c, grid[r - 1].length - 1)]);
+      } else if (key === 'down' && r < grid.length - 1) {
+        setActiveAction(grid[r + 1][Math.min(c, grid[r + 1].length - 1)]);
       } else if (key === 'enter') {
-        if (activeAction === 'help') setShowHelpModal(true);
-        else if (activeAction === 'diag') handleOpenDiag();
+        const action = grid[r][c];
+        if (action === 'help') setShowHelpModal(true);
+        else if (action === 'diag') handleOpenDiag();
+        else if (action === 'report') handleOpenReport();
         else retry();
       } else if (key === 'back' && window.XuperPlatform && window.XuperPlatform.exit) {
         window.XuperPlatform.exit();
@@ -449,31 +503,42 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
             </div>
           )}
 
-          {canRetry && (
+          {phase.name === 'expired' && (
             <div className="tg-login-btn-row">
-              <div
-                className={`pf-btn tg-login-btn ${activeAction === 'retry' ? 'is-focused' : ''}`}
-                onClick={retry}
-              >
-                {phase.name === 'expired' ? 'Generar nuevo código' : 'Reintentar'}
+              <div className={`pf-btn tg-login-btn ${activeAction === 'retry' ? 'is-focused' : ''}`} onClick={retry}>
+                Generar nuevo código
               </div>
-              {phase.name === 'error' && (
-                <>
-                  <div
-                    className={`pf-btn tg-login-btn tg-login-btn-diag ${activeAction === 'diag' ? 'is-focused' : ''}`}
-                    onClick={handleOpenDiag}
-                  >
-                    Diagnosticar red
-                  </div>
-                  <div
-                    className={`pf-btn tg-login-btn tg-login-btn-help ${activeAction === 'help' ? 'is-focused' : ''}`}
-                    onClick={() => setShowHelpModal(true)}
-                  >
-                    ¿Cómo solucionarlo?
-                  </div>
-                </>
-              )}
             </div>
+          )}
+
+          {phase.name === 'error' && (
+            <>
+              <div className="tg-login-btn-row is-pair">
+                <div className={`pf-btn tg-login-btn ${activeAction === 'retry' ? 'is-focused' : ''}`} onClick={retry}>
+                  Reintentar
+                </div>
+                <div
+                  className={`pf-btn tg-login-btn tg-login-btn-diag ${activeAction === 'diag' ? 'is-focused' : ''}`}
+                  onClick={handleOpenDiag}
+                >
+                  Diagnosticar red
+                </div>
+              </div>
+              <div className="tg-login-btn-row is-pair">
+                <div
+                  className={`pf-btn tg-login-btn tg-login-btn-report ${activeAction === 'report' ? 'is-focused' : ''}`}
+                  onClick={handleOpenReport}
+                >
+                  Enviar reporte
+                </div>
+                <div
+                  className={`pf-btn tg-login-btn tg-login-btn-help ${activeAction === 'help' ? 'is-focused' : ''}`}
+                  onClick={() => setShowHelpModal(true)}
+                >
+                  ¿Cómo solucionarlo?
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -540,14 +605,7 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
 
             {diagResult && (
               <div className={`tg-login-diag-verdict-box is-${diagResult.verdict === 'ok' ? 'ok' : (diagResult.verdict === 'relay-only' ? 'warn' : 'error')}`}>
-                <div className="tg-login-diag-verdict-title">
-                  {diagResult.verdict === 'ok' && 'Todo listo para conectar'}
-                  {diagResult.verdict === 'clock-wrong' && 'Atención: Fecha y hora desfasadas'}
-                  {diagResult.verdict === 'no-internet' && 'Sin conexión a internet'}
-                  {diagResult.verdict === 'relay-only' && 'Servidor principal filtrado (Relay listo)'}
-                  {diagResult.verdict === 'all-blocked' && 'Bloqueo DNS detectado'}
-                  {diagResult.verdict === 'workers-blocked' && 'Filtro DNS en red'}
-                </div>
+                <div className="tg-login-diag-verdict-title">{VERDICT_TITLE[diagResult.verdict]}</div>
                 <div className="tg-login-diag-verdict-desc">
                   {diagResult.recommendation}
                 </div>
@@ -565,6 +623,12 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
                 Reintentar conexión
               </div>
               <div
+                className={`pf-btn tg-login-diag-btn ${diagAction === 'report' ? 'is-focused' : ''}`}
+                onClick={handleOpenReport}
+              >
+                Enviar reporte
+              </div>
+              <div
                 className={`pf-btn tg-login-diag-btn tg-login-btn-help ${diagAction === 'help' ? 'is-focused' : ''}`}
                 onClick={() => {
                   setShowDiagModal(false);
@@ -580,6 +644,51 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
                   setActiveAction('diag');
                 }}
               >
+                Cerrar
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReportModal && (
+        <div className="tg-login-diag-overlay">
+          <div className="tg-login-diag-card tg-login-report-card">
+            <div className="tg-login-diag-header">
+              <div className="tg-login-diag-badge">REPORTE PARA SOPORTE</div>
+              <h2 className="tg-login-diag-title">Envía el reporte con tu teléfono</h2>
+              <p className="tg-login-diag-desc">
+                Esta TV no llega a nuestros servidores, así que el reporte sale desde tu teléfono.
+              </p>
+            </div>
+            <div className="tg-login-report-body">
+              <div className="tg-login-report-qr">
+                {diagResult ? (
+                  <QrCode text={diagQrUrl(__APP_VERSION__, accountService.deviceInfo().model, diagResult)} size={230} />
+                ) : (
+                  <div className="tg-login-report-wait">
+                    <span className="tg-login-spinner"></span>
+                  </div>
+                )}
+              </div>
+              <div className="tg-login-report-info">
+                <div className="tg-login-report-steps">
+                  <div><b>1.</b> Escanea el código con la cámara del teléfono.</div>
+                  <div><b>2.</b> Se abre nuestro bot de Telegram: toca <b>Iniciar</b>.</div>
+                  <div><b>3.</b> El bot te dice qué probar y pasa el reporte a soporte.</div>
+                </div>
+                <div className="tg-login-report-data">
+                  <div>TV: <b>{accountService.deviceInfo().model || 'modelo desconocido'}</b></div>
+                  <div>Versión de la app: <b>{__APP_VERSION__}</b></div>
+                  <div>
+                    Diagnóstico:{' '}
+                    <b>{diagResult ? VERDICT_TITLE[diagResult.verdict] : 'analizando la red…'}</b>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="tg-login-diag-footer">
+              <div className="pf-btn tg-login-diag-btn is-focused" onClick={closeReport}>
                 Cerrar
               </div>
             </div>
