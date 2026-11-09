@@ -1458,7 +1458,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     };
   });
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
   const remainingTime = duration > 0 ? Math.max(0, duration - currentTime) : 0;
   const osdVisible = !!error || (!osdDismissed && showOsd);
   const osdVisibleRef = useRef(osdVisible);
