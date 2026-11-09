@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HistoryItem } from '../../types/history';
-import { useCardImage, isImagePrecached, markImageLoaded } from '../../lib/imageCache';
+import { useCardImage, isImagePrecached, markImageLoaded, markImageFailed } from '../../lib/imageCache';
 
 interface ContinueWatchingCardProps {
   item: HistoryItem;
@@ -20,16 +20,22 @@ const ContinueWatchingCardComponent: React.FC<ContinueWatchingCardProps> = ({
 
   const isCached = !!cardSrc && isImagePrecached(cardSrc);
   const [imgLoaded, setImgLoaded] = useState(isCached);
+  const [imgFailed, setImgFailed] = useState(false);
 
   useEffect(() => {
-    if (cardSrc && isImagePrecached(cardSrc)) {
-      setImgLoaded(true);
-    }
+    setImgFailed(false);
+    setImgLoaded(!!cardSrc && isImagePrecached(cardSrc));
   }, [cardSrc]);
 
-  const handleImgDone = () => {
+  const handleImgLoad = () => {
     if (cardSrc) markImageLoaded(cardSrc);
     setImgLoaded(true);
+  };
+
+  const handleImgError = () => {
+    if (cardSrc) markImageFailed(cardSrc);
+    setImgLoaded(false);
+    setImgFailed(true);
   };
 
   const pct = item.duration > 0
@@ -58,14 +64,14 @@ const ContinueWatchingCardComponent: React.FC<ContinueWatchingCardProps> = ({
           alt=""
           loading="eager"
         />
-        {cardSrc && (
+        {cardSrc && !imgFailed && (
           <img
             className={`poster-card-img-element ${imgLoaded ? 'is-loaded' : ''}`}
             src={cardSrc}
             decoding="async"
             loading="lazy"
-            onLoad={handleImgDone}
-            onError={handleImgDone}
+            onLoad={handleImgLoad}
+            onError={handleImgError}
             alt=""
           />
         )}

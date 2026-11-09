@@ -9,6 +9,7 @@
 
 const preloadedUrls = new Set<string>();
 const loadedImageUrls = new Set<string>();
+const failedImageUrls = new Set<string>();
 let preloadTimer: any = null;
 
 export function isImagePrecached(url: string): boolean {
@@ -17,7 +18,29 @@ export function isImagePrecached(url: string): boolean {
 }
 
 export function markImageLoaded(url: string): void {
-  if (url) loadedImageUrls.add(url);
+  if (url) {
+    loadedImageUrls.add(url);
+    failedImageUrls.delete(url);
+  }
+}
+
+export function markImageFailed(url: string): void {
+  if (url) {
+    failedImageUrls.add(url);
+  }
+}
+
+export function isImageFailed(url: string): boolean {
+  if (!url) return false;
+  return failedImageUrls.has(url);
+}
+
+export function getImageCacheStats(): { loaded: number; failed: number; preloaded: number } {
+  return {
+    loaded: loadedImageUrls.size,
+    failed: failedImageUrls.size,
+    preloaded: preloadedUrls.size
+  };
 }
 
 export function getDirectImageUrl(url: string): string {

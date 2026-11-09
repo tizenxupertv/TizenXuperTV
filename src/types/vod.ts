@@ -34,6 +34,8 @@ export interface VodItem {
   poster?: string;
   landscape?: string;
   backdrop?: string;
+  /** Candidate artwork URLs in priority order for automatic fallback on load error */
+  posterAlternates?: string[];
   streamUrl?: string;
   trailerUrl?: string;
   quality?: string;
@@ -44,6 +46,9 @@ export interface VodItem {
   row?: string;
   /** Collection tile (portal aggregation row): the column of the tab's root it opens */
   collectionId?: number;
+  /** True when the item belongs to a restricted (+18) column or category */
+  restricted?: boolean;
+  privateContent?: boolean;
   _portal?: boolean;
 }
 

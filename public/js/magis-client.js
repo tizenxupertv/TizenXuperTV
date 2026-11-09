@@ -961,12 +961,14 @@
         }
 
         var streamUrl = mainCdn.bases[0] + path;
+        var idxUrl = mainCdn.bases[0] + '/vod/' + trim(chosen.contentId) + '_idx.idxg';
         var backupUrls = [];
         for (var h = 0; h < cdns.length; h++) {
           for (var g = 0; g < cdns[h].bases.length; g++) {
             if (h !== 0 || g !== 0) {
               backupUrls.push({
                 url: cdns[h].bases[g] + path,
+                idxUrl: cdns[h].bases[g] + '/vod/' + trim(chosen.contentId) + '_idx.idxg',
                 headers: makeHeaders(cdns[h].auth)
               });
             }
@@ -980,6 +982,7 @@
         callback(null, {
           url: streamUrl,
           proxyPath: streamUrl,
+          idxUrl: idxUrl,
           mime: mime,
           codec: codec,
           quality: trim(chosen.quality),
@@ -1494,8 +1497,63 @@
   }
 
   var itemCache = {};
+  function hasUsableArt(url) {
+    var s = trim(url);
+    return !!s && !/(?:^|\/)placeholder_(?:vertical|horizontal)\.png(?:\?|$)/i.test(s);
+  }
+  function collectAssetAlternates(asset, extraItem) {
+    var seen = {};
+    var out = [];
+    function pushUrl(u) {
+      var s = trim(u);
+      if (!hasUsableArt(s) || seen[s]) return;
+      seen[s] = true;
+      out.push(s);
+    }
+    var list = asset && asset.posterList;
+    if (list && list.length) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].fileUrl) pushUrl(list[i].fileUrl);
+      }
+    }
+    if (asset) {
+      pushUrl(asset.picture);
+      pushUrl(asset.cover);
+      pushUrl(asset.posterUrl);
+      pushUrl(asset.poster);
+    }
+    if (extraItem) {
+      pushUrl(extraItem.poster);
+      if (extraItem.posterAlternates && extraItem.posterAlternates.length) {
+        for (var j = 0; j < extraItem.posterAlternates.length; j++) {
+          pushUrl(extraItem.posterAlternates[j]);
+        }
+      }
+      pushUrl(extraItem.landscape);
+      pushUrl(extraItem.backdrop);
+    }
+    return out;
+  }
   function remember(item) {
-    if (item && item.id) itemCache[item.id] = item;
+    if (!item || !item.id) return;
+    var prev = itemCache[item.id] || findItemInLocalCatalogs(item.id);
+    if (prev) {
+      if (!hasUsableArt(item.poster) && hasUsableArt(prev.poster)) item.poster = prev.poster;
+      if (!hasUsableArt(item.landscape) && hasUsableArt(prev.landscape)) item.landscape = prev.landscape;
+      if (!hasUsableArt(item.backdrop) && hasUsableArt(prev.backdrop)) item.backdrop = prev.backdrop;
+      if (prev.restricted) item.restricted = true;
+      if (prev.privateContent) item.privateContent = true;
+    }
+    item.posterAlternates = collectAssetAlternates(null, item);
+    if (prev) {
+      var mergedAlts = collectAssetAlternates(null, prev);
+      for (var k = 0; k < mergedAlts.length; k++) {
+        if (item.posterAlternates.indexOf(mergedAlts[k]) === -1) {
+          item.posterAlternates.push(mergedAlts[k]);
+        }
+      }
+    }
+    itemCache[item.id] = item;
   }
 
   // Row name for the aggregation tiles (the portal sends that row without a name)
@@ -1531,6 +1589,7 @@
     var posterUrl = imageOf(asset, 'icon') || imageOf(asset, 'poster') || imageOf(asset, '1') || trim(asset.picture || asset.cover || asset.posterUrl);
     var landscapeUrl = imageOf(asset, 'poster') || imageOf(asset, 'stage') || imageOf(asset, '2') || posterUrl;
     var backdropUrl = imageOf(asset, 'stage') || imageOf(asset, 'poster') || imageOf(asset, '4') || imageOf(asset, '3') || landscapeUrl;
+    var posterAlternates = collectAssetAlternates(asset, null);
 
     var item = {
       id: trim(asset.contentId),
@@ -1544,7 +1603,8 @@
       director: text(asset.director),
       actors: text(asset.actorDisplay || asset.actors),
       synopsis: text(asset.description || asset.synopsis),
-      poster: posterUrl,
+      poster: posterUrl || posterAlternates[0] || '',
+      posterAlternates: posterAlternates,
       landscape: landscapeUrl,
       backdrop: backdropUrl,
       type: isSeries ? 'teleplay' : pType,
@@ -1804,8 +1864,10 @@
   // Sorted by the portal's `sequence`; restricted (adult) columns are left out unless opts.special
   // (specialFlag "1", the adult section opened after the PIN).
   var columnCache = {};
+  var restrictedColumns = { '76300': true };
   function columns(columnId, callback, opts) {
-    var special = !!(opts && opts.special);
+    var special = !!(opts && opts.special) || String(columnId) === String(ROOT_IDS.adult);
+    if (special) restrictedColumns[String(columnId)] = true;
     var key = String(columnId) + (special ? ':s' : '');
     var hit = columnCache[key];
     if (hit && Date.now() - hit.at < TREE_TTL) return callback(null, hit.list);
@@ -1820,7 +1882,9 @@
         for (var i = 0; i < raw.length; i++) {
           var c = raw[i];
           if (!c || !c.id || (!special && String(c.restricted) === '1')) continue;
-          list.push({ id: c.id, code: text(c.code), name: text(c.name), free: String(c.free) === '1', sequence: parseInt(c.sequence, 10) || 0 });
+          var isColRestricted = special || String(c.restricted) === '1';
+          if (isColRestricted) restrictedColumns[String(c.id)] = true;
+          list.push({ id: c.id, code: text(c.code), name: text(c.name), free: String(c.free) === '1', restricted: isColRestricted, sequence: parseInt(c.sequence, 10) || 0 });
         }
         list.sort(function (a, b) { return a.sequence - b.sequence; });
         columnCache[key] = { at: Date.now(), list: list };
@@ -1835,6 +1899,8 @@
   function columnPage(columnId, pageNum, pageSize, callback, opts) {
     pageNum = Math.max(1, parseInt(pageNum, 10) || 1);
     pageSize = pageSize || 42;
+    var isRestrictedCol = !!(restrictedColumns[String(columnId)] || (opts && opts.restricted));
+    if (isRestrictedCol) restrictedColumns[String(columnId)] = true;
     var key = columnId + ':' + pageNum + ':' + pageSize;
     var hit = shelfCache[key];
     if (hit && Date.now() < hit.until) return callback(null, { items: hit.items, total: hit.total, cached: true });
@@ -1845,8 +1911,16 @@
         var list = sRes && sRes.assetList || [];
         var items = [];
         for (var i = 0; i < list.length; i++) {
-          var it = itemFromAsset(list[i], '', null);
-          if (it) items.push(it);
+          var it = itemFromAsset(list[i], isRestrictedCol ? 'adult' : '', null);
+          if (it) {
+            if (isRestrictedCol) {
+              it.restricted = true;
+              it.privateContent = true;
+              it.category = 'adult';
+              remember(it);
+            }
+            items.push(it);
+          }
         }
         var total = parseInt(sRes && sRes.assetListTotalSize, 10) || items.length;
         var fresh = parseInt(sRes && sRes.freshTime, 10) || 600;
@@ -1907,6 +1981,68 @@
     });
   }
 
+  function normSearchTitle(s) {
+    return String(s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\b(?:temporada|season)\s*\d+\b/gi, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  function supplementSearchArtwork(items) {
+    if (!items || !items.length) return items;
+    var needTitleMatch = false;
+    for (var i = 0; i < items.length; i++) {
+      if (!hasUsableArt(items[i].poster)) {
+        needTitleMatch = true;
+        break;
+      }
+    }
+    if (!needTitleMatch) return items;
+    var byTitle = {};
+    function indexPool(pool) {
+      if (!pool) return;
+      for (var k = 0; k < pool.length; k++) {
+        var c = pool[k];
+        if (!c || !hasUsableArt(c.poster)) continue;
+        var nt = normSearchTitle(c.title);
+        if (!nt) continue;
+        var kind = (c.type === 'teleplay' || c.kind === 'serie') ? 's' : 'm';
+        var yr = trim(c.year);
+        if (yr && yr !== '—') byTitle[nt + '|' + kind + '|' + yr] = c;
+        if (!byTitle[nt + '|' + kind]) byTitle[nt + '|' + kind] = c;
+        if (!byTitle[nt]) byTitle[nt] = c;
+      }
+    }
+    var cachedList = [];
+    for (var cid in itemCache) {
+      if (Object.prototype.hasOwnProperty.call(itemCache, cid)) cachedList.push(itemCache[cid]);
+    }
+    indexPool(cachedList);
+    if (window.XUPERTV_PORTAL && window.XUPERTV_PORTAL.items) indexPool(window.XUPERTV_PORTAL.items);
+    if (window.XUPERTV_CATALOG && window.XUPERTV_CATALOG.items) indexPool(window.XUPERTV_CATALOG.items);
+
+    for (var m = 0; m < items.length; m++) {
+      var it = items[m];
+      if (!it || hasUsableArt(it.poster)) continue;
+      var t = normSearchTitle(it.title);
+      if (!t) continue;
+      var knd = (it.type === 'teleplay' || it.kind === 'serie') ? 's' : 'm';
+      var y = trim(it.year);
+      var match = (y && y !== '—' && byTitle[t + '|' + knd + '|' + y]) || byTitle[t + '|' + knd] || byTitle[t];
+      if (match && hasUsableArt(match.poster)) {
+        it.poster = match.poster;
+        if (!hasUsableArt(it.landscape) && hasUsableArt(match.landscape)) it.landscape = match.landscape;
+        if (!hasUsableArt(it.backdrop) && hasUsableArt(match.backdrop)) it.backdrop = match.backdrop;
+        it.posterAlternates = collectAssetAlternates(null, it);
+        remember(it);
+      }
+    }
+    return items;
+  }
+
   var searchCache = {};
   // opts.pageSize: results wanted (default 20)
   function search(value, callback, opts) {
@@ -1915,7 +2051,7 @@
     var size = (opts && opts.pageSize) || 20;
     var key = val.toLowerCase() + '|' + size;
     if (searchCache[key] && Date.now() - searchCache[key].at < SEARCH_TTL) {
-      return callback(null, { items: searchCache[key].items, cached: true });
+      return callback(null, { items: supplementSearchArtwork(searchCache[key].items), cached: true });
     }
     ensureSession(function (err) {
       if (err) return callback(err);
@@ -1941,6 +2077,7 @@
             }
           }
         }
+        supplementSearchArtwork(items);
         searchCache[key] = { at: Date.now(), items: items };
         callback(null, { items: items, total: sRes && sRes.totalSize, cached: false });
       });

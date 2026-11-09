@@ -63,7 +63,9 @@ export const PinDialog: React.FC<PinDialogProps> = ({ mode, isTop, onSuccess, on
         return;
       }
       if (res === 'bad') {
-        fail('PIN incorrecto');
+        const curAttempt = parentalService.failedAttempts();
+        const maxAtt = parentalService.maxAttempts();
+        fail(curAttempt > 0 ? `PIN incorrecto (intento ${curAttempt} de ${maxAtt})` : 'PIN incorrecto');
         return;
       }
       if (mode === 'change') {
@@ -130,7 +132,14 @@ export const PinDialog: React.FC<PinDialogProps> = ({ mode, isTop, onSuccess, on
       if (parentalService.cooldownSeconds() === 0) return;
       setMessage(`Demasiados intentos. Espera ${parentalService.cooldownSeconds()} s`);
     }, 1000);
-    return () => clearInterval(t);
+    const onVisChange = () => {
+      if (document.hidden) cancel();
+    };
+    document.addEventListener('visibilitychange', onVisChange);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisChange);
+    };
   }, []);
 
   return (

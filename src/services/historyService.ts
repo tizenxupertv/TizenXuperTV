@@ -1,14 +1,94 @@
-import { HistoryItem, EpisodePlaybackRecord } from '../types/history';
-import { VodItem, VodEpisode } from '../types/vod';
-import { isFinished } from '../lib/vodResume';
-import { withoutHistory, withoutHistoryEntry } from '../lib/profileHistory';
-import { pk } from '../lib/localProfiles';
+import type { HistoryItem, EpisodePlaybackRecord } from '../types/history';
+import type { VodItem, VodEpisode } from '../types/vod';
+import { isFinished } from '../lib/vodResume.ts';
+import { withoutHistory, withoutHistoryEntry } from '../lib/profileHistory.ts';
+import { pk } from '../lib/localProfiles.ts';
+import { isAdultItem } from '../lib/catalogOrganizer.ts';
 
 const PROFILE_KEY = pk('xuper_local_profile_v1');
+const PRIVATE_IDS_KEY = 'xuper_private_ids_v1';
 
 class HistoryService {
   private listeners: Array<() => void> = [];
   private hasMergedAll = false;
+  private privateIds: Set<string> = new Set();
+  private privateLoaded = false;
+
+  private ensurePrivateLoaded(): void {
+    if (this.privateLoaded) return;
+    this.privateLoaded = true;
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const raw = localStorage.getItem(PRIVATE_IDS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          for (const id of parsed) {
+            if (id !== undefined && id !== null && String(id).trim()) {
+              this.privateIds.add(String(id).trim());
+            }
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  private savePrivateIds(): void {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const arr = Array.from(this.privateIds).slice(-2000);
+      localStorage.setItem(PRIVATE_IDS_KEY, JSON.stringify(arr));
+    } catch (e) {}
+  }
+
+  /** Marks one or more items as private/adult (+18) so they are never stored or shown in Continue Watching */
+  public markPrivate(items: Array<{ id?: string | number }> | { id?: string | number } | null | undefined): void {
+    if (!items) return;
+    this.ensurePrivateLoaded();
+    const list = Array.isArray(items) ? items : [items];
+    let added = false;
+    const idsToPurge = new Set<string>();
+    for (const it of list) {
+      const id = String(it?.id ?? '').trim();
+      if (!id) continue;
+      idsToPurge.add(id);
+      if (!this.privateIds.has(id)) {
+        this.privateIds.add(id);
+        added = true;
+      }
+    }
+    if (added) this.savePrivateIds();
+    if (idsToPurge.size > 0) {
+      try {
+        if (typeof localStorage !== 'undefined') {
+          const raw = localStorage.getItem(PROFILE_KEY);
+          if (raw) {
+            const profile = JSON.parse(raw);
+            if (profile && Array.isArray(profile.history)) {
+              const before = profile.history.length;
+              profile.history = profile.history.filter((h: any) => !idsToPurge.has(String(h?.id ?? '')) && !this.isRestricted(h));
+              if (profile.history.length !== before) {
+                localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+                this.notify();
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    }
+  }
+
+  /** Checks whether an item or history entry is adult/restricted (+18) and must be excluded from public history */
+  public isRestricted(item: any): boolean {
+    if (!item) return false;
+    this.ensurePrivateLoaded();
+    const id = String(item.id ?? '').trim();
+    if (id && this.privateIds.has(id)) return true;
+    if (item.restricted === true || item.restricted === '1' || item.privateContent === true || item.category === 'adult') {
+      return true;
+    }
+    return isAdultItem(item as VodItem);
+  }
 
   private getProfile(): any {
     if (!this.hasMergedAll) {
@@ -34,11 +114,14 @@ class HistoryService {
 
   public getHistory(): HistoryItem[] {
     const profile = this.getProfile();
-    return (profile && profile.history) ? profile.history : [];
+    const list: HistoryItem[] = (profile && Array.isArray(profile.history)) ? profile.history : [];
+    return list.filter(h => !this.isRestricted(h));
   }
 
   /** History entry of an item (the series/movie whose detail was opened) */
   public getEntry(itemId: string): HistoryItem | undefined {
+    this.ensurePrivateLoaded();
+    if (this.privateIds.has(String(itemId))) return undefined;
     return this.getHistory().find(h => String(h.id) === String(itemId));
   }
 
@@ -51,6 +134,10 @@ class HistoryService {
     season?: { id?: string; number?: number }
   ): void {
     if (!item || !item.id) return;
+    if (this.isRestricted(item)) {
+      this.markPrivate(item);
+      return;
+    }
     
     // Ensure valid position (even for 0 or newly opened)
     const validPos = Math.max(0, Math.floor(position));
@@ -152,15 +239,14 @@ class HistoryService {
       // A favorite is `true` or the title's info (favoritesService): keep the info when any copy has it
       const allFavs: Record<string, unknown> = {};
 
-      // 1. Scan all storage keys containing profile or history data
+      // 1. Scan storage keys belonging to the active profile or legacy non-profiled backup
       for (let i = 0; i < ls.length; i++) {
         const key = ls.key(i);
         if (!key) continue;
 
         if (
-          key === 'xuper_local_profile_v1' ||
-          key.startsWith('xuper_local_profile_v1@') ||
-          key.startsWith('xuper_history')
+          key === PROFILE_KEY ||
+          (PROFILE_KEY === 'xuper_local_profile_v1' && (key === 'xuper_local_profile_v1' || key.startsWith('xuper_history')))
         ) {
           try {
             const raw = ls.getItem(key);
@@ -170,7 +256,7 @@ class HistoryService {
 
             if (Array.isArray(data.history)) {
               for (const item of data.history) {
-                if (!item || !item.id) continue;
+                if (!item || !item.id || this.isRestricted(item)) continue;
                 const id = String(item.id);
                 const existing = allHistories[id];
                 if (!existing) {
@@ -187,7 +273,10 @@ class HistoryService {
 
             if (data.favs && typeof data.favs === 'object') {
               for (const fid of Object.keys(data.favs)) {
-                if (data.favs[fid] && (typeof data.favs[fid] === 'object' || !allFavs[fid])) allFavs[fid] = data.favs[fid];
+                const favVal = data.favs[fid];
+                if (favVal && typeof favVal === 'object' && this.isRestricted({ id: fid, ...favVal })) continue;
+                if (this.privateIds.has(String(fid))) continue;
+                if (favVal && (typeof favVal === 'object' || !allFavs[fid])) allFavs[fid] = favVal;
               }
             }
           } catch (e) {}
@@ -211,7 +300,7 @@ class HistoryService {
 
       if (Array.isArray(current.history)) {
         for (const item of current.history) {
-          if (!item || !item.id) continue;
+          if (!item || !item.id || this.isRestricted(item)) continue;
           const id = String(item.id);
           const existing = allHistories[id];
           if (!existing || (item.updatedAt || 0) >= (existing.updatedAt || 0)) {
@@ -221,7 +310,10 @@ class HistoryService {
       }
       if (current.favs) {
         for (const fid of Object.keys(current.favs)) {
-          if (current.favs[fid] && (typeof current.favs[fid] === 'object' || !allFavs[fid])) allFavs[fid] = current.favs[fid];
+          const favVal = current.favs[fid];
+          if (favVal && typeof favVal === 'object' && this.isRestricted({ id: fid, ...favVal })) continue;
+          if (this.privateIds.has(String(fid))) continue;
+          if (favVal && (typeof favVal === 'object' || !allFavs[fid])) allFavs[fid] = favVal;
         }
       }
 

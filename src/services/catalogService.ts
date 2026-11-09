@@ -2,6 +2,7 @@ import { kvGet, kvSet } from '../lib/kvStore.ts';
 import type { VodItem, VodEpisode, VodSeason, PersonDetail, PersonResult } from '../types/vod';
 import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../lib/catalogOrganizer.ts';
 import { formatDuration } from '../lib/vodResume.ts';
+import { collectPosterAlternates } from '../lib/searchArtwork.ts';
 
 declare global {
   interface Window {
@@ -57,9 +58,34 @@ function normalizeItem(raw: any, index: number): VodItem {
   else if (typeof raw.genre === 'string') genres = raw.genre.split(',');
 
   const synopsis = raw.synopsis || raw.overview || raw.description || raw.programUpdateContent || '';
-  const poster = raw.posterUrl || raw.poster_url || raw.poster || raw.image || raw.imageUrl || raw.cover || 'assets/placeholder_vertical.png';
+  const posterAlternates = collectPosterAlternates(
+    raw.posterUrl,
+    raw.poster_url,
+    raw.poster,
+    raw.posterAlternates,
+    raw.image,
+    raw.imageUrl,
+    raw.cover,
+    raw.landscapeUrl,
+    raw.landscape_url,
+    raw.landscape,
+    raw.wideImage,
+    raw.bannerImage,
+    raw.backdropUrl,
+    raw.backdrop_url,
+    raw.backdrop
+  );
+  const poster = posterAlternates[0] || raw.posterUrl || raw.poster_url || raw.poster || raw.image || raw.imageUrl || raw.cover || 'assets/placeholder_vertical.png';
   const landscape = raw.landscapeUrl || raw.landscape_url || raw.landscape || raw.wideImage || raw.bannerImage || poster;
   const backdrop = raw.backdropUrl || raw.backdrop_url || raw.backdrop || landscape;
+  const isRestricted = Boolean(
+    raw.restricted === true ||
+    raw.restricted === '1' ||
+    raw.privateContent === true ||
+    raw.isAdult === true ||
+    raw.category === 'adult' ||
+    String(raw.columnId || '') === '76300'
+  );
 
   const rowName = String(raw.row || '');
   const isSeries = !!(
@@ -73,7 +99,7 @@ function normalizeItem(raw: any, index: number): VodItem {
   return {
     id,
     title,
-    category: raw.category || '',
+    category: isRestricted && !raw.category ? 'adult' : (raw.category || ''),
     kind: isSeries ? 'serie' : (raw.kind || 'pelicula'),
     score: String(score),
     year: String(year),
@@ -83,9 +109,12 @@ function normalizeItem(raw: any, index: number): VodItem {
     actors: raw.actors || raw.actorDisplay || raw.cast || '—',
     synopsis,
     poster,
+    posterAlternates,
     landscape,
     backdrop,
     isSeries,
+    restricted: isRestricted || undefined,
+    privateContent: isRestricted || undefined,
     row: rowName,
     streamUrl: raw.streamUrl || raw.stream_url || '',
     trailerUrl: raw.trailerUrl || raw.trailer_url || raw.trailer || raw.previewUrl || raw.preview_url || undefined,
@@ -907,6 +936,21 @@ class CatalogService {
           if (!detailItem.backdrop && item.backdrop) detailItem.backdrop = item.backdrop;
           if (!detailItem.poster && item.poster) detailItem.poster = item.poster;
           if (!detailItem.landscape && item.landscape) detailItem.landscape = item.landscape;
+          detailItem.posterAlternates = collectPosterAlternates(
+            detailItem.poster,
+            detailItem.posterAlternates,
+            item.poster,
+            item.posterAlternates,
+            detailItem.landscape,
+            item.landscape,
+            detailItem.backdrop,
+            item.backdrop
+          );
+          if (item.restricted || item.privateContent || item.category === 'adult') {
+            detailItem.restricted = true;
+            detailItem.privateContent = true;
+            if (!detailItem.category) detailItem.category = 'adult';
+          }
           const rawTrailer = res.item?.trailerUrl || res.item?.trailer_url || res.item?.trailer || res.trailerUrl || res.trailer || res.trailer_url || res.previewUrl || '';
           if (rawTrailer) detailItem.trailerUrl = String(rawTrailer);
           if (res.item?.duration) detailItem.duration = formatDuration(res.item.duration) || detailItem.duration;
@@ -1126,7 +1170,8 @@ export async function getPopularSearchPage(pageNum: number, pageSize: number): P
 export function getPortalColumnPage(
   columnId: number,
   pageNum: number,
-  pageSize: number
+  pageSize: number,
+  opts?: { restricted?: boolean }
 ): Promise<{ items: VodItem[]; total: number }> {
   return new Promise((resolve, reject) => {
     const client = window.MagisClient;
@@ -1134,11 +1179,20 @@ export function getPortalColumnPage(
     client.columnPage(columnId, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
       if (err) return reject(err);
       const offset = (pageNum - 1) * pageSize;
+      const isRestricted = Boolean(opts?.restricted || columnId === 76300);
       resolve({
-        items: (res.items || []).map((raw, i) => normalizeItem(raw, offset + i)),
+        items: (res.items || []).map((raw, i) => {
+          const item = normalizeItem(isRestricted ? { ...raw, restricted: true, privateContent: true, category: raw?.category || 'adult' } : raw, offset + i);
+          if (isRestricted) {
+            item.restricted = true;
+            item.privateContent = true;
+            if (!item.category) item.category = 'adult';
+          }
+          return item;
+        }),
         total: res.total || 0
       });
-    });
+    }, opts);
   });
 }
 
