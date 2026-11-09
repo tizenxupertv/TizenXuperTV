@@ -1789,8 +1789,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           <div className="vp-progress-row">
             <span className={`vp-time ${focusArea === 'timeline' && !menu ? 'is-focused' : ''}`}>{formatTime(currentTime)}</span>
             <div className={`vp-track ${focusArea === 'timeline' && !menu ? 'is-focused' : ''}`}>
-              <div className="vp-fill" style={{ width: `${progressPercent}%` }} />
-              <div className="vp-thumb" style={{ left: `${progressPercent}%` }} />
+              {/* Moved with transform (the TV's compositor animates it between updates): the bar glides
+                  while seeking instead of jumping at each re-render */}
+              <div className="vp-fill" style={{ transform: `scaleX(${progressPercent / 100})` }} />
+              <div className="vp-thumb-rail" style={{ transform: `translateX(${progressPercent}%)` }}>
+                <div className="vp-thumb" />
+              </div>
             </div>
             <span className="vp-time">−{formatTime(remainingTime)}</span>
           </div>
