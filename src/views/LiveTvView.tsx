@@ -1,4 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react';
+import { REGION_BLOCKED_TEXT, REGION_BLOCKED_TITLE } from '../lib/portalErrors';
 import { LiveChannel, LiveCategory } from '../types/channel';
 import { playerService, LiveStatus } from '../services/playerService';
 import '../styles/screenOff.css';
@@ -951,7 +952,12 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
 
           {/* The tuned channel does not answer: say so instead of a black box */}
           {tunedIsDown && (
-            liveStatus.reason === 'isp' ? (
+            liveStatus.reason === 'region' ? (
+              <div className="live-signal-error">
+                <div className="live-signal-error-title">{REGION_BLOCKED_TITLE}</div>
+                <div className="live-signal-error-desc">{REGION_BLOCKED_TEXT}</div>
+              </div>
+            ) : liveStatus.reason === 'isp' ? (
               <div className="live-signal-error">
                 <div className="live-signal-error-title">Tu proveedor de internet bloquea este canal</div>
                 <div className="live-signal-error-desc">

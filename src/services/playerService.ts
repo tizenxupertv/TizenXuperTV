@@ -1,4 +1,5 @@
 import { LiveChannel } from '../types/channel';
+import { isRegionBlocked } from '../lib/portalErrors';
 import { normalizeChannel } from '../lib/channelKey';
 import { hostOf, isIspBlockPage, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSequenceFixer } from '../lib/mediaSequence';
@@ -22,7 +23,7 @@ export interface LiveStatus {
   code: string;
   state: LiveSignal;
   /** Why it failed, when known: 'isp' = the internet provider blocks the server */
-  reason?: 'isp';
+  reason?: 'isp' | 'region';
 }
 
 // Without a picture after this long, the channel counts as down
@@ -205,7 +206,7 @@ class PlayerService {
   /** An internet provider's block page was seen this session (also explains VOD errors) */
   public ispBlocked = false;
 
-  private setStatus(code: string, state: LiveSignal, reason?: 'isp') {
+  private setStatus(code: string, state: LiveSignal, reason?: 'isp' | 'region') {
     if (state === 'playing' && !(this.status.code === code && this.status.state === 'playing')) {
       logPlayback({ kind: 'start', player: this.playerName(), detail: `reproduciendo${this.pictureInfo()}` });
     }
@@ -253,7 +254,7 @@ class PlayerService {
   }
 
   /** The channel does not play: stop trying (no endless retries) and report it */
-  private failChannel(code: string, why: string, reason?: 'isp') {
+  private failChannel(code: string, why: string, reason?: 'isp' | 'region') {
     if (this.activeChannelCode !== code) return;
     console.warn('[PlayerService] Channel down:', code, why);
     logPlayback({ kind: 'error', player: this.playerName(), detail: why + (this.lastHlsError ? ` · ${this.lastHlsError}` : '') });
@@ -481,7 +482,8 @@ class PlayerService {
           console.error('[PlayerService] Failed to resolve channel:', err);
           this.lastHlsError = `portal ${(err && (err.portalCode || err.message)) || 'sin enlace'}`.slice(0, 80);
           if (!(err && /aaa10002/i.test(err.portalCode || err.message || ''))) {
-            this.failChannel(code, 'resolve');
+            // The portal refuses this channel for the viewer's region or provider: say so, not "no signal"
+            this.failChannel(code, 'resolve', isRegionBlocked(err) ? 'region' : undefined);
             return;
           }
           if (err && /aaa10002/i.test(err.portalCode || err.message || '')) {
