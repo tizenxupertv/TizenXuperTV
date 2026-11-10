@@ -47,6 +47,13 @@ const NEXT_EPISODE_SECONDS = 10;
  */
 const CREDITS_WINDOW_S = 30;
 const CREDITS_COUNTDOWN_S = 5;
+/**
+ * "Omitir intro": the portal does not say where an intro starts or ends, so the offer is general. An episode shows
+ * the button between INTRO_FROM_S and INTRO_UNTIL_S, and OK jumps INTRO_SKIP_S ahead
+ */
+const INTRO_FROM_S = 5;
+const INTRO_UNTIL_S = 150;
+const INTRO_SKIP_S = 90;
 
 interface SettingRow {
   group: string;
@@ -139,6 +146,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   // "Siguiente capítulo" is Manual in the settings
   const [nextOffer, setNextOffer] = useState<null | 'credits' | 'end'>(null);
   const creditsDismissedRef = useRef(false);
+  /** The intro button was used or hidden in this episode */
+  const [introDismissed, setIntroDismissed] = useState(false);
   const osdTimerRef = useRef<any>(null);
   const useAvPlayRef = useRef<boolean>(false);
   const requestIdRef = useRef<number>(0);
@@ -177,6 +186,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const pendingSeekRef = useRef<{ target: number; until: number } | null>(null);
   const seekTimerRef = useRef<any>(null);
   const acceptTimeRef = useRef<(t: number) => boolean>(() => true);
+  const introOfferRef = useRef(false);
   // Resuming at the saved position: until the TV confirms that seek, its time (0:00, 0:10…) is not the
   // viewer's and must never be saved over the saved position
   const resumePendingRef = useRef(false);
@@ -1242,6 +1252,19 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         return;
       }
 
+      // "Omitir intro" (shown with the controls hidden): OK jumps ahead, Back hides it
+      if (introOfferRef.current && !osdVisibleRef.current) {
+        if (isEnter) {
+          setIntroDismissed(true);
+          seekBy(INTRO_SKIP_S);
+          return;
+        }
+        if (isBack) {
+          setIntroDismissed(true);
+          return;
+        }
+      }
+
       // Back key
       if (isBack && !error) {
         if (menu) {
@@ -1568,6 +1591,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const osdVisible = !!error || (!osdDismissed && showOsd);
   const osdVisibleRef = useRef(osdVisible);
   osdVisibleRef.current = osdVisible;
+  // Episodes only, long enough to have an intro, in their first minutes and with nothing else on screen
+  const introOffer = !isTrailer && !!episode && !introDismissed && !nextOffer && !error && !menu && !osdVisible &&
+    duration > 600 && currentTime >= INTRO_FROM_S && currentTime < INTRO_UNTIL_S;
+  introOfferRef.current = introOffer;
   const subtitleText = subIndex >= 0 ? cueAt(cues, currentTime) : '';
   const subSize = settings.size === 1 ? 'is-large' : settings.size === 2 ? 'is-small' : '';
   const subStyle = settings.style === 1 ? 'is-yellow' : settings.style === 2 ? 'is-boxed' : '';
@@ -1641,6 +1668,16 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
             <span className="vod-player-error-key">OK</span><span>Reintentar</span>
             <span className="vod-player-error-key">VOLVER</span><span>Salir</span>
           </div>
+        </div>
+      )}
+
+      {introOffer && (
+        <div className="vod-next-button-wrap">
+          <div className="vod-next-btn" onClick={() => { setIntroDismissed(true); seekBy(INTRO_SKIP_S); }}>
+            <span className="vod-next-btn-icon">⏭</span>
+            <span>Omitir intro</span>
+          </div>
+          <span className="vod-next-cancel-hint"><b>OK</b> salta 1:30 · <b>Atrás</b> para ocultar</span>
         </div>
       )}
 
