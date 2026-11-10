@@ -378,14 +378,20 @@
   };
 
   // ---- Screensaver management (Jellyfin / Tizen pattern) ----
+  // Every key press asks for OFF: the TV is only told when the state changes. Coming back from another app the TV
+  // may have changed it on its own, so the state is unknown again
+  var screenSaverEnabled = null;
+  document.addEventListener('visibilitychange', function () { screenSaverEnabled = null; });
   window.XuperPlatform.setScreenSaver = function (enable) {
     if (!isTizen || !window.webapis || !webapis.appcommon || !webapis.appcommon.setScreenSaver) return;
+    enable = !!enable;
+    if (screenSaverEnabled === enable) return;
     try {
       var state = enable
         ? webapis.appcommon.AppCommonScreenSaverState.SCREEN_SAVER_ON
         : webapis.appcommon.AppCommonScreenSaverState.SCREEN_SAVER_OFF;
       webapis.appcommon.setScreenSaver(state);
-      console.log('[TizenBridge] ScreenSaver set to:', enable ? 'ON' : 'OFF');
+      screenSaverEnabled = enable;
     } catch (e) {
       console.warn('[TizenBridge] Failed to setScreenSaver:', e);
     }

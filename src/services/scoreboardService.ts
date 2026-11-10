@@ -7,6 +7,7 @@ import type {
   MatchStatComparison,
   MatchEventType
 } from '../types/sports.ts';
+import { fetchWithTimeout } from '../lib/fetchTimeout.ts';
 
 interface EspnCompetitor {
   homeAway: 'home' | 'away';
@@ -195,10 +196,12 @@ class ScoreboardService {
 
     this.isFetching = true;
     try {
+      // A sport whose feed fails or does not answer keeps the games it had: an empty answer used to wipe them
+      const kept = (sportKey: string) => this.games.filter(g => g.sport === sportKey);
       const fetchPromises = Object.entries(ESPN_ENDPOINTS).map(async ([sportKey, url]) => {
         try {
-          const resp = await fetch(url);
-          if (!resp.ok) return [];
+          const resp = await fetchWithTimeout(url);
+          if (!resp.ok) return kept(sportKey);
           const data = await resp.json();
           const events: EspnEvent[] = data.events || [];
           const parsed: NormalizedEspnGame[] = [];
@@ -256,7 +259,7 @@ class ScoreboardService {
 
           return parsed;
         } catch {
-          return [];
+          return kept(sportKey);
         }
       });
 
@@ -354,7 +357,7 @@ class ScoreboardService {
     const { game, swapped } = match;
     const url = `https://site.api.espn.com/apis/site/v2/sports/${game.summaryPath}/summary?event=${game.id}`;
     try {
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url);
       if (!res.ok) return null;
       const data = await res.json();
       return this.parseMatchSummary(game, data, swapped);
