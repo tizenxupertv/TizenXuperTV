@@ -988,7 +988,7 @@
             } else {
               reopen(self._lastUrl, self._lastHeaders);
             }
-          });
+          }, { fresh: true });
           return;
         }
         if (self.kind === 'vod' && meta && meta.contentId && window.MagisClient && typeof window.MagisClient.resolve === 'function') {
