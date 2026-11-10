@@ -1,4 +1,5 @@
 import { LiveChannel } from '../types/channel';
+import { fetchWithTimeout } from '../lib/fetchTimeout';
 
 const DOMAINS = ['https://playlatam.site', 'https://epictvparaiphone.top', 'https://epicplustv.com'];
 const PULSERA_URL = 'https://playlatam.site/iphone/pulsera';
@@ -75,7 +76,7 @@ class EpicSportsService {
 
   private async fetchNewToken(): Promise<string> {
     try {
-      const res = await fetch(PULSERA_URL, {
+      const res = await fetchWithTimeout(PULSERA_URL, {
         method: 'POST',
         headers: {
           'Accept': 'application/json, text/plain, */*'
@@ -125,7 +126,7 @@ class EpicSportsService {
 
     try {
       const token = await this.getPulseraToken();
-      const res = await fetch(CANALES_URL, {
+      const res = await fetchWithTimeout(CANALES_URL, {
         headers: {
           'X-Pulsera': token,
           'Accept': 'application/json'
