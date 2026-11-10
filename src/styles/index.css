@@ -5715,7 +5715,9 @@ html.xuper-vod-avplay .app-root,
   display: flex;
   gap: 12px;
   padding: 4px 0 6px !important;
-  transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1);
+  /* Short and linear: with 0.22 s the list was still sliding when the next key arrived, over a playing video */
+  transition: transform 0.08s linear;
+  will-change: transform;
   box-sizing: border-box;
   width: max-content !important;
   min-width: 100%;
@@ -5734,6 +5736,9 @@ html.xuper-vod-avplay .app-root,
   border: 2px solid rgba(255, 255, 255, 0.18);
   box-sizing: border-box;
   transform: none !important;
+  /* No shadow and no transition per tile: each move repainted every blurred shadow above the video */
+  box-shadow: none;
+  transition: none;
 }
 
 .vp-episodes .vod-ep-tile.is-watched {
@@ -5751,7 +5756,7 @@ html.xuper-vod-avplay .app-root,
   background: #ffffff !important;
   border: 2px solid #ffffff !important;
   color: #000000 !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
+  box-shadow: none;
   transform: none !important;
   z-index: 5;
 }
