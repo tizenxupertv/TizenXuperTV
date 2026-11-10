@@ -1,5 +1,6 @@
 import { pk } from '../lib/localProfiles';
 import { readStoredJson } from '../lib/storedJson';
+import { saveItem } from '../lib/safeStorage';
 const KEY = pk('xuper_global_playback_v1');
 
 export interface PlaybackSettings {
@@ -38,9 +39,7 @@ class SettingsService {
 
   public set(patch: Partial<PlaybackSettings>): PlaybackSettings {
     const next = { ...this.get(), ...patch };
-    try {
-      localStorage.setItem(KEY, JSON.stringify(next));
-    } catch (e) {}
+    saveItem(KEY, JSON.stringify(next));
     applyTextSize(next);
     this.listeners.forEach(cb => {
       try { cb(); } catch (e) {}

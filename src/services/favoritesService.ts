@@ -3,6 +3,7 @@ import { pk } from '../lib/localProfiles.ts';
 import { isAdultItem } from '../lib/catalogOrganizer.ts';
 import { historyService } from './historyService.ts';
 import { readStoredJson } from '../lib/storedJson.ts';
+import { saveItem } from '../lib/safeStorage.ts';
 
 const PROFILE_KEY = pk('xuper_local_profile_v1');
 
@@ -68,7 +69,7 @@ class FavoritesService {
                   ...currentParsed,
                   favs: { ...mainParsed.favs, ...((currentParsed && currentParsed.favs) || {}) }
                 };
-                localStorage.setItem(PROFILE_KEY, JSON.stringify(mergedProfile));
+                saveItem(PROFILE_KEY, JSON.stringify(mergedProfile));
                 return mergedProfile;
               }
             }
@@ -101,9 +102,8 @@ class FavoritesService {
       const profile = this.getProfile();
       if (profile.favs && profile.favs[key]) {
         delete profile.favs[key];
-        try {
-          localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-        } catch (e) {}
+        saveItem(PROFILE_KEY, JSON.stringify(profile));
+        historyService.syncBackup();
         this.notify();
       }
       return false;
@@ -116,9 +116,9 @@ class FavoritesService {
     } else {
       delete profile.favs[key];
     }
-    try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-    } catch (e) {}
+    saveItem(PROFILE_KEY, JSON.stringify(profile));
+    // A favourite removed on purpose must not come back from the backup copy at the next start
+    if (!newState) historyService.syncBackup();
     this.notify();
     return newState;
   }
@@ -126,10 +126,11 @@ class FavoritesService {
   /** Removes one favorite. False if it could not be saved. */
   public removeFavorite(id: string | number): boolean {
     try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(withoutFavorite(this.getProfile(), id)));
+      if (!saveItem(PROFILE_KEY, JSON.stringify(withoutFavorite(this.getProfile(), id)))) return false;
     } catch (e) {
       return false;
     }
+    historyService.syncBackup();
     this.notify();
     return true;
   }
@@ -146,9 +147,7 @@ class FavoritesService {
     const key = String(id);
     if (!profile.favs || !profile.favs[key]) return;
     profile.favs[key] = infoOf(item);
-    try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-    } catch (e) {}
+    saveItem(PROFILE_KEY, JSON.stringify(profile));
     this.notify();
   }
 

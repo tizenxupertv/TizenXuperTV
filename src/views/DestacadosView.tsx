@@ -9,6 +9,11 @@ import { HeroShowcase } from '../components/vod/HeroShowcase';
 import { ContentSlider } from '../components/vod/ContentSlider';
 import { ContinueWatchingRow } from '../components/vod/ContinueWatchingRow';
 import { rowHasSeeAll } from '../app/tabRows';
+import { isOlderTv } from '../lib/tvMemory';
+
+/** On a TV short of memory, a row this many rows away from the focus lets go of its images */
+const OLDER_TV = isOlderTv();
+const RELEASE_ROWS_AWAY = 4;
 
 export interface DestacadosFocus {
   area: 'hero' | 'row';
@@ -185,6 +190,7 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
             items={row.items as VodItem[]}
             isRanked={row.isRanked}
             nearFocus={isNearFocus}
+            releaseImages={OLDER_TV && Math.abs(rowIdx - activeRowIdx) > RELEASE_ROWS_AWAY}
             isWide={row.isWide}
             focusedIndex={focusedIndex}
             onActivate={onActivateVod}

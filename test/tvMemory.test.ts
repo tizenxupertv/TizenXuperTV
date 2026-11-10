@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { backBufferFor, isLegacyVideoTv, isLowMemoryTv } from '../src/lib/tvMemory.ts';
+import { backBufferFor, isLegacyVideoTv, isLowMemoryTv, isOlderTv } from '../src/lib/tvMemory.ts';
 import { mseHlsConfig } from '../src/lib/vodMseEngine.ts';
 
 const TIZEN_3 = 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 3.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/3.0 TV Safari/538.1';
@@ -35,4 +35,14 @@ test('Tizen 6.0 and older get the plain preview box (their engines show the prev
   assert.equal(isLegacyVideoTv(ua('6.5')), false);
   assert.equal(isLegacyVideoTv(ua('9.0')), false);
   assert.equal(isLegacyVideoTv('Mozilla/5.0 (Macintosh) Chrome/130.0 Safari/537.36'), false, 'a desktop browser');
+});
+
+test('TVs short of memory for images are Tizen 6.0 and older', () => {
+  const ua = (v: string) => `Mozilla/5.0 (SMART-TV; LINUX; Tizen ${v}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0 TV Safari/537.36`;
+  assert.equal(isOlderTv(ua('4.0')), true);
+  assert.equal(isOlderTv(ua('5.5')), true);
+  assert.equal(isOlderTv(ua('6.0')), true);
+  assert.equal(isOlderTv(ua('6.5')), false);
+  assert.equal(isOlderTv(ua('9.0')), false);
+  assert.equal(isOlderTv('Mozilla/5.0 (Macintosh)'), false, 'a desktop browser keeps every image');
 });

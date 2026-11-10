@@ -863,6 +863,8 @@ html, body {
 
 .poster-card-img-element.is-loaded {
   opacity: 1;
+  /* The fade is over: no layer of its own for every loaded card */
+  will-change: auto;
 }
 
 /* Brand badge top-right corner */

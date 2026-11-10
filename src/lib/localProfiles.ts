@@ -39,7 +39,8 @@ export const PER_PROFILE_KEYS = [
   'xuper_last_live_ch',
   'xuper_last_live_cat_idx',
   'xuper_global_playback_v1',
-  'xuper_hidden_tabs'
+  'xuper_hidden_tabs',
+  'xuper_history_master_backup'
 ];
 
 export function cleanName(value: unknown): string {
