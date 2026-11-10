@@ -7,7 +7,7 @@ import { getEpisodeStatus, canSaveProgress, reachedResumeGoal, retryStartAt } fr
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
-import { buildVodPlaylist, fileAudioLanguages, mseAudioFits, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
+import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseAudioFits, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
 import { friendlyPortalError } from '../lib/portalErrors';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
@@ -461,6 +461,14 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         const d = window.XuperAVPlay.durationSec || res.duration || 0;
         timeRef.current.d = d;
         setDuration(d);
+        // Older TVs give no duration for these files and the portal sends 0: the title's index has it
+        if (!d && res.idxUrl) {
+          indexDuration(res).then(sec => {
+            if (!isCurrent() || !(sec > 0) || timeRef.current.d > 0) return;
+            timeRef.current.d = sec;
+            setDuration(sec);
+          });
+        }
         // Several audio languages inside the same stream: switch them without reloading
         try {
           const info = window.webapis.avplay.getTotalTrackInfo() || [];

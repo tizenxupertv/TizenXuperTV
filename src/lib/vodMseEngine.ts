@@ -8,6 +8,7 @@
  * AVPlay stays as the fallback (the player switches to it when anything here fails).
  */
 import { buildVodTsPlaylist, groupIdxgSegments, parseIdxg } from './vodIdxg.ts';
+import type { IdxgSegment } from './vodIdxg.ts';
 import { backBufferFor } from './tvMemory.ts';
 
 /** Fake address of the generated playlist: the playlist loader answers it from memory */
@@ -93,11 +94,8 @@ export interface VodPlaylist {
   pieces: number;
 }
 
-/**
- * Downloads the index and turns it into a byte-range playlist (the index header carries the media size and
- * duration). `fetchFn` is injectable for tests.
- */
-export async function buildVodPlaylist(src: MseVodSource, fetchFn: typeof fetch = fetch): Promise<VodPlaylist> {
+/** Downloads the index and groups its keyframes into pieces. `fetchFn` is injectable for tests */
+async function loadIndexPieces(src: MseVodSource, fetchFn: typeof fetch): Promise<IdxgSegment[]> {
   if (!src.idxUrl) throw new Error('El título no tiene índice');
   const bytes = await withTimeout(
     fetchFn(src.idxUrl, { headers: cdnHeaders(src.headers) }).then(r => {
@@ -107,9 +105,31 @@ export async function buildVodPlaylist(src: MseVodSource, fetchFn: typeof fetch 
     FETCH_TIMEOUT_MS,
     'índice'
   );
-  const grouped = groupIdxgSegments(parseIdxg(bytes), PIECE_SEC);
-  const duration = grouped.segments.reduce((sum, s) => sum + s.duration, 0);
-  return { playlist: buildVodTsPlaylist(grouped, src.url), duration, pieces: grouped.segments.length };
+  return groupIdxgSegments(parseIdxg(bytes), PIECE_SEC).segments;
+}
+
+/**
+ * Downloads the index and turns it into a byte-range playlist (the index header carries the media size and
+ * duration). `fetchFn` is injectable for tests.
+ */
+export async function buildVodPlaylist(src: MseVodSource, fetchFn: typeof fetch = fetch): Promise<VodPlaylist> {
+  const segments = await loadIndexPieces(src, fetchFn);
+  const duration = segments.reduce((sum, s) => sum + s.duration, 0);
+  return { playlist: buildVodTsPlaylist({ segments }, src.url), duration, pieces: segments.length };
+}
+
+/**
+ * Duration of a title in seconds, from its index; 0 when it has no index or it cannot be read. For AVPlay on older
+ * TVs, which reports no duration for these files (and the portal sends 0): without one there is no timeline, no
+ * time left, and the title never counts as finished.
+ */
+export async function indexDuration(src: MseVodSource, fetchFn: typeof fetch = fetch): Promise<number> {
+  try {
+    const segments = await loadIndexPieces(src, fetchFn);
+    return segments.reduce((sum, s) => sum + s.duration, 0);
+  } catch {
+    return 0;
+  }
 }
 
 /** HLS.js loader that serves the generated playlist from memory and everything else as usual */
