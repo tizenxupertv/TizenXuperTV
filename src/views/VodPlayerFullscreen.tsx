@@ -42,16 +42,19 @@ const DEV_FALLBACK_URL = 'https://media.w3.org/2010/05/bunny/movie.mp4';
 const SAVE_EVERY_MS = 15000;
 const NEXT_EPISODE_SECONDS = 10;
 /**
- * The next-episode card shows this many seconds before the end of an episode, over the credits; its countdown is
- * the time left in the episode, and the next one starts when it ends
+ * A "Siguiente episodio" button shows this many seconds before the end of an episode, over the credits; the
+ * countdown appears only for the last CREDITS_COUNTDOWN_S, and the next one starts when the episode ends
  */
-const CREDITS_WINDOW_S = 15;
+const CREDITS_WINDOW_S = 30;
+const CREDITS_COUNTDOWN_S = 5;
 
 interface SettingRow {
   group: string;
   label: string;
   selected: boolean;
   apply: () => void;
+  /** Choosing it closes the menu (a track or a resolution); settings stay open to try another value */
+  close?: boolean;
 }
 
 // Same order as PlaybackSettings.display and the bridge's _displayMethod
@@ -163,7 +166,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const [focusArea, setFocusArea] = useState<'center' | 'controls' | 'timeline' | 'episodes'>('center');
   const [centerIndex, setCenterIndex] = useState<number>(1); // 0 = -10s, 1 = play/pause, 2 = +10s
   const [ctrlIndex, setCtrlIndex] = useState<number>(0); // 0 = subtitles, 1 = audio, then episodes (series) and settings
-  const [menu, setMenu] = useState<null | 'subs' | 'audio' | 'episodes' | 'settings'>(null);
+  const [menu, setMenu] = useState<null | 'subs' | 'audio' | 'quality' | 'episodes' | 'settings'>(null);
   const [menuCursor, setMenuCursor] = useState<number>(0);
   const [toastId, setToastId] = useState<number>(0);
   const [seekHud, setSeekHud] = useState<{ delta: number; target: number; duration: number } | null>(null);
@@ -231,7 +234,9 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const nextEpisode = epIndex !== -1 && epIndex + 1 < effectiveEpisodes.length ? effectiveEpisodes[epIndex + 1] : undefined;
   // Episode shelf (like Apple TV): the other episodes of the season, without leaving the player
   const hasEpisodeShelf = !isTrailer && !!onPlayEpisode && effectiveEpisodes.length > 1;
-  const settingsCtrl = hasEpisodeShelf ? 3 : 2;
+  // Controls row: Subtítulos, Audio, (Episodios), Resolución, Ajustes
+  const qualityCtrl = hasEpisodeShelf ? 3 : 2;
+  const settingsCtrl = qualityCtrl + 1;
   const ctrlCount = settingsCtrl + 1;
   const epNumber = episode ? (episode.number || epIndex + 1 || 1) : 0;
 
@@ -353,15 +358,15 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     const opening = inCredits && !nextOffer && isPlaying && !creditsDismissedRef.current && !pendingSeekRef.current;
     if (opening) setNextOffer('credits');
     if (inCredits && (opening || nextOffer === 'credits')) {
-      // The countdown is the time left in the episode (it stops while paused)
-      setNextCountdown(settingsService.get().autoNext !== false ? Math.max(0, Math.ceil(left)) : null);
+      // The countdown is the time left in the episode (it stops while paused), shown only for the last seconds
+      setNextCountdown(settingsService.get().autoNext !== false && left <= CREDITS_COUNTDOWN_S ? Math.max(0, Math.ceil(left)) : null);
     } else if (!inCredits && nextOffer === 'credits') {
       setNextOffer(null);
       setNextCountdown(null);
     }
   }, [currentTime, duration, isPlaying, isTrailer, nextEpisode, onPlayEpisode, nextOffer]);
   // Length of the card's countdown bar: the credits window, or the 10 s after the end
-  const countdownTotal = nextOffer === 'credits' ? CREDITS_WINDOW_S : NEXT_EPISODE_SECONDS;
+  const countdownTotal = nextOffer === 'credits' ? CREDITS_COUNTDOWN_S : NEXT_EPISODE_SECONDS;
   const playNext = useCallback(() => {
     setNextOffer(null);
     setNextCountdown(null);
@@ -1086,30 +1091,58 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       try { window.webapis.avplay.setDisplayMethod(DISPLAY_METHODS[idx]); } catch (e) {}
     }
   };
+  // Each control opens the menu with what belongs to it: tracks and subtitle look under Subtítulos, the resolution
+  // under Resolución, and what is left (screen format, next episode) under Ajustes
+  const subsMenuRows: SettingRow[] = [
+    ...subRows.map(r => ({
+      group: 'Subtítulos',
+      label: r.label,
+      selected: r.value === subIndex,
+      close: true,
+      apply: () => chooseSubtitle(r.value)
+    })),
+    ...(hasSubtitles ? [
+      ...SUB_SIZE_LABELS.map((label, i) => ({
+        group: 'Tamaño',
+        label,
+        selected: settings.size === i,
+        apply: () => { settingsService.set({ size: i }); }
+      })),
+      ...SUB_STYLE_LABELS.map((label, i) => ({
+        group: 'Estilo',
+        label,
+        selected: settings.style === i,
+        apply: () => { settingsService.set({ style: i }); }
+      }))
+    ] : [])
+  ];
+  const audioMenuRows: SettingRow[] = audioRows.map(r => ({
+    group: 'Audio',
+    label: r.label,
+    selected: r.value === audioIndex,
+    close: true,
+    apply: () => chooseAudio(r.value)
+  }));
+  const qualityMenuRows: SettingRow[] = QUALITY_OPTIONS.map((opt, i) => {
+    const qLabel = i === 0 ? 'Auto' : opt.toUpperCase();
+    return {
+      group: 'Resolución',
+      label: qLabel,
+      selected: (settings.quality || 0) === i,
+      close: true,
+      apply: () => {
+        settingsService.set({ quality: i });
+        flash(`Resolución: ${qLabel}`);
+      }
+    };
+  });
   const settingRows: SettingRow[] = [
-    // 1. Nitidez / Resolución
-    ...QUALITY_OPTIONS.map((opt, i) => {
-      const qLabel = i === 0 ? 'Auto' : opt.toUpperCase();
-      return {
-        group: 'Nitidez',
-        label: qLabel,
-        selected: (settings.quality || 0) === i,
-        apply: () => {
-          settingsService.set({ quality: i });
-          flash(`Nitidez: ${qLabel}`);
-        }
-      };
-    }),
-
-    // 2. Formato de pantalla (Siempre aplica a cualquier video)
     ...DISPLAY_LABELS.map((label, i) => ({
       group: 'Formato de pantalla',
       label,
       selected: settings.display === i,
       apply: () => applyDisplay(i)
     })),
-
-    // 2. Opciones de Series (sólo si es una serie con episodios)
     ...(isSeriesContent ? [
       {
         group: 'Episodios de la serie',
@@ -1121,25 +1154,11 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           flash(next ? 'Siguiente capítulo: Automático' : 'Siguiente capítulo: Manual');
         }
       }
-    ] : []),
-
-    // 3. Estilo y tamaño de subtítulos (SOLO si el contenido actual tiene subtítulos disponibles)
-    ...(hasSubtitles ? [
-      ...SUB_SIZE_LABELS.map((label, i) => ({
-        group: 'Tamaño de subtítulos',
-        label,
-        selected: settings.size === i,
-        apply: () => settingsService.set({ size: i })
-      })),
-      ...SUB_STYLE_LABELS.map((label, i) => ({
-        group: 'Estilo de subtítulos',
-        label,
-        selected: settings.style === i,
-        apply: () => settingsService.set({ style: i })
-      }))
     ] : [])
   ];
-  const menuRows = menu === 'subs' ? subRows : menu === 'settings' ? settingRows : audioRows;
+  const rowsOf = (which: 'subs' | 'audio' | 'quality' | 'settings'): SettingRow[] =>
+    which === 'subs' ? subsMenuRows : which === 'audio' ? audioMenuRows : which === 'quality' ? qualityMenuRows : settingRows;
+  const menuRows: SettingRow[] = menu && menu !== 'episodes' ? rowsOf(menu) : [];
 
   // Handle TV Remote Keys during full playback
   useEffect(() => {
@@ -1184,10 +1203,19 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         return;
       }
       if (isFastForward || isRewind) {
-        setFocusArea('center');
-        setCenterIndex(isFastForward ? 2 : 0);
-        seekBy(isFastForward ? 10 : -10);
+        // The key seeks only with its button (or the timeline) on screen and focused: the first press shows the
+        // controls and goes to the button, the next ones seek (held: longer jumps)
+        const wanted = isFastForward ? 2 : 0;
+        const onButton = osdVisibleRef.current && !menu && focusArea === 'center' && centerIndex === wanted;
+        const onTimeline = osdVisibleRef.current && !menu && focusArea === 'timeline';
         triggerOsd();
+        if (onButton || onTimeline) {
+          holdSeek(isFastForward ? 1 : -1, e.repeat);
+        } else {
+          if (menu) setMenu(null);
+          setFocusArea('center');
+          setCenterIndex(wanted);
+        }
         return;
       }
 
@@ -1363,21 +1391,16 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           return;
         }
         if (isEnter) {
-          if (menu === 'settings') {
-            const row = settingRows[menuCursor];
-            if (row) {
-              row.apply();
+          const row = menuRows[menuCursor];
+          if (row) {
+            row.apply();
+            if (row.close) {
+              setMenu(null);
+              setFocusArea('controls');
+            } else {
               setSettingsTick(t => t + 1);
             }
-            return;
           }
-          const row = (menu === 'subs' ? subRows : audioRows)[menuCursor];
-          if (row) {
-            if (menu === 'subs') chooseSubtitle(row.value);
-            else chooseAudio(row.value);
-          }
-          setMenu(null);
-          setFocusArea('controls');
           return;
         }
         return;
@@ -1392,12 +1415,15 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
       // Focus Area 1: Center Transport Controls ([-10], [Play/Pause], [+10])
       if (focusArea === 'center') {
+        // ◄ ► move between the three buttons; already on the rewind or forward button, they seek
         if (isLeft) {
-          setCenterIndex(i => Math.max(0, i - 1));
+          if (centerIndex === 0) holdSeek(-1, e.repeat);
+          else setCenterIndex(i => Math.max(0, i - 1));
           return;
         }
         if (isRight) {
-          setCenterIndex(i => Math.min(2, i + 1));
+          if (centerIndex === 2) holdSeek(1, e.repeat);
+          else setCenterIndex(i => Math.min(2, i + 1));
           return;
         }
         if (isEnter) {
@@ -1463,11 +1489,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           return;
         }
         if (isEnter) {
-          if (ctrlIndex === settingsCtrl) {
-            if (menu === 'episodes') setMenu(null);
-            setMenu('settings');
-            setMenuCursor(Math.max(0, settingRows.findIndex(r => r.selected)));
-          } else if (hasEpisodeShelf && ctrlIndex === 2) {
+          if (hasEpisodeShelf && ctrlIndex === 2) {
             if (menu === 'episodes') {
               setMenu(null);
             } else {
@@ -1479,15 +1501,13 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
             }
           } else {
             if (menu === 'episodes') setMenu(null);
-            const which = ctrlIndex === 0 ? 'subs' : 'audio';
+            const which = ctrlIndex === 0 ? 'subs' : ctrlIndex === 1 ? 'audio' : ctrlIndex === qualityCtrl ? 'quality' : 'settings';
             if (which === 'subs' && !hasSubtitles) {
               flash('Este contenido no cuenta con subtítulos');
               return;
             }
-            const rows = which === 'subs' ? subRows : audioRows;
-            const current = which === 'subs' ? subIndex : audioIndex;
             setMenu(which);
-            setMenuCursor(Math.max(0, rows.findIndex(r => r.value === current)));
+            setMenuCursor(Math.max(0, rowsOf(which).findIndex(r => r.selected)));
           }
           return;
         }
@@ -1496,14 +1516,13 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
       // Focus Area 3: Timeline Progress Bar (Select on-screen jump buttons with ◄ ►)
       if (focusArea === 'timeline') {
+        // On the timeline ◄ ► move the video (held: longer jumps)
         if (isLeft) {
-          setFocusArea('center');
-          setCenterIndex(0);
+          holdSeek(-1, e.repeat);
           return;
         }
         if (isRight) {
-          setFocusArea('center');
-          setCenterIndex(2);
+          holdSeek(1, e.repeat);
           return;
         }
         if (isEnter) {
@@ -1625,8 +1644,19 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         </div>
       )}
 
-      {/* Apple TV Style Next Episode Card */}
-      {nextOffer && nextEpisode && (
+      {/* Over the credits: just a button (OK plays the next episode, Back hides it) */}
+      {nextOffer === 'credits' && nextEpisode && (
+        <div className="vod-next-button-wrap">
+          <div className="vod-next-btn" onClick={playNext}>
+            <span className="vod-next-btn-icon">▶</span>
+            <span>Siguiente episodio{nextCountdown !== null ? ` en ${nextCountdown}` : ''}</span>
+          </div>
+          <span className="vod-next-cancel-hint"><b>Atrás</b> para seguir viendo</span>
+        </div>
+      )}
+
+      {/* After the end: the card with the next episode */}
+      {nextOffer === 'end' && nextEpisode && (
         <div className="vod-next-episode">
           {nextCountdown !== null && (
             <div className="vod-next-progress-track">
@@ -1659,7 +1689,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
                   <span>Ver ahora</span>
                 </div>
                 <span className="vod-next-cancel-hint">
-                  <b>Atrás</b> {nextOffer === 'credits' ? 'para seguir viendo' : 'para salir'}
+                  <b>Atrás</b> para salir
                 </span>
               </div>
             </div>
@@ -1751,6 +1781,17 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
                 )}
 
                 <div
+                  className={`vp-ctrl ${focusArea === 'controls' && ctrlIndex === qualityCtrl ? 'is-focused' : ''} ${menu === 'quality' ? 'is-on' : ''}`}
+                  title="Resolución"
+                >
+                  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="2" y="5" width="20" height="14" rx="2" />
+                    <path d="M7 15V9M7 12h3M10 9v6M14 9v6h1.5a2.5 2.5 0 0 0 2.5-2.5v-1A2.5 2.5 0 0 0 15.5 9H14Z" />
+                  </svg>
+                  <span className="vp-ctrl-label">Resolución</span>
+                </div>
+
+                <div
                   className={`vp-ctrl ${focusArea === 'controls' && ctrlIndex === settingsCtrl ? 'is-focused' : ''} ${menu === 'settings' ? 'is-on' : ''}`}
                   title="Ajustes"
                 >
@@ -1761,33 +1802,18 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
                   <span className="vp-ctrl-label">Ajustes</span>
                 </div>
 
-                {menu === 'settings' && (
-                  <div className="vp-menu is-settings">
-                    {settingRows.map((row, i) => (
-                      <React.Fragment key={row.group + row.label}>
-                        {(i === 0 || settingRows[i - 1].group !== row.group) && <div className="vp-menu-title">{row.group}</div>}
+                {menu && menu !== 'episodes' && (
+                  <div className={`vp-menu ${menu === 'audio' ? 'is-audio' : ''} ${menu === 'settings' || menu === 'quality' || menu === 'subs' ? 'is-settings' : ''} is-${menu}`}>
+                    {menuRows.length === 0 && <div className="vp-menu-empty">No hay opciones</div>}
+                    {menuRows.map((row, i) => (
+                      <React.Fragment key={row.group + row.label + i}>
+                        {(i === 0 || menuRows[i - 1].group !== row.group) && <div className="vp-menu-title">{row.group}</div>}
                         <div className={`vp-menu-row ${i === menuCursor ? 'is-focused' : ''}`}>
                           <span className="vp-check">{row.selected ? '✓' : ''}</span>
                           <span>{row.label}</span>
                         </div>
                       </React.Fragment>
                     ))}
-                  </div>
-                )}
-
-                {menu && menu !== 'episodes' && menu !== 'settings' && (
-                  <div className={`vp-menu ${menu === 'audio' ? 'is-audio' : ''}`}>
-                    <div className="vp-menu-title">{menu === 'subs' ? 'Subtítulos' : 'Audio'}</div>
-                    {menuRows.length === 0 && <div className="vp-menu-empty">No hay opciones</div>}
-                    {menuRows.map((row, i) => {
-                      const selected = menu === 'subs' ? row.value === subIndex : row.value === audioIndex;
-                      return (
-                        <div key={row.label + i} className={`vp-menu-row ${i === menuCursor ? 'is-focused' : ''}`}>
-                          <span className="vp-check">{selected ? '✓' : ''}</span>
-                          <span>{row.label}</span>
-                        </div>
-                      );
-                    })}
                   </div>
                 )}
               </div>

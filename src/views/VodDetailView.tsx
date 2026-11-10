@@ -532,12 +532,16 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     if (focus.area === 'back' || focus.area === 'actions' || focus.area === 'quick' || focus.area === 'audioModal') {
       rootScrollRef.current.scrollTop = 0;
     } else if (focus.area === 'seasons' || focus.area === 'seasonMenu' || focus.area === 'epRanges' || focus.area === 'episodes') {
-      // The whole series section (selector, ranges, tiles) just under the header
+      // The series section (selector, ranges, tiles) scrolls only as far as it needs to be whole on screen: when it
+      // already fits under the hero the page stays at the top, and the hero stays in view
       const sec = seriesSectionRef.current;
-      rootScrollRef.current.scrollTop = sec ? Math.max(0, sec.offsetTop - 90) : 280;
-    } else if (focus.area === 'cast') {
-      const sec = castSectionRef.current;
-      rootScrollRef.current.scrollTop = sec ? Math.max(0, sec.offsetTop - 120) : 480;
+      const root = rootScrollRef.current;
+      if (!sec) {
+        root.scrollTop = 0;
+      } else {
+        const overflow = sec.offsetTop + sec.offsetHeight + 24 - root.clientHeight;
+        root.scrollTop = Math.max(0, Math.min(overflow, sec.offsetTop - 90));
+      }
     } else if (focus.area === 'related') {
       rootScrollRef.current.scrollTop = rootScrollRef.current.scrollHeight;
     }
@@ -885,50 +889,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
           </section>
         )}
 
-        {/* Cast / Reparto Section */}
-        {effectiveCast && effectiveCast.length > 0 && (
-          <section className="vod-detail-cast-section" ref={castSectionRef}>
-            <h2 className="section-title">Reparto y Equipo</h2>
-            <div className="vod-cast-slider" ref={castSliderRef}>
-              {effectiveCast.map((p, pIdx) => {
-                const isCastFocused = focus.area === 'cast' && (focus.castIndex ?? 0) === pIdx;
-                return (
-                  <div
-                    key={p.puId || `${p.name}-${pIdx}`}
-                    className={`poster-card apple-poster-card vod-cast-card ${isCastFocused ? 'is-focused' : ''}`}
-                    tabIndex={0}
-                    onClick={() => {
-                      if (onSelectPerson) onSelectPerson(p);
-                      else setSelectedPerson(p);
-                    }}
-                  >
-                    <div className="poster-card-img-wrap">
-                      <div className="vod-cast-poster-placeholder">
-                        <svg className="vod-cast-person-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                          <circle cx="12" cy="7" r="4" />
-                        </svg>
-                      </div>
-                      {p.icon ? (
-                        <img
-                          src={p.icon}
-                          alt={p.name}
-                          className="poster-card-img"
-                          loading="lazy"
-                          onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
-                        />
-                      ) : null}
-                    </div>
-                    <div className="poster-card-footer">
-                      <div className="poster-card-title">{p.name}</div>
-                      <div className="poster-card-meta">{p.personType === 1 ? 'Director' : 'Reparto'}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
+        {/* Reparto y Equipo lives only in the Info dialog (below) */}
 
         {/* Recommended / Similar Titles Row */}
         {relatedItems && relatedItems.length > 0 && (
