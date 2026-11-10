@@ -1,5 +1,6 @@
 import SHA256 from 'crypto-js/sha256';
 import { isAdultLabel } from '../lib/catalogOrganizer.ts';
+import { saveItem } from '../lib/safeStorage.ts';
 
 const KEY = 'xuper_parental_v1';
 const LOCK_KEY = 'xuper_parental_lock_v1';
@@ -52,7 +53,7 @@ class ParentalService {
   private writeLockState() {
     try {
       if (typeof localStorage === 'undefined') return;
-      localStorage.setItem(LOCK_KEY, JSON.stringify({
+      saveItem(LOCK_KEY, JSON.stringify({
         fails: this.fails,
         cooldownUntil: this.cooldownUntil
       }));
@@ -77,9 +78,7 @@ class ParentalService {
   }
 
   private write(state: ParentalState) {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(state));
-    } catch (e) {}
+    saveItem(KEY, JSON.stringify(state));
     this.emit();
   }
 

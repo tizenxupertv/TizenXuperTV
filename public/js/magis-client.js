@@ -276,7 +276,7 @@
       gatewayMac: randomMac(),
       wifiMac: randomMac()
     };
-    try { if (window.localStorage) localStorage.setItem(DEVICE_IDENTITY_KEY, JSON.stringify(id)); } catch (e) {}
+    storeSet(DEVICE_IDENTITY_KEY, JSON.stringify(id));
     return id;
   }
 
@@ -345,17 +345,55 @@
     }
   } catch (e) {}
 
-  function saveSession() {
+  var LIVE_PAGE_PREFIX = 'xuper_magis_page_v1_';
+  // Channel pages of categories that are not visited any more (or that the portal renamed) stayed for ever
+  var LIVE_PAGE_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+
+  /** Removes the saved channel pages older than `maxAgeMs` (0: all of them); returns how many */
+  function dropLivePages(maxAgeMs) {
+    var doomed = [];
     try {
-      if (window.localStorage && session.ready && session.userId && session.userToken) {
-        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
-          sn: session.sn,
-          userId: session.userId,
-          userToken: session.userToken,
-          snToken: session.snToken
-        }));
+      if (!window.localStorage) return 0;
+      for (var i = 0; i < localStorage.length; i++) {
+        var key = localStorage.key(i);
+        if (!key || key.indexOf(LIVE_PAGE_PREFIX) !== 0) continue;
+        if (maxAgeMs > 0) {
+          var m = /^\{"at":(\d+)/.exec(localStorage.getItem(key) || '');
+          if (m && Date.now() - parseInt(m[1], 10) < maxAgeMs) continue;
+        }
+        doomed.push(key);
       }
+      for (var d = 0; d < doomed.length; d++) localStorage.removeItem(doomed[d]);
     } catch (e) {}
+    return doomed.length;
+  }
+
+  /** Saves what must not be lost (session, device identity): when the store is full the channel pages make room */
+  function storeSet(key, value) {
+    try {
+      if (!window.localStorage) return false;
+      localStorage.setItem(key, value);
+      return true;
+    } catch (e) {
+      if (!dropLivePages(0)) return false;
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch (e2) {
+        return false;
+      }
+    }
+  }
+
+  function saveSession() {
+    if (session.ready && session.userId && session.userToken) {
+      storeSet(SESSION_STORAGE_KEY, JSON.stringify({
+        sn: session.sn,
+        userId: session.userId,
+        userToken: session.userToken,
+        snToken: session.snToken
+      }));
+    }
   }
 
   function clearSession() {
@@ -1310,7 +1348,7 @@
       return callback(null, memPage.channels, memPage.hasMore);
     }
     try {
-      var rawPage = window.localStorage && localStorage.getItem('xuper_magis_page_v1_' + pageKey);
+      var rawPage = window.localStorage && localStorage.getItem(LIVE_PAGE_PREFIX + pageKey);
       if (rawPage) {
         var parsedPage = JSON.parse(rawPage);
         if (parsedPage && parsedPage.channels && parsedPage.channels.length && (Date.now() - (parsedPage.at || 0) < LIVE_PAGE_TTL)) {
@@ -1374,8 +1412,7 @@
                   fav: ch.isFav || false,
                   now: 'En vivo',
                   next: '',
-                  time: '',
-                  liveAddressList: ch.liveAddressList || []
+                  time: ''
                 };
                 channels.push(mapped);
                 liveChannelCache[ch.channelCode] = { at: Date.now(), channel: mapped };
@@ -1387,7 +1424,7 @@
               livePageCache[pageKey] = entry;
               try {
                 if (window.localStorage) {
-                  localStorage.setItem('xuper_magis_page_v1_' + pageKey, JSON.stringify(entry));
+                  localStorage.setItem(LIVE_PAGE_PREFIX + pageKey, JSON.stringify(entry));
                 }
               } catch (e) {}
             }
@@ -1468,10 +1505,16 @@
   }
 
   var liveResolveCache = {};
-  function resolveLive(channelCode, callback) {
+  // opts.fresh: the link just handed out stopped working (401/403, stream dropped): ask the portal again. Without it
+  // the "new" link came from this cache and was the same dead one for up to two minutes
+  function resolveLive(channelCode, callback, opts) {
     var code = trim(channelCode);
     if (!code) return callback(new Error('channelCode required'));
 
+    if (opts && opts.fresh) {
+      delete liveResolveCache[code];
+      slbCache = null;
+    }
     var cached = liveResolveCache[code];
     if (cached && Date.now() - cached.at < LIVE_RESOLVE_CACHE_MS) {
       return setTimeout(function () { callback(null, cached.stream); }, 0);
@@ -2287,6 +2330,9 @@
       });
     });
   }
+
+  // Once the app has started: old channel pages go
+  setTimeout(function () { dropLivePages(LIVE_PAGE_KEEP_MS); }, 20000);
 
   window.MagisClient = {
     ensureSession: ensureSession,
