@@ -7,7 +7,7 @@ import { getEpisodeStatus, canSaveProgress, reachedResumeGoal, retryStartAt } fr
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
-import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseAudioFits, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
+import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseHlsConfig, mseUnsupportedReason, wantedAudioIndex, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
 import { friendlyPortalError } from '../lib/portalErrors';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
@@ -162,6 +162,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const mseFailedRef = useRef(false);
   /** Audio language picked in this player among the ones inside the file ('' = the profile preference) */
   const fileAudioRef = useRef('');
+  /** Which of the file's audios MSE plays (0: the first one) */
+  const mseAudioIndexRef = useRef(0);
   const [avMode, setAvMode] = useState(false);
 
   // Audio / subtitles chosen from the player menus (bottom-right buttons)
@@ -627,7 +629,9 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       const audioWanted = fileAudioRef.current || PREF_LANG_CODES[settingsService.get().audio] || 'es';
       const mseWhyNot = mseFailedRef.current
         ? 'MSE falló en esta reproducción'
-        : mseUnsupportedReason(res) || (mseAudioFits(res.audio, l => sameLanguage(l, audioWanted)) ? '' : 'el audio elegido no es el primero del archivo');
+        : mseUnsupportedReason(res);
+      // The wanted audio may not be the file's first one: MSE is told which one to play (lib/tsAudioSelect.ts)
+      mseAudioIndexRef.current = wantedAudioIndex(res.audio, l => sameLanguage(l, audioWanted));
       if (hasAvPlay() && !isTrailer) {
         // Which player and why, for the problem report (the first thing to know when a title misbehaves)
         const resumeAt = startedAtRef.current > 5 ? ` · retomar en ${Math.round(startedAtRef.current)} s` : '';
@@ -636,7 +640,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       if (hasAvPlay() && !isTrailer && !mseWhyNot) {
         // Indexed .ts on a TV with MSE: pieces by byte range, instant seeks inside the buffer
         window.__xuperCurrentStreamMeta = { ...res, contentId, seasonId, trackIndex: portalTrackRef.current, startedAt: Date.now() };
-        // The other audios inside the file stay in the menu: choosing one reopens the title with AVPlay
+        // The audios inside the file are the menu: choosing another one reopens the title on it, at the same position
         const fileLangs: AudioOption[] = [];
         fileAudioLanguages(res.audio).forEach((lang, i) => {
           const label = languageName(lang);
@@ -644,7 +648,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         });
         if (tracks.length <= 1 && fileLangs.length > 1) {
           setAudioOptions(fileLangs);
-          setAudioIndex(0);
+          const playing = languageName(fileAudioLanguages(res.audio)[mseAudioIndexRef.current]);
+          setAudioIndex(Math.max(0, fileLangs.findIndex(o => o.label === playing)));
         }
         setMseRes(res);
       } else if (hasAvPlay()) {
@@ -797,7 +802,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       .then(({ playlist, pieces }) => {
         if (!alive) return;
         console.log('[VodPlayer] MSE playlist', pieces, 'pieces, start at', Math.round(startedAtRef.current));
-        hls = (window as any).__xuperCreateHls(mseHlsConfig(Hls, playlist, startedAtRef.current));
+        hls = (window as any).__xuperCreateHls(mseHlsConfig(Hls, playlist, startedAtRef.current, mseAudioIndexRef.current));
         if (!hls) return fallBack('hls.js no disponible');
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           video.play().catch(() => {
@@ -1067,7 +1072,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     if (opt.kind === 'avplay') {
       try { window.webapis.avplay.setSelectTrack('AUDIO', opt.index); } catch (e) {}
     } else if (opt.kind === 'file') {
-      // Another audio of the same file: MSE cannot switch to it, AVPlay reopens the title at the same position
+      // Another audio of the same file: the title reopens on it at the same position
       fileAudioRef.current = opt.lang || '';
       setRetryTick(t => t + 1);
     } else {

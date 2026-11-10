@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildVodPlaylist, canPlayVodWithMse, cdnHeaders, fileAudioLanguages, indexDuration, mseAudioFits, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL, playlistLoader, VOD_ENGINE_KEY } from '../src/lib/vodMseEngine.ts';
+import { buildVodPlaylist, canPlayVodWithMse, cdnHeaders, fileAudioLanguages, indexDuration, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL, playlistLoader, wantedAudioIndex, VOD_ENGINE_KEY } from '../src/lib/vodMseEngine.ts';
 import { makeIdxg } from './helpers/idxg.ts';
 
 /** A TV window: MSE plays the given types, hls.js and the bridge factory are there */
@@ -47,16 +47,23 @@ test('the localStorage switch turns MSE off on a TV where it misbehaves', () => 
   assert.equal(canPlayVodWithMse(tsTitle, w), false);
 });
 
-test('MSE plays the first audio of the file: a title whose wanted audio is another one is left to AVPlay', () => {
+test('the audio MSE plays is the first one in the wanted language, or the first of the file when it has none', () => {
   const wants = (code: string) => (lang: string) => lang === code;
   assert.deepEqual(fileAudioLanguages('spa, eng'), ['spa', 'eng']);
   assert.deepEqual(fileAudioLanguages(undefined), []);
-  assert.equal(mseAudioFits('spa,eng', wants('spa')), true, 'the wanted audio is the first one');
-  assert.equal(mseAudioFits('spa,eng', wants('eng')), false, 'English is the second audio: AVPlay can select it');
-  assert.equal(mseAudioFits('spa,spa,spa,spa,eng', wants('spa')), true);
-  assert.equal(mseAudioFits('spa,eng', wants('por')), true, 'the file does not have the wanted audio: nothing to select');
-  assert.equal(mseAudioFits('eng', wants('spa')), true, 'a single audio');
-  assert.equal(mseAudioFits(undefined, wants('spa')), true);
+  assert.equal(wantedAudioIndex('spa,eng', wants('spa')), 0);
+  assert.equal(wantedAudioIndex('spa,eng', wants('eng')), 1);
+  assert.equal(wantedAudioIndex('spa,spa,spa,spa,eng', wants('eng')), 4);
+  assert.equal(wantedAudioIndex('spa,eng', wants('por')), 0, 'not in the file');
+  assert.equal(wantedAudioIndex(undefined, wants('spa')), 0);
+});
+
+test('a fragment loader is added only when the wanted audio is not the first one', () => {
+  class FakeLoader { load() {} }
+  const Hls = { DefaultConfig: { loader: FakeLoader } };
+  assert.equal('fLoader' in mseHlsConfig(Hls, '#EXTM3U', 0), false);
+  assert.equal('fLoader' in mseHlsConfig(Hls, '#EXTM3U', 0, 0), false);
+  assert.equal(typeof mseHlsConfig(Hls, '#EXTM3U', 0, 1).fLoader, 'function');
 });
 
 test('only the headers the CDN checks are sent (User-Agent cannot be set from a page)', () => {
