@@ -26,7 +26,7 @@ let cachedAllVodItems: VodItem[] | null = null;
 const searchResultCache = new Map<string, { items: VodItem[]; total: number; at: number }>();
 
 const RECENT_SEARCHES_KEY = 'xuper_recent_searches_v1';
-const MAX_RECENT = 6;
+const MAX_RECENT = 10;
 
 function loadRecentSearches(): string[] {
   try {
@@ -60,6 +60,11 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const [focusArea, setFocusArea] = useState<'keyboard' | 'results' | 'refresh' | 'recent'>('keyboard');
   const [recentSearches, setRecentSearches] = useState<string[]>(loadRecentSearches);
   const [recentIndex, setRecentIndex] = useState<number>(0);
+  const recentIndexRef = useRef(0);
+  recentIndexRef.current = recentIndex;
+  const recentSearchesRef = useRef(recentSearches);
+  recentSearchesRef.current = recentSearches;
+  const recentListRef = useRef<HTMLDivElement>(null);
   const [kb, setKb] = useState<KbState>(KB_INITIAL);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
 
@@ -354,14 +359,19 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           e.preventDefault();
           e.stopImmediatePropagation();
         }
+        const currentIdx = recentIndexRef.current;
+        const totalRecent = recentSearchesRef.current.length;
+
         if (e.key === 'ArrowDown') {
-          setRecentIndex(prev => Math.min(recentSearches.length, prev + 1));
+          if (currentIdx < totalRecent) {
+            setRecentIndex(currentIdx + 1);
+          }
         } else if (e.key === 'ArrowUp') {
-          if (recentIndex === 0) {
+          if (currentIdx === 0) {
             setFocusArea('keyboard');
             setKb(prev => ({ ...prev, r: 5 }));
           } else {
-            setRecentIndex(prev => Math.max(0, prev - 1));
+            setRecentIndex(currentIdx - 1);
           }
         } else if (e.key === 'ArrowRight') {
           if (totalResults > 0) {
@@ -372,10 +382,10 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           setFocusArea('keyboard');
           setKb(prev => ({ ...prev, r: 5 }));
         } else if (e.key === 'Enter') {
-          if (recentIndex === recentSearches.length) {
+          if (currentIdx === totalRecent) {
             clearRecentSearches();
           } else {
-            const selected = recentSearches[recentIndex];
+            const selected = recentSearchesRef.current[currentIdx];
             if (selected) {
               setQuery(selected);
               submitSearch(selected);
@@ -520,6 +530,17 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     }
   }, [focusedResultIndex, focusArea]);
 
+  // Keep focused recent search in view
+  useEffect(() => {
+    if (focusArea === 'recent' && recentListRef.current) {
+      const container = recentListRef.current;
+      const target = container.children[recentIndex] as HTMLElement;
+      if (target) {
+        target.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [recentIndex, focusArea]);
+
   if (!isOpen) return null;
 
   return (
@@ -584,7 +605,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                 <div className="search-recent-header">
                   <span className="search-recent-title">Búsquedas recientes</span>
                 </div>
-                <div className="search-recent-list">
+                <div className="search-recent-list" ref={recentListRef}>
                   {recentSearches.map((s, idx) => {
                     const isFoc = focusArea === 'recent' && recentIndex === idx;
                     return (
