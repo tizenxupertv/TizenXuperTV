@@ -1,3 +1,4 @@
+import { noteFinished, playerClosed, playerOpened } from '../lib/donateMoment';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { VodItem, VodEpisode, VodSeason } from '../types/vod';
 import { historyService } from '../services/historyService';
@@ -129,6 +130,13 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   useEffect(() => {
     if (seasonNumber) setCurrentSeasonNum(seasonNumber);
   }, [seasonNumber]);
+
+  // The donation request waits for the player to be gone (lib/donateMoment)
+  useEffect(() => {
+    if (isTrailer) return;
+    playerOpened();
+    return () => playerClosed();
+  }, [isTrailer]);
 
   // Problem report: what is playing, and why it stopped
   useEffect(() => {
@@ -354,6 +362,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     if (!isTrailer) {
       timeRef.current.t = timeRef.current.d || timeRef.current.t;
       saveProgress();
+      noteFinished();
     }
     // The card was counting down over the credits: the end is its zero
     if (nextOffer === 'credits' && settingsService.get().autoNext !== false && nextEpisode && onPlayEpisode) {

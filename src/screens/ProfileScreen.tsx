@@ -849,7 +849,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <h3 className="pf-donate-heading">Apoya el desarrollo de TizenXuper TV</h3>
               <p className="pf-donate-text">
                 TizenXuper TV es un proyecto comunitario optimizado para televisores Samsung Tizen.
-                Tu aporte voluntario nos permite costear la infraestructura de servidores, mantener las listas y guías actualizadas, y seguir desarrollando mejoras y nuevas funciones.
+                Tu aporte voluntario nos permite costear la infraestructura del proyecto y seguir desarrollando mejoras y nuevas funciones.
               </p>
               <div className="pf-donate-steps">
                 <div className="pf-donate-step">
