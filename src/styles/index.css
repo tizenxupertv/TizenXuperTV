@@ -9156,3 +9156,11 @@ html.no-flexgap .tg-login-report-body > * + * { margin-left: 32px; }
 /* Version on the sign-in screen: support can tell at a glance what a TV runs, even before it signs in */
 .tg-login-brand { position: relative; }
 .tg-login-version { position: absolute; top: 34px; right: 48px; font-size: 15px; font-weight: 600; color: var(--text-dim); }
+
+/* Tizen 6.0 and older (html.legacy-video, set in main.tsx): a Tizen 5.5 TV played the preview's sound without its
+   picture while the same <video> showed in fullscreen. To test there: the preview box without what fullscreen does
+   not have, rounded clipping and the gradient over the video */
+html.legacy-video .live-grand-preview-box { border-radius: 0; overflow: visible; }
+html.legacy-video .live-grand-preview-box.is-focused::after { border-radius: 0; }
+html.legacy-video .live-preview-video { object-fit: contain; }
+html.legacy-video .live-preview-overlay { display: none; }

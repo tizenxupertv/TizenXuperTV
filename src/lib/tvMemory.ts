@@ -16,3 +16,15 @@ export function isLowMemoryTv(ua: string = typeof navigator !== 'undefined' ? na
 export function backBufferFor(seconds: number, ua?: string): number {
   return isLowMemoryTv(ua) ? Math.min(seconds, LOW_MEMORY_BACK_BUFFER) : seconds;
 }
+
+/**
+ * Tizen 6.0 and older (Chromium 85 is Tizen 6.5): a TV there played the live preview's sound without its picture,
+ * while the same video showed in fullscreen. main.tsx marks these TVs with html.legacy-video so the preview box
+ * drops what fullscreen does not have (rounded clipping, the gradient over the video).
+ */
+export function isLegacyVideoTv(ua: string = typeof navigator !== 'undefined' ? navigator.userAgent : ''): boolean {
+  const m = /Tizen (\d+)\.(\d+)/.exec(ua || '');
+  if (!m) return false;
+  const major = parseInt(m[1], 10);
+  return major < 6 || (major === 6 && parseInt(m[2], 10) === 0);
+}
