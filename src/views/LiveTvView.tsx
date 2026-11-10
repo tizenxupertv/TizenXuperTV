@@ -521,7 +521,14 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     [onTuneChannel, activeCategory]
   );
 
-  // Background Preloader: prefetch and cache channels & logos for ALL categories
+  // The TV tab has been on screen at least once. Until then only the saved channel lists are read: downloading
+  // every category right after the start competed with what the viewer opened first
+  const [liveSeen, setLiveSeen] = useState(isActiveTab);
+  useEffect(() => {
+    if (isActiveTab) setLiveSeen(true);
+  }, [isActiveTab]);
+
+  // Background Preloader: prefetch and cache the channels of ALL categories
   useEffect(() => {
     if (!categories || categories.length <= 1) return;
     if (!window.MagisClient || typeof window.MagisClient.getLiveChannels !== 'function') return;
@@ -575,8 +582,14 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         }
       } catch (e) {}
 
+      // Not saved: downloaded only once the viewer has been to the TV tab (this effect runs again then)
+      if (!liveSeen) {
+        setTimeout(prefetchStep, 40);
+        return;
+      }
+
       // Fetch from API in background
-      window.MagisClient.getLiveChannels(catKey, 1, 50, (err: any, list: any[]) => {
+      window.MagisClient.getAllLiveChannels(catKey, (err: any, list: any[]) => {
         if (isCancelled) return;
         if (!err && Array.isArray(list) && list.length) {
           const chs: LiveChannel[] = list.map((c, i) => ({
@@ -591,13 +604,9 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             isFav: !!favMap[channelKey(c)]
           }));
 
+          // Logos load when their rows are drawn: preloading them here was one download per channel of every category
           chs.forEach(c => {
             channelMasterCache.current[String(c.id || c.code)] = c;
-            // Preload logo image in browser cache
-            if (c.logo) {
-              const img = new Image();
-              img.src = c.logo;
-            }
           });
 
           categoryChannelsCache.set(catKey, chs);
@@ -614,7 +623,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       isCancelled = true;
       clearTimeout(startTimer);
     };
-  }, [categories, favMap]);
+  }, [categories, favMap, liveSeen]);
 
   // Fetch Channels when active category changes (0ms instant if cached in memory!)
   useEffect(() => {
@@ -762,7 +771,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       const parsedEntry = getChannelEntry(catId);
       const isFresh = parsedEntry && (Date.now() - parsedEntry.at < 10 * 60 * 1000);
       if (!isFresh && window.MagisClient && typeof window.MagisClient.getLiveChannels === 'function') {
-        window.MagisClient.getLiveChannels(catId, 1, 50, (err: any, list: any[]) => {
+        window.MagisClient.getAllLiveChannels(catId, (err: any, list: any[]) => {
           if (!alive || err || !Array.isArray(list) || !list.length) return;
           const chs: LiveChannel[] = list.map((c, idx) => ({
             id: c.channelCode || c.id || idx,
@@ -782,7 +791,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           const visible = filterLockedChannels(chs, categories, catId);
           setChannels(visible);
           setChannelEntry(catId, chs);
-        });
+        }, { progressive: true });
       }
       return;
     }
@@ -805,7 +814,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           // Silent background revalidation if data is older than 10 mins
           const isFresh = (Date.now() - parsed.at < 10 * 60 * 1000);
           if (!isFresh && window.MagisClient && typeof window.MagisClient.getLiveChannels === 'function') {
-            window.MagisClient.getLiveChannels(catId, 1, 50, (err: any, list: any[]) => {
+            window.MagisClient.getAllLiveChannels(catId, (err: any, list: any[]) => {
               if (!alive || err || !Array.isArray(list) || !list.length) return;
               const chs: LiveChannel[] = list.map((c, idx) => ({
                 id: c.channelCode || c.id || idx,
@@ -825,7 +834,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
               const visibleFresh = filterLockedChannels(chs, categories, catId);
               setChannels(visibleFresh);
               setChannelEntry(catId, chs);
-            });
+            }, { progressive: true });
           }
           return;
         }
@@ -835,7 +844,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     // 3. Fallback to API if not cached yet
     setIsLoadingChannels(true);
     if (window.MagisClient && typeof window.MagisClient.getLiveChannels === 'function') {
-      window.MagisClient.getLiveChannels(catId, 1, 50, (err: any, list: any[]) => {
+      window.MagisClient.getAllLiveChannels(catId, (err: any, list: any[]) => {
         if (!alive) return;
         if (!err && Array.isArray(list) && list.length) {
           const chs: LiveChannel[] = list.map((c, idx) => ({
@@ -863,7 +872,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           if (onChannelsLoaded) onChannelsLoaded([]);
         }
         setIsLoadingChannels(false);
-      });
+      }, { progressive: true });
     } else {
       setChannels([]);
       if (onChannelsLoaded) onChannelsLoaded([]);
@@ -972,6 +981,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   const isDisplayChannelTuned = isSameChannel(tunedChannel, displayChannel);
   const isDisplayChannelFav = !!(displayChannel && favMap[channelKey(displayChannel)]);
   const tunedIsDown = !!tunedChannel && liveStatus.state === 'error' && liveStatus.code === String(tunedChannel.code || tunedChannel.id);
+  const tunedIsLoading = !!tunedChannel && liveStatus.state === 'loading' && liveStatus.code === String(tunedChannel.code || tunedChannel.id);
   const [chFrom, chTo] = listWindow(channels.length, focus.channelIndex);
 
   return (
@@ -1076,6 +1086,23 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             autoPlay
           />
           <div className="live-preview-overlay" />
+
+          {/* Changing channel: the last frame of the previous one stayed on screen until the new one played. The
+              new channel's name covers it meanwhile */}
+          {tunedIsLoading && tunedChannel && (
+            <div className="live-tuning">
+              {tunedChannel.logo && (
+                <img
+                  className="live-tuning-logo"
+                  src={tunedChannel.logo}
+                  alt=""
+                  onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                />
+              )}
+              <div className="live-tuning-name">{tunedChannel.name}</div>
+              <div className="live-tuning-spinner" />
+            </div>
+          )}
 
           {/* The tuned channel does not answer: say so instead of a black box */}
           {tunedIsDown && (
