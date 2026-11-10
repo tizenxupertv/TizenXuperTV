@@ -25,7 +25,16 @@ def sha256_b64(data):
 
 
 def openssl(*args, input_data=None):
-    return subprocess.run(["openssl", *args], input=input_data, check=True, capture_output=True).stdout
+    try:
+        return subprocess.run(["openssl", *args], input=input_data, check=True, capture_output=True).stdout
+    except subprocess.CalledProcessError:
+        # Retry with -legacy flag for PKCS#12 legacy encryption compatibility in OpenSSL 3+
+        if "pkcs12" in args and "-legacy" not in args:
+            new_args = list(args)
+            pkcs12_idx = new_args.index("pkcs12")
+            new_args.insert(pkcs12_idx + 1, "-legacy")
+            return subprocess.run(["openssl", *new_args], input=input_data, check=True, capture_output=True).stdout
+        raise
 
 
 def load_p12(path, password, work_dir, name):

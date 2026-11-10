@@ -936,6 +936,7 @@ export const App: React.FC = () => {
           selectedPerson={selectedPerson}
           onSelectPerson={p => setSelectedPerson(p)}
           onClosePerson={() => setSelectedPerson(null)}
+          onItemChange={updatedItem => setActiveDetailItem(updatedItem)}
           onOpenAudioModal={col => {
             const current = col === 'menu' ? 0 : settingPosition(col, detail.detailCounts);
             setDetailFocus(prev => ({ ...prev, area: 'audioModal', modalCol: col, modalIndex: current, quickIndex: 1 }));

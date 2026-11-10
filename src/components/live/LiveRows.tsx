@@ -65,5 +65,6 @@ export const CategoryRow = React.memo<CategoryRowProps>(({ cat, idx, active, cur
     onClick={() => onSelect && onSelect(idx)}
   >
     <span className="live-cat-vname">{cat.name}</span>
+    {cat.badge && <span className="live-cat-badge">{cat.badge}</span>}
   </div>
 ));
