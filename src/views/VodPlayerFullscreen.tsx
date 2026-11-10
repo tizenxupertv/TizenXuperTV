@@ -152,6 +152,15 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const useAvPlayRef = useRef<boolean>(false);
   const requestIdRef = useRef<number>(0);
   const timeRef = useRef({ t: 0, d: 0 });
+  // The player reports its time several times a second and every update re-renders this whole screen. With the
+  // controls hidden and no subtitles on, nothing on screen changes that often: once a second is enough there
+  const shownTimeRef = useRef(0);
+  const fineTimeRef = useRef(true);
+  const showTime = useCallback((t: number) => {
+    if (!fineTimeRef.current && Math.abs(t - shownTimeRef.current) < 1) return;
+    shownTimeRef.current = t;
+    setCurrentTime(t);
+  }, []);
   const startedAtRef = useRef<number>(startAt);
 
   const [streamInfoText, setStreamInfoText] = useState<string>('');
@@ -515,7 +524,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           resumePendingRef.current = false;
         }
         timeRef.current.t = t;
-        setCurrentTime(t);
+        showTime(t);
       };
       video.onwaiting = () => isCurrent() && setIsBuffering(true);
       video.onplaying = () => {
@@ -688,7 +697,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     const onTimeUpdate = () => {
       if (!acceptTimeRef.current(video.currentTime)) return;
       timeRef.current.t = video.currentTime;
-      setCurrentTime(video.currentTime);
+      showTime(video.currentTime);
     };
     const onLoadedMetadata = () => {
       timeRef.current.d = video.duration || 0;
@@ -768,7 +777,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     const onTimeUpdate = () => {
       if (!acceptTimeRef.current(video.currentTime)) return;
       timeRef.current.t = video.currentTime;
-      setCurrentTime(video.currentTime);
+      showTime(video.currentTime);
     };
     const onLoadedMetadata = () => {
       timeRef.current.d = video.duration || 0;
@@ -986,7 +995,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         // Only HTML5 video needs explicit play() call after resume; AVPlay continues playing automatically
         // via onbufferingcomplete once the seeked buffer fills.
         if (shouldResume && !useAvPlayRef.current && videoRef.current) {
-          videoRef.current.play();
+          // A seek or closing the player can interrupt this play(): that is expected, not an error for the report
+          videoRef.current.play().catch(() => {});
         }
       };
 
@@ -1595,6 +1605,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const osdVisible = !!error || (!osdDismissed && showOsd);
   const osdVisibleRef = useRef(osdVisible);
   osdVisibleRef.current = osdVisible;
+  // Every update while the timeline, a seek or the subtitles are on screen; once a second otherwise (showTime)
+  fineTimeRef.current = osdVisible || subIndex >= 0 || !!seekHud || !!nextOffer;
   // Episodes only, long enough to have an intro, in their first minutes and with nothing else on screen
   const introOffer = !isTrailer && !!episode && !introDismissed && !nextOffer && !error && !menu && !osdVisible &&
     duration > 600 && currentTime >= INTRO_FROM_S && currentTime < INTRO_UNTIL_S;
