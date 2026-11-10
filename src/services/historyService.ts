@@ -4,8 +4,16 @@ import { isFinished } from '../lib/vodResume.ts';
 import { withoutHistory, withoutHistoryEntry } from '../lib/profileHistory.ts';
 import { pk } from '../lib/localProfiles.ts';
 import { isAdultItem } from '../lib/catalogOrganizer.ts';
+import { readStoredJson } from '../lib/storedJson.ts';
+import { saveItem } from '../lib/safeStorage.ts';
 
 const PROFILE_KEY = pk('xuper_local_profile_v1');
+/**
+ * A second copy of this profile, in case its key is lost: written at start and after every deletion, and merged back
+ * at start. One per profile: it used to be a single key for all of them, so another profile's history ended up in
+ * Principal, and a title removed from the history came back at the next start
+ */
+const BACKUP_KEY = pk('xuper_history_master_backup');
 const PRIVATE_IDS_KEY = 'xuper_private_ids_v1';
 
 class HistoryService {
@@ -37,7 +45,7 @@ class HistoryService {
     try {
       if (typeof localStorage === 'undefined') return;
       const arr = Array.from(this.privateIds).slice(-2000);
-      localStorage.setItem(PRIVATE_IDS_KEY, JSON.stringify(arr));
+      saveItem(PRIVATE_IDS_KEY, JSON.stringify(arr));
     } catch (e) {}
   }
 
@@ -68,7 +76,7 @@ class HistoryService {
               const before = profile.history.length;
               profile.history = profile.history.filter((h: any) => !idsToPurge.has(String(h?.id ?? '')) && !this.isRestricted(h));
               if (profile.history.length !== before) {
-                localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+                saveItem(PROFILE_KEY, JSON.stringify(profile));
                 this.notify();
               }
             }
@@ -107,13 +115,22 @@ class HistoryService {
       favs: {}
     };
     try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(fresh));
+      saveItem(PROFILE_KEY, JSON.stringify(fresh));
     } catch (e) {}
     return fresh;
   }
 
+  /**
+   * The profile for reading only: parsed once per stored text (lib/storedJson.ts), where getProfile() parses a copy of
+   * its own for the code that edits and saves it. Never change what this returns
+   */
+  private readProfile(): any {
+    if (!this.hasMergedAll) return this.getProfile();
+    return readStoredJson(PROFILE_KEY) || this.getProfile();
+  }
+
   public getHistory(): HistoryItem[] {
-    const profile = this.getProfile();
+    const profile = this.readProfile();
     const list: HistoryItem[] = (profile && Array.isArray(profile.history)) ? profile.history : [];
     return list.filter(h => !this.isRestricted(h));
   }
@@ -198,9 +215,8 @@ class HistoryService {
     }
 
     profile.history = nextList;
-    try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-    } catch (e) {}
+    // Makes room (channel caches first) when the store is full, and reports it when it still cannot save
+    saveItem(PROFILE_KEY, JSON.stringify(profile));
 
     this.notify();
   }
@@ -208,10 +224,11 @@ class HistoryService {
   /** Forgets what was watched on this TV (titles and their progress); favorites and settings stay. False if it could not be saved. */
   public clearHistory(): boolean {
     try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(withoutHistory(this.getProfile())));
+      if (!saveItem(PROFILE_KEY, JSON.stringify(withoutHistory(this.getProfile())))) return false;
     } catch (e) {
       return false;
     }
+    this.syncBackup();
     this.notify();
     return true;
   }
@@ -219,85 +236,81 @@ class HistoryService {
   /** Forgets one title (and its progress). False if it could not be saved. */
   public removeEntry(itemId: string | number): boolean {
     try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(withoutHistoryEntry(this.getProfile(), itemId)));
+      if (!saveItem(PROFILE_KEY, JSON.stringify(withoutHistoryEntry(this.getProfile(), itemId)))) return false;
     } catch (e) {
       return false;
     }
+    this.syncBackup();
     this.notify();
     return true;
   }
 
   /**
-   * Scans all profiles and history backups in localStorage and merges them into the active profile.
-   * Ensures new history and previous history are preserved together without duplicate entries.
+   * Copies the stored profile over its backup copy. Called after something is deleted on purpose (a title of the
+   * history, the whole history, a favourite), so the start-up merge does not bring it back
+   */
+  public syncBackup(): void {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const raw = localStorage.getItem(PROFILE_KEY);
+      if (raw) localStorage.setItem(BACKUP_KEY, raw);
+    } catch (e) {}
+  }
+
+  /**
+   * Merges this profile with its backup copy (history by newest entry, favourites as a union) and saves both, so a
+   * profile whose key was lost gets its history back. Nothing is written when nothing changed.
    */
   public mergeAllHistories(): void {
     try {
       if (typeof window === 'undefined' || !window.localStorage) return;
       const ls = window.localStorage;
+      const parse = (raw: string | null): any => {
+        try {
+          const data = raw ? JSON.parse(raw) : null;
+          return data && typeof data === 'object' ? data : null;
+        } catch (e) {
+          return null;
+        }
+      };
+      const curRaw = ls.getItem(PROFILE_KEY);
+      const stored = parse(curRaw);
+      const current: any = stored || {
+        id: 'TV-' + String(Date.now()).slice(-8),
+        createdAt: Date.now(),
+        history: [],
+        favs: {}
+      };
+      const backupRaw = ls.getItem(BACKUP_KEY);
+      const backup = parse(backupRaw);
+      // A copy left by another profile (older versions shared one key) is not this profile's history. With the
+      // profile itself gone there is nothing to compare: the copy is all there is
+      const backupIsOurs = !!backup && (!stored || !backup.id || !stored.id || backup.id === stored.id);
+
       const allHistories: Record<string, HistoryItem> = {};
       // A favorite is `true` or the title's info (favoritesService): keep the info when any copy has it
       const allFavs: Record<string, unknown> = {};
-
-      // 1. Scan storage keys belonging to the active profile or legacy non-profiled backup
-      for (let i = 0; i < ls.length; i++) {
-        const key = ls.key(i);
-        if (!key) continue;
-
-        if (
-          key === PROFILE_KEY ||
-          (PROFILE_KEY === 'xuper_local_profile_v1' && (key === 'xuper_local_profile_v1' || key.startsWith('xuper_history')))
-        ) {
-          try {
-            const raw = ls.getItem(key);
-            if (!raw) continue;
-            const data = JSON.parse(raw);
-            if (!data || typeof data !== 'object') continue;
-
-            if (Array.isArray(data.history)) {
-              for (const item of data.history) {
-                if (!item || !item.id || this.isRestricted(item)) continue;
-                const id = String(item.id);
-                const existing = allHistories[id];
-                if (!existing) {
-                  allHistories[id] = item;
-                } else {
-                  const itemTime = item.updatedAt || 0;
-                  const existTime = existing.updatedAt || 0;
-                  if (itemTime > existTime || (itemTime === existTime && (item.position || 0) > (existing.position || 0))) {
-                    allHistories[id] = { ...existing, ...item };
-                  }
-                }
-              }
-            }
-
-            if (data.favs && typeof data.favs === 'object') {
-              for (const fid of Object.keys(data.favs)) {
-                const favVal = data.favs[fid];
-                if (favVal && typeof favVal === 'object' && this.isRestricted({ id: fid, ...favVal })) continue;
-                if (this.privateIds.has(String(fid))) continue;
-                if (favVal && (typeof favVal === 'object' || !allFavs[fid])) allFavs[fid] = favVal;
-              }
-            }
-          } catch (e) {}
+      const addFavs = (favs: any) => {
+        if (!favs || typeof favs !== 'object') return;
+        for (const fid of Object.keys(favs)) {
+          const favVal = favs[fid];
+          if (favVal && typeof favVal === 'object' && this.isRestricted({ id: fid, ...favVal })) continue;
+          if (this.privateIds.has(String(fid))) continue;
+          if (favVal && (typeof favVal === 'object' || !allFavs[fid])) allFavs[fid] = favVal;
         }
+      };
+
+      if (backupIsOurs) {
+        if (Array.isArray(backup.history)) {
+          for (const item of backup.history) {
+            if (!item || !item.id || this.isRestricted(item)) continue;
+            allHistories[String(item.id)] = item;
+          }
+        }
+        addFavs(backup.favs);
       }
 
-      // 2. Read active profile
-      let current: any = null;
-      try {
-        const curRaw = ls.getItem(PROFILE_KEY);
-        if (curRaw) current = JSON.parse(curRaw);
-      } catch (e) {}
-      if (!current || typeof current !== 'object') {
-        current = {
-          id: 'TV-' + String(Date.now()).slice(-8),
-          createdAt: Date.now(),
-          history: [],
-          favs: {}
-        };
-      }
-
+      // The profile's own entry wins unless the copy's is newer
       if (Array.isArray(current.history)) {
         for (const item of current.history) {
           if (!item || !item.id || this.isRestricted(item)) continue;
@@ -308,22 +321,16 @@ class HistoryService {
           }
         }
       }
-      if (current.favs) {
-        for (const fid of Object.keys(current.favs)) {
-          const favVal = current.favs[fid];
-          if (favVal && typeof favVal === 'object' && this.isRestricted({ id: fid, ...favVal })) continue;
-          if (this.privateIds.has(String(fid))) continue;
-          if (favVal && (typeof favVal === 'object' || !allFavs[fid])) allFavs[fid] = favVal;
-        }
-      }
+      addFavs(current.favs);
 
       const mergedList = Object.values(allHistories).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
       if (mergedList.length > 0) {
         current.history = mergedList.slice(0, 50);
         current.favs = allFavs;
-        ls.setItem(PROFILE_KEY, JSON.stringify(current));
-        ls.setItem('xuper_history_master_backup', JSON.stringify(current));
+        const next = JSON.stringify(current);
+        if (next !== curRaw) saveItem(PROFILE_KEY, next, ls);
+        if (next !== backupRaw) ls.setItem(BACKUP_KEY, next);
       }
     } catch (e) {}
   }

@@ -1,4 +1,6 @@
 import { pk } from '../lib/localProfiles';
+import { readStoredJson } from '../lib/storedJson';
+import { saveItem } from '../lib/safeStorage';
 const KEY = pk('xuper_global_playback_v1');
 
 export interface PlaybackSettings {
@@ -30,18 +32,14 @@ class SettingsService {
   private listeners: Array<() => void> = [];
 
   public get(): PlaybackSettings {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
-    } catch (e) {}
-    return { ...DEFAULTS };
+    // Read on every render of the players: parsed once per stored text (lib/storedJson.ts)
+    const stored = readStoredJson<Partial<PlaybackSettings>>(KEY);
+    return stored && typeof stored === 'object' ? { ...DEFAULTS, ...stored } : { ...DEFAULTS };
   }
 
   public set(patch: Partial<PlaybackSettings>): PlaybackSettings {
     const next = { ...this.get(), ...patch };
-    try {
-      localStorage.setItem(KEY, JSON.stringify(next));
-    } catch (e) {}
+    saveItem(KEY, JSON.stringify(next));
     applyTextSize(next);
     this.listeners.forEach(cb => {
       try { cb(); } catch (e) {}

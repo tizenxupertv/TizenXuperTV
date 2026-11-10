@@ -62,7 +62,10 @@ export function preloadCardNeighbors(
   // Clear pending preloads while user is actively pressing D-pad keys
   if (preloadTimer) clearTimeout(preloadTimer);
 
-  // Only preload after user pauses for 280ms
+  // Look ahead N+1 to N+count (accelerated for fast D-pad carousels)
+  count = Math.max(count, 4);
+
+  // Preload immediately without long pause on TV (reduced debounce to 80ms)
   preloadTimer = setTimeout(() => {
     const targets: string[] = [];
 
@@ -76,11 +79,14 @@ export function preloadCardNeighbors(
       }
     }
 
-    // Look back N-1
-    if (currentIndex > 0) {
-      const it = items[currentIndex - 1];
-      const url = isWide ? (it.landscape || it.backdrop || it.poster) : (it.poster || it.landscape || it.backdrop);
-      if (url && /^https?:/.test(url)) targets.push(url);
+    // Look back N-1 and N-2
+    for (let backOffset = 1; backOffset <= 2; backOffset++) {
+      const bIdx = currentIndex - backOffset;
+      if (bIdx >= 0) {
+        const it = items[bIdx];
+        const url = isWide ? (it.landscape || it.backdrop || it.poster) : (it.poster || it.landscape || it.backdrop);
+        if (url && /^https?:/.test(url)) targets.push(url);
+      }
     }
 
     for (const rawUrl of targets) {
@@ -97,7 +103,7 @@ export function preloadCardNeighbors(
         }
       }
     }
-  }, 280);
+  }, 80);
 }
 
 /** Returns the image URL synchronously without cascading re-renders */

@@ -1,7 +1,10 @@
 import { LiveChannel } from '../types/channel';
+import { isRegionBlocked } from '../lib/portalErrors';
+import { backBufferFor } from '../lib/tvMemory';
 import { normalizeChannel } from '../lib/channelKey';
 import { hostOf, isIspBlockPage, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSequenceFixer } from '../lib/mediaSequence';
+import { epicSportsService } from './epicSportsService';
 
 declare global {
   interface Window {
@@ -22,7 +25,7 @@ export interface LiveStatus {
   code: string;
   state: LiveSignal;
   /** Why it failed, when known: 'isp' = the internet provider blocks the server */
-  reason?: 'isp';
+  reason?: 'isp' | 'region';
 }
 
 // Without a picture after this long, the channel counts as down
@@ -35,9 +38,116 @@ const REFRESH_RETRY_MS = 1500;
 /** Refresh retries count within this window, so a server that keeps failing ends up on the backups */
 const REFRESH_WINDOW_MS = 60000;
 
-/** HLS.js playlist loader that renumbers live playlists whose server shifts the media sequence (src/lib/mediaSequence.ts) */
-function sequenceFixingLoader(Hls: any): any {
+const segCache = new Map<string, { buffer?: ArrayBuffer; promise?: Promise<ArrayBuffer> }>();
+
+function resolveSegmentUrl(uri: string, baseUrl: string): string {
+  try {
+    return new URL(uri, baseUrl).href;
+  } catch {
+    const base = baseUrl.slice(0, baseUrl.lastIndexOf('/') + 1);
+    return base + uri;
+  }
+}
+
+function prefetchUpcomingSegments(manifestText: string, manifestUrl: string, headers?: Record<string, string>) {
+  if (typeof fetch === 'undefined') return;
+  const lines = manifestText.split('\n');
+  const segUrls: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line && !line.startsWith('#')) {
+      segUrls.push(resolveSegmentUrl(line, manifestUrl));
+    }
+  }
+  // HLS.js plays near the live edge (liveSyncDurationCount 3): the newest segments are the ones it asks for next
+  if (manifestText.includes('#EXT-X-ENDLIST')) return;
+  const toPrefetch = segUrls.slice(-3);
+  for (const u of toPrefetch) {
+    if (!segCache.has(u)) {
+      const item: { buffer?: ArrayBuffer; promise?: Promise<ArrayBuffer> } = {};
+      item.promise = fetch(u, { headers: headers || {}, cache: 'no-store' })
+        .then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.arrayBuffer();
+        })
+        .then(buf => {
+          item.buffer = buf;
+          delete item.promise;
+          return buf;
+        })
+        .catch(() => {
+          segCache.delete(u);
+          return undefined;
+        });
+      segCache.set(u, item);
+    }
+  }
+  if (segCache.size > 8) {
+    const it = segCache.keys();
+    while (segCache.size > 8) {
+      const k = it.next().value;
+      if (k) segCache.delete(k);
+    }
+  }
+}
+
+/** Load stats for a segment served from the prefetch cache, in the shape HLS.js 1.x reads (stats.loading.first/end) */
+function cachedStats(loader: any, bytes: number): any {
+  const now = performance.now();
+  const stats = loader.stats || { aborted: false, retry: 0, chunkCount: 0, bwEstimate: 0, loading: {}, parsing: {}, buffering: {} };
+  stats.loading = stats.loading || {};
+  stats.loading.start = stats.loading.first = stats.loading.end = now;
+  stats.loaded = stats.total = bytes;
+  return stats;
+}
+
+/** HLS.js playlist and fragment loader that fixes media sequences and prefetches upcoming segments for instant zapping */
+function liveOptimizedLoader(Hls: any): any {
   const fix = createSequenceFixer();
+  const Base = Hls.DefaultConfig.loader;
+  return class extends Base {
+    load(context: any, config: any, callbacks: any) {
+      const isSegment = context.type === 'fragment' || context.type === 'segment' || context.frag != null;
+      if (isSegment && segCache.has(context.url)) {
+        const cached = segCache.get(context.url);
+        segCache.delete(context.url);
+        if (cached?.buffer) {
+          callbacks.onSuccess({ url: context.url, data: cached.buffer, code: 200 }, cachedStats(this, cached.buffer.byteLength), context, null);
+          return;
+        }
+        if (cached?.promise) {
+          cached.promise.then(buf => {
+            if (buf) {
+              callbacks.onSuccess({ url: context.url, data: buf, code: 200 }, cachedStats(this, buf.byteLength), context, null);
+            } else {
+              super.load(context, config, callbacks);
+            }
+          }).catch(() => {
+            super.load(context, config, callbacks);
+          });
+          return;
+        }
+      }
+
+      const onSuccess = callbacks.onSuccess;
+      super.load(context, config, {
+        ...callbacks,
+        onSuccess: (response: any, stats: any, ctx: any, networkDetails: any) => {
+          if (response && typeof response.data === 'string') {
+            response.data = fix(response.data);
+            if (response.data.includes('#EXTINF:')) {
+              prefetchUpcomingSegments(response.data, ctx.url, context.headers);
+            }
+          }
+          onSuccess(response, stats, ctx, networkDetails);
+        }
+      });
+    }
+  };
+}
+
+/** HLS.js fragment loader that strips the 67-byte fake PNG prefix from Epic Sports / Perelman segments */
+function epicFragmentLoader(Hls: any): any {
   const Base = Hls.DefaultConfig.loader;
   return class extends Base {
     load(context: any, config: any, callbacks: any) {
@@ -45,7 +155,13 @@ function sequenceFixingLoader(Hls: any): any {
       super.load(context, config, {
         ...callbacks,
         onSuccess: (response: any, stats: any, ctx: any, networkDetails: any) => {
-          if (response && typeof response.data === 'string') response.data = fix(response.data);
+          if (response && response.data instanceof ArrayBuffer) {
+            const bytes = new Uint8Array(response.data);
+            // Check PNG magic: 0x89 0x50 0x4E 0x47 and sync byte 0x47 at offset 67
+            if (bytes.length > 67 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[67] === 0x47) {
+              response.data = bytes.slice(67).buffer;
+            }
+          }
           onSuccess(response, stats, ctx, networkDetails);
         }
       });
@@ -107,6 +223,14 @@ class PlayerService {
     }
   }
 
+  /** Preview box or fullscreen and the size of the video element on screen (sound without picture in the
+   *  preview but not in fullscreen points to how the TV draws that box, not to the stream) */
+  private screenInfo(): string {
+    const v = this.currentVideoEl;
+    const size = v ? ` ${v.clientWidth}x${v.clientHeight}` : '';
+    return ` · ${this.isFullscreen ? 'pantalla completa' : 'vista previa'}${size}`;
+  }
+
   /** Player of the current channel, for the problem report */
   private playerName(): string {
     return window.__xuperPreviewHls ? 'HLS.js' : 'AVPlay';
@@ -115,9 +239,9 @@ class PlayerService {
   /** An internet provider's block page was seen this session (also explains VOD errors) */
   public ispBlocked = false;
 
-  private setStatus(code: string, state: LiveSignal, reason?: 'isp') {
+  private setStatus(code: string, state: LiveSignal, reason?: 'isp' | 'region') {
     if (state === 'playing' && !(this.status.code === code && this.status.state === 'playing')) {
-      logPlayback({ kind: 'start', player: this.playerName(), detail: `reproduciendo${this.pictureInfo()}` });
+      logPlayback({ kind: 'start', player: this.playerName(), detail: `reproduciendo${this.pictureInfo()}${this.screenInfo()}` });
     }
     if (this.status.code === code && this.status.state === state && this.status.reason === reason) return;
     this.status = reason ? { code, state, reason } : { code, state };
@@ -163,7 +287,7 @@ class PlayerService {
   }
 
   /** The channel does not play: stop trying (no endless retries) and report it */
-  private failChannel(code: string, why: string, reason?: 'isp') {
+  private failChannel(code: string, why: string, reason?: 'isp' | 'region') {
     if (this.activeChannelCode !== code) return;
     console.warn('[PlayerService] Channel down:', code, why);
     logPlayback({ kind: 'error', player: this.playerName(), detail: why + (this.lastHlsError ? ` · ${this.lastHlsError}` : '') });
@@ -183,6 +307,7 @@ class PlayerService {
   }
 
   private destroyHls() {
+    segCache.clear();
     if (window.__xuperPreviewHls) {
       try {
         window.__xuperPreviewHls.stopLoad();
@@ -243,7 +368,12 @@ class PlayerService {
   }
 
   public setFullscreen(fullscreen: boolean) {
+    const changed = this.isFullscreen !== fullscreen;
     this.isFullscreen = fullscreen;
+    if (changed && this.activeChannelCode && this.status.state === 'playing') {
+      // After the layout settles, so the size is the one on screen
+      setTimeout(() => logPlayback({ kind: 'info', player: this.playerName(), detail: `cambio a${this.screenInfo().slice(2)} · imagen${this.pictureInfo()}` }), 1500);
+    }
     if (fullscreen) {
       if (window.XuperAVPlay && typeof window.XuperAVPlay.switchToFullscreen === 'function') {
         window.XuperAVPlay.switchToFullscreen();
@@ -291,6 +421,60 @@ class PlayerService {
       } catch {}
     }
     window.XuperPlatform?.setScreenSaver?.(true);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pre-warming & Zero-Latency Zapping (DNS / Socket pre-connect + Stream Pre-Resolve)
+  // ---------------------------------------------------------------------------
+  private prewarmedCodes = new Set<string>();
+
+  /**
+   * Pre-warms network connection and stream URL in background without interrupting playback.
+   * Can be called on cursor hover (dwell ~350ms) or for adjacent channels (CH- / CH+).
+   */
+  public prewarm(channel: LiveChannel | null | undefined): void {
+    if (!channel) return;
+    const code = String(channel.code || channel.id);
+    if (!code || this.prewarmedCodes.has(code) || this.activeChannelCode === code) return;
+    this.prewarmedCodes.add(code);
+
+    // Limit cache set size
+    if (this.prewarmedCodes.size > 25) {
+      const it = this.prewarmedCodes.values();
+      this.prewarmedCodes.delete(it.next().value!);
+    }
+
+    try {
+      if (channel.url && channel.url.startsWith('http')) {
+        // Direct stream: pre-connect TCP/TLS to host
+        const match = channel.url.match(/^(https?:\/\/[^/]+)/i);
+        if (match && match[1]) {
+          const origin = match[1];
+          if (!document.querySelector(`link[rel="preconnect"][href="${origin}"]`)) {
+            const link = document.createElement('link');
+            link.rel = 'preconnect';
+            link.href = origin;
+            document.head.appendChild(link);
+          }
+        }
+        if (channel.url.includes('epictvparaiphone.top') || channel.url.includes('playlatam.site')) {
+          epicSportsService.getPulseraToken().catch(() => {});
+        }
+      } else if (window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
+        // Portal stream: pre-resolve so it gets stored in liveResolveCache[code]
+        window.MagisClient.resolveLive(code, (err: any, meta: any) => {
+          if (!err && meta && meta.url) {
+            const m = meta.url.match(/^(https?:\/\/[^/]+)/i);
+            if (m && m[1]) {
+              const link = document.createElement('link');
+              link.rel = 'preconnect';
+              link.href = m[1];
+              document.head.appendChild(link);
+            }
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   // ---------------------------------------------------------------------------
@@ -365,8 +549,23 @@ class PlayerService {
     this.usingAvPreview = false;
     this.watchStart(code, videoEl);
 
-    // If channel has direct stream URL (M3U / IPTV)
+    // If channel has direct stream URL (M3U / IPTV / Epic Sports)
     if (channel.url && channel.url.startsWith('http')) {
+      if (channel.url.includes('epictvparaiphone.top') || channel.url.includes('playlatam.site')) {
+        epicSportsService.getPulseraToken().then(token => {
+          if (this.activeChannelCode !== code) return;
+          window.__xuperCurrentStreamMeta = {
+            url: channel.url,
+            headers: { 'X-Pulsera': token }
+          };
+          this.streamHls(channel.url!, videoEl, window.__xuperCurrentStreamMeta, code);
+        }).catch(() => {
+          if (this.activeChannelCode !== code) return;
+          this.streamHls(channel.url!, videoEl, undefined, code);
+        });
+        return;
+      }
+
       if (channel.url.includes('.m3u8')) {
         this.streamHls(channel.url, videoEl, undefined, code);
       } else if (fullscreen && window.XuperAVPlay && window.XuperAVPlay.playStream) {
@@ -390,7 +589,8 @@ class PlayerService {
           console.error('[PlayerService] Failed to resolve channel:', err);
           this.lastHlsError = `portal ${(err && (err.portalCode || err.message)) || 'sin enlace'}`.slice(0, 80);
           if (!(err && /aaa10002/i.test(err.portalCode || err.message || ''))) {
-            this.failChannel(code, 'resolve');
+            // The portal refuses this channel for the viewer's region or provider: say so, not "no signal"
+            this.failChannel(code, 'resolve', isRegionBlocked(err) ? 'region' : undefined);
             return;
           }
           if (err && /aaa10002/i.test(err.portalCode || err.message || '')) {
@@ -464,10 +664,22 @@ class PlayerService {
 
     if (window.__xuperCreateHls || (window.Hls && window.Hls.isSupported())) {
       try {
-        const pLoader = sequenceFixingLoader(window.Hls);
+        const pLoader = liveOptimizedLoader(window.Hls);
+        const fLoader = epicFragmentLoader(window.Hls);
         const hls = window.__xuperCreateHls
-          ? window.__xuperCreateHls({ pLoader })
-          : new window.Hls({ enableWorker: false, lowLatencyMode: false, backBufferLength: 15, pLoader });
+          ? window.__xuperCreateHls({ pLoader, fLoader, backBufferLength: backBufferFor(15) })
+          : new window.Hls({
+              enableWorker: false,
+              lowLatencyMode: false,
+              backBufferLength: backBufferFor(15),
+              maxBufferLength: 15,
+              maxMaxBufferLength: 30,
+              nudgeOffset: 0.1,
+              nudgeMaxRetry: 5,
+              liveSyncDurationCount: 3,
+              pLoader,
+              fLoader
+            });
         window.__xuperPreviewHls = hls;
 
         let backupIdx = 0;
@@ -497,9 +709,43 @@ class PlayerService {
           });
         });
 
-        hls.on(window.Hls.Events.ERROR, (event: any, data: any) => {
+        let selfHealingAuth = false;
+        /** Last 401/403 token refresh: within a minute of it, another 401/403 is a real error (geo or ISP block) */
+        let lastAuthRefreshAt = 0;
+
+        const onHlsError = (event: any, data: any) => {
           console.error('[HLS error]', data.type, data.details, data.fatal);
-          const status = data.response && data.response.code ? ` ${data.response.code}` : '';
+          const httpCode = data.response && data.response.code ? Number(data.response.code) : 0;
+          const status = httpCode ? ` ${httpCode}` : '';
+
+          // Self-healing token refresh on HTTP 401/403 during live playback
+          if ((httpCode === 401 || httpCode === 403) && code && !selfHealingAuth && Date.now() - lastAuthRefreshAt > 60000 &&
+            window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
+            selfHealingAuth = true;
+            lastAuthRefreshAt = Date.now();
+            console.log('[PlayerService] Live HTTP ' + httpCode + ' detected, refreshing SLB token...');
+            window.MagisClient.resolveLive(code, (rErr: any, newMeta: any) => {
+              selfHealingAuth = false;
+              if (window.__xuperPreviewHls !== hls || this.activeChannelCode !== code) return;
+              if (!rErr && newMeta && newMeta.url) {
+                window.__xuperCurrentStreamMeta = newMeta;
+                segCache.clear();
+                let nextEffective = newMeta.url;
+                if (isBrowserEnv && newMeta.url.startsWith('http') && !newMeta.url.includes('/stream-proxy')) {
+                  const auth = newMeta?.headers?.['Content-Auth'] || '';
+                  const license = newMeta?.headers?.['Content-License'] || '';
+                  nextEffective = `/stream-proxy?url=${encodeURIComponent(newMeta.url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}`;
+                }
+                currentSource = nextEffective;
+                hls.loadSource(nextEffective);
+                hls.startLoad();
+              } else {
+                // No new token: handle the original error as usual (backups, retries, the error on screen)
+                onHlsError(event, data);
+              }
+            }, { fresh: true });
+            return;
+          }
           // What the server sent instead of a playlist (an ISP block page, a portal error): links removed
           let body = '';
           if (/Parsing|Load/i.test(String(data.details || ''))) {
@@ -566,7 +812,8 @@ class PlayerService {
               hls.recoverMediaError();
             }
           }
-        });
+        };
+        hls.on(window.Hls.Events.ERROR, onHlsError);
         return;
       } catch (err) {
         console.error('[PlayerService] Error creating Hls:', err);

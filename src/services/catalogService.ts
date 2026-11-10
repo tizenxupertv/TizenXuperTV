@@ -1,4 +1,5 @@
 import { kvGet, kvSet } from '../lib/kvStore.ts';
+import { liveCatalogSave } from '../lib/liveCatalog.ts';
 import type { VodItem, VodEpisode, VodSeason, PersonDetail, PersonResult } from '../types/vod';
 import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../lib/catalogOrganizer.ts';
 import { formatDuration } from '../lib/vodResume.ts';
@@ -153,6 +154,8 @@ const LIVE_ROOTS = ['featured', 'movies', 'series', 'kids', 'anime', 'free', 'ex
 const LIVE_WAIT_MS = 6000;
 const LIVE_FRESH_MS = 2 * 60 * 60 * 1000;
 const LIVE_REFRESH_AFTER_MS = 30 * 60 * 1000;
+/** A partial download saved for lack of anything better is due for a new download this soon */
+const LIVE_RETRY_SOON_MS = 5 * 60 * 1000;
 let liveInFlight: Promise<any[]> | null = null;
 let lastKeyAt = 0;
 if (typeof window !== 'undefined') window.addEventListener('keydown', () => { lastKeyAt = Date.now(); }, true);
@@ -212,20 +215,34 @@ function fetchLiveCatalog(low = false): Promise<any[]> {
     const check = () => (Date.now() - lastKeyAt >= 4000 ? resolve() : setTimeout(check, 1000));
     check();
   });
-  const roots: Promise<any[][]> = low
-    ? LIVE_ROOTS.reduce<Promise<any[][]>>(
-        (acc, root) => acc.then(lists => idle().then(() => homeRoot(root, true)).catch(() => [] as any[]).then(items => lists.concat([items]))),
+  // A root whose request fails is null, not an empty list: the saved copy is not replaced by a partial download
+  const roots: Promise<Array<any[] | null>> = low
+    ? LIVE_ROOTS.reduce<Promise<Array<any[] | null>>>(
+        (acc, root) => acc.then(lists => idle().then(() => homeRoot(root, true)).catch(() => null).then(items => lists.concat([items]))),
         Promise.resolve([])
       )
     : Promise.all([
-        ...LIVE_ROOTS.map(root => homeRoot(root, false).catch(() => [] as any[])),
+        ...LIVE_ROOTS.map(root => homeRoot(root, false).catch(() => null)),
         fetchCompositeHome().catch(() => [] as any[])
       ]);
-  liveInFlight = roots.then(lists => {
-    const items = ([] as any[]).concat(...lists);
-    console.log(`[catalog] live catalog: ${items.length} items in ${Date.now() - t0} ms`);
+  liveInFlight = roots.then(async lists => {
+    const items = ([] as any[]).concat(...lists.map(l => l || []));
+    const failed = lists.filter(l => l === null).length;
+    console.log(`[catalog] live catalog: ${items.length} items in ${Date.now() - t0} ms${failed ? `, ${failed} roots failed` : ''}`);
     if (items.length < 100) throw new Error(`live catalog too small (${items.length})`);
-    kvSet(LIVE_KEY, { at: Date.now(), v: LIVE_FORMAT, items });
+    let savedAgeMs: number | null = null;
+    if (failed) {
+      const saved = await readLiveCatalog();
+      savedAgeMs = saved ? Date.now() - saved.at : null;
+    }
+    const mode = liveCatalogSave(lists, savedAgeMs);
+    if (mode === 'keep-saved') {
+      console.log('[catalog] live catalog not saved: the saved copy is complete and recent');
+      return items;
+    }
+    // A partial copy counts as almost due, so it is downloaded again soon
+    const at = mode === 'save' ? Date.now() : Date.now() - LIVE_REFRESH_AFTER_MS + LIVE_RETRY_SOON_MS;
+    kvSet(LIVE_KEY, { at, v: LIVE_FORMAT, items });
     console.log(`[catalog] live catalog saved: ${items.length} items`);
     return items;
   });
@@ -1088,24 +1105,29 @@ export function portalRootId(root: string): number | undefined {
 }
 
 /** opts.special: restricted children too (adult section, opened after the PIN) */
-export function getPortalColumns(columnId: number, opts?: { special?: boolean }): Promise<PortalColumn[]> {
+export async function getPortalColumns(columnId: number, opts?: { special?: boolean }): Promise<PortalColumn[]> {
   const special = !!(opts && opts.special);
   const key = `xuper_columns_v1_${columnId}${special ? '_s' : ''}`;
-  return new Promise<PortalColumn[]>((resolve, reject) => {
+  
+  // SWR: return cached immediately if available
+  const saved = await kvGet<PortalColumn[]>(key);
+
+  const fetchPromise = new Promise<PortalColumn[]>((resolve, reject) => {
     const client = window.MagisClient;
     if (!client || typeof client.columns !== 'function') return reject(new Error('no portal client'));
     client.columns(columnId, (err: any, list: PortalColumn[]) => (err ? reject(err) : resolve(list || [])), { special });
-  }).then(
-    list => {
-      if (list.length) kvSet(key, list);
-      return list;
-    },
-    async err => {
-      const saved = await kvGet<PortalColumn[]>(key);
-      if (saved && saved.length) return saved;
-      throw err;
-    }
-  );
+  }).then(list => {
+    if (list && list.length) kvSet(key, list);
+    return list;
+  });
+
+  if (saved && saved.length) {
+    // Background revalidation
+    fetchPromise.catch(() => {});
+    return saved;
+  }
+
+  return fetchPromise;
 }
 
 // ---------- Filter screen (v3/filterGenre values, v3/filterByContent titles)
@@ -1167,31 +1189,76 @@ export async function getPopularSearchPage(pageNum: number, pageSize: number): P
   return getPortalColumnPage(cols[0].id, pageNum, pageSize);
 }
 
-export function getPortalColumnPage(
+// Memory + KV cache for column pages (SWR pattern)
+const columnPageMemoryCache = new Map<string, { items: VodItem[]; total: number; at: number }>();
+
+export async function getPortalColumnPage(
   columnId: number,
   pageNum: number,
   pageSize: number,
   opts?: { restricted?: boolean }
 ): Promise<{ items: VodItem[]; total: number }> {
+  const isRestricted = Boolean(opts?.restricted || columnId === 76300);
+  const cacheKey = `xuper_col_page_${columnId}_p${pageNum}_s${pageSize}${isRestricted ? '_r' : ''}`;
+
+  // 1. In-memory instant check (< 1ms)
+  const mem = columnPageMemoryCache.get(cacheKey);
+  if (mem && (Date.now() - mem.at < 15 * 60 * 1000)) {
+    return { items: mem.items, total: mem.total };
+  }
+
+  // 2. IndexedDB instant check (< 10ms)
+  const saved = await kvGet<{ items: any[]; total: number; at: number }>(cacheKey);
+  if (saved && Array.isArray(saved.items) && saved.items.length > 0) {
+    const mapped = {
+      items: saved.items.map((raw, i) => normalizeItem(raw, (pageNum - 1) * pageSize + i)),
+      total: saved.total || saved.items.length
+    };
+    columnPageMemoryCache.set(cacheKey, { ...mapped, at: saved.at || Date.now() });
+
+    // Background revalidation if older than 10 minutes
+    if (Date.now() - (saved.at || 0) > 10 * 60 * 1000) {
+      new Promise<{ items: VodItem[]; total: number }>((resolve, reject) => {
+        const client = window.MagisClient;
+        if (!client || typeof client.columnPage !== 'function') return reject(new Error('no portal client'));
+        client.columnPage(columnId, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
+          if (err) return reject(err);
+          const rawItems = res.items || [];
+          kvSet(cacheKey, { items: rawItems, total: res.total || 0, at: Date.now() });
+          resolve({ items: rawItems, total: res.total || 0 });
+        }, opts);
+      }).catch(() => {});
+    }
+
+    return mapped;
+  }
+
+  // 3. Network fetch
   return new Promise((resolve, reject) => {
     const client = window.MagisClient;
     if (!client || typeof client.columnPage !== 'function') return reject(new Error('no portal client'));
     client.columnPage(columnId, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
       if (err) return reject(err);
       const offset = (pageNum - 1) * pageSize;
-      const isRestricted = Boolean(opts?.restricted || columnId === 76300);
-      resolve({
-        items: (res.items || []).map((raw, i) => {
-          const item = normalizeItem(isRestricted ? { ...raw, restricted: true, privateContent: true, category: raw?.category || 'adult' } : raw, offset + i);
-          if (isRestricted) {
-            item.restricted = true;
-            item.privateContent = true;
-            if (!item.category) item.category = 'adult';
-          }
-          return item;
-        }),
-        total: res.total || 0
+      const rawList = res.items || [];
+      const items = rawList.map((raw, i) => {
+        const item = normalizeItem(isRestricted ? { ...raw, restricted: true, privateContent: true, category: raw?.category || 'adult' } : raw, offset + i);
+        if (isRestricted) {
+          item.restricted = true;
+          item.privateContent = true;
+          if (!item.category) item.category = 'adult';
+        }
+        return item;
       });
+      const total = res.total || 0;
+      
+      // Save in cache
+      columnPageMemoryCache.set(cacheKey, { items, total, at: Date.now() });
+      if (items.length) {
+        kvSet(cacheKey, { items: rawList, total, at: Date.now() });
+      }
+
+      resolve({ items, total });
     }, opts);
   });
 }

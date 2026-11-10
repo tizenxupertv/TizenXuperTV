@@ -1,7 +1,22 @@
 import { getImageCacheStats } from '../lib/imageCache.ts';
 import { isUsableArtworkUrl } from '../lib/searchArtwork.ts';
 
-export type DiagVerdict = 'ok' | 'no-internet' | 'doh-blocked' | 'portal-down' | 'no-cdn';
+import { isRegionBlocked } from '../lib/portalErrors.ts';
+
+export type DiagVerdict = 'ok' | 'no-internet' | 'doh-blocked' | 'dns-blocked' | 'region-blocked' | 'portal-down' | 'no-cdn';
+
+/**
+ * Why the portal check failed: the portal refusing this region (its code 100024), the provider's DNS hiding the portal
+ * (secure DNS finds it but the TV cannot reach it, no portal code), or the portal itself not answering
+ */
+export function portalVerdict(err: any, hosts: Array<{ ok: boolean }>, cdns: number): DiagVerdict {
+  if (err) {
+    if (isRegionBlocked(err)) return 'region-blocked';
+    if (!err.portalCode && hosts.some(h => h.ok)) return 'dns-blocked';
+    return 'portal-down';
+  }
+  return cdns === 0 ? 'no-cdn' : 'ok';
+}
 
 export interface DiagHostRow {
   host: string;
@@ -335,11 +350,11 @@ export async function runLoginDiagnostic(deps?: LoginDiagDeps): Promise<LoginDia
   } else if (!workersOk && !relayOk) {
     verdict = 'all-blocked';
     headline = 'Bloqueo de servidores por tu proveedor de internet';
-    recommendation = 'Tu operador bloquea los servidores de Cloudflare o la resolución DNS. Ve a Configuración › General › Red › Estado de la red › Configuración de IP, cambia la DNS a manual y escribe 1.1.1.1 u 8.8.8.8.';
+    recommendation = 'Tu operador bloquea los servidores de Cloudflare o la resolución DNS. Ve a Configuración › General › Red › Estado de la red › Configuración de IP, cambia la DNS a manual y escribe 1.1.1.1 u 8.8.8.8. Otra opción: inicia sesión una vez con los datos del móvil (Zona Wi-Fi personal) y después vuelve a tu Wi-Fi: la sesión queda guardada en la TV.';
   } else if (!dohOk) {
     verdict = 'workers-blocked';
     headline = 'Filtro o bloqueo DNS detectado';
-    recommendation = 'El servidor DNS de tu proveedor está filtrando peticiones. Te recomendamos cambiar el DNS de la TV a 1.1.1.1 en Configuración de red.';
+    recommendation = 'El servidor DNS de tu proveedor está filtrando peticiones. Te recomendamos cambiar el DNS de la TV a 1.1.1.1 en Configuración de red. Otra opción: inicia sesión una vez con los datos del móvil (Zona Wi-Fi personal) y después vuelve a tu Wi-Fi: la sesión queda guardada en la TV.';
   }
 
   return {
@@ -395,9 +410,9 @@ class DiagnosticService {
     const portalMs = Date.now() - started;
     const images = await imagesPromise;
 
-    if (portal.err) return { verdict: 'portal-down', hosts, portalMs: null, cdns: 0, images };
-    if (portal.cdns === 0) return { verdict: 'no-cdn', hosts, portalMs, cdns: 0, images };
-    return { verdict: 'ok', hosts, portalMs, cdns: portal.cdns, images };
+    const verdict = portalVerdict(portal.err, hosts, portal.cdns);
+    if (portal.err) return { verdict, hosts, portalMs: null, cdns: 0, images };
+    return { verdict, hosts, portalMs, cdns: portal.cdns, images };
   }
 
   public runLoginDiag(deps?: LoginDiagDeps): Promise<LoginDiagResult> {

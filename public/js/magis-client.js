@@ -46,6 +46,12 @@
   );
 
   var RATE_MS = 250;
+  // One host may go this long without sending a byte, and this long in all; a whole request, over every host, this long
+  var HOST_IDLE_MS = 8000;
+  var HOST_MAX_MS = 30000;
+  var REQUEST_MAX_MS = 64000;
+  // Starting a session (two requests) that gives no answer at all is given up after this long
+  var SESSION_START_MAX_MS = 180000;
   var SLB_TTL = 300000;
   var PLAY_TTL = 60000;
   var SEARCH_TTL = 180000;
@@ -270,7 +276,7 @@
       gatewayMac: randomMac(),
       wifiMac: randomMac()
     };
-    try { if (window.localStorage) localStorage.setItem(DEVICE_IDENTITY_KEY, JSON.stringify(id)); } catch (e) {}
+    storeSet(DEVICE_IDENTITY_KEY, JSON.stringify(id));
     return id;
   }
 
@@ -339,17 +345,55 @@
     }
   } catch (e) {}
 
-  function saveSession() {
+  var LIVE_PAGE_PREFIX = 'xuper_magis_page_v1_';
+  // Channel pages of categories that are not visited any more (or that the portal renamed) stayed for ever
+  var LIVE_PAGE_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+
+  /** Removes the saved channel pages older than `maxAgeMs` (0: all of them); returns how many */
+  function dropLivePages(maxAgeMs) {
+    var doomed = [];
     try {
-      if (window.localStorage && session.ready && session.userId && session.userToken) {
-        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
-          sn: session.sn,
-          userId: session.userId,
-          userToken: session.userToken,
-          snToken: session.snToken
-        }));
+      if (!window.localStorage) return 0;
+      for (var i = 0; i < localStorage.length; i++) {
+        var key = localStorage.key(i);
+        if (!key || key.indexOf(LIVE_PAGE_PREFIX) !== 0) continue;
+        if (maxAgeMs > 0) {
+          var m = /^\{"at":(\d+)/.exec(localStorage.getItem(key) || '');
+          if (m && Date.now() - parseInt(m[1], 10) < maxAgeMs) continue;
+        }
+        doomed.push(key);
       }
+      for (var d = 0; d < doomed.length; d++) localStorage.removeItem(doomed[d]);
     } catch (e) {}
+    return doomed.length;
+  }
+
+  /** Saves what must not be lost (session, device identity): when the store is full the channel pages make room */
+  function storeSet(key, value) {
+    try {
+      if (!window.localStorage) return false;
+      localStorage.setItem(key, value);
+      return true;
+    } catch (e) {
+      if (!dropLivePages(0)) return false;
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch (e2) {
+        return false;
+      }
+    }
+  }
+
+  function saveSession() {
+    if (session.ready && session.userId && session.userToken) {
+      storeSet(SESSION_STORAGE_KEY, JSON.stringify({
+        sn: session.sn,
+        userId: session.userId,
+        userToken: session.userToken,
+        snToken: session.snToken
+      }));
+    }
   }
 
   function clearSession() {
@@ -385,10 +429,17 @@
       var task = queue.length ? queue.shift() : lowQueue.shift();
       session.busy = true;
       lastCallAt = Date.now();
-      task(function () {
+      try {
+        task(function () {
+          session.busy = false;
+          drain();
+        });
+      } catch (e) {
+        // A task that throws must not leave the queue marked busy for good
+        console.error('[MagisClient] queued task failed:', e);
         session.busy = false;
-        drain();
-      });
+        setTimeout(drain, 0);
+      }
     }
   }
 
@@ -434,7 +485,7 @@
 
     function tryHost() {
       if (finished) return;
-      if (idx >= hosts.length) {
+      if (idx >= hosts.length || Date.now() - tStart >= REQUEST_MAX_MS) {
         finished = true;
         return done(new Error(path + ': el portal no respondió'));
       }
@@ -443,7 +494,35 @@
 
       var xhr = new XMLHttpRequest();
       xhr.open('POST', url, true);
-      xhr.timeout = 8000;
+      // The limit is 8 s without receiving anything, not 8 s for the whole answer: a ~1 MB answer on a slow
+      // connection was cut at 8 s and asked again from the next host, eight times over, with the queue waiting
+      var settled = false;
+      var idleTimer = null;
+      var hardTimer = null;
+      var disarm = function () {
+        clearTimeout(idleTimer);
+        clearTimeout(hardTimer);
+      };
+      var expire = function () {
+        if (settled || finished) return;
+        settled = true;
+        disarm();
+        try { xhr.abort(); } catch (e) {}
+        if (isBrowserEnv) {
+          finished = true;
+          return done(new Error(path + ': timeout en navegador local.'));
+        }
+        tryHost();
+      };
+      var arm = function () {
+        if (settled) return;
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(expire, HOST_IDLE_MS);
+      };
+      hardTimer = setTimeout(expire, HOST_MAX_MS);
+      arm();
+      xhr.onprogress = arm;
+      xhr.onreadystatechange = function () { if (xhr.readyState >= 2) arm(); };
       try { xhr.setRequestHeader('apk', APP_ID); } catch (e) {}
       try { xhr.setRequestHeader('apkVer', APK_VER_HEADER); } catch (e) {}
       try { xhr.setRequestHeader('spkgVer', SPKG_VER); } catch (e) {}
@@ -451,7 +530,9 @@
       try { xhr.setRequestHeader('Content-Type', CONTENT_TYPE); } catch (e) {}
 
       xhr.onload = function () {
-        if (finished) return;
+        if (settled || finished) return;
+        settled = true;
+        disarm();
         if (xhr.status >= 200 && xhr.status < 300) {
           var resp;
           try {
@@ -470,6 +551,7 @@
           if (code !== '' && code !== '0') {
             var pErr = new Error(path + ' -> ' + code + ' ' + text(resp.errorMessage));
             pErr.portalCode = code;
+            pErr.portalText = text(resp.errorMessage);
             finished = true;
             return done(pErr);
           }
@@ -501,16 +583,12 @@
       };
 
       xhr.onerror = function () {
+        if (settled || finished) return;
+        settled = true;
+        disarm();
         if (isBrowserEnv) {
           finished = true;
           return done(new Error(path + ': CORS restringido en navegador de escritorio. Usando catálogo local.'));
-        }
-        tryHost();
-      };
-      xhr.ontimeout = function () {
-        if (isBrowserEnv) {
-          finished = true;
-          return done(new Error(path + ': timeout en navegador local.'));
         }
         tryHost();
       };
@@ -518,6 +596,17 @@
     }
 
     tryHost();
+  }
+
+  /**
+   * The portal answered that the session is not valid any more (its codes, or its words). Only what the portal said
+   * counts: a network failure of 'v3/snToken' carries "token" in its message (the path) and used to pass for an
+   * expired session
+   */
+  function isSessionError(err) {
+    if (!err || !err.portalCode) return false;
+    if (err.portalCode === 'aaa100028' || err.portalCode === 'aaa100027') return true;
+    return /aaa10002[0-9]|未登录|sesi[oó]n|login|token/i.test(err.portalCode + ' ' + (err.portalText || ''));
   }
 
   function call(endpoint, payload, opts, callback) {
@@ -552,7 +641,9 @@
       }
       postHttp(endpoint, fullPayload, function (err, res) {
         releaseOnce();
-        if (err && (err.portalCode === 'aaa100028' || err.portalCode === 'aaa100027' || /aaa10002[0-9]|未登录|sesi[oó]n|login|token/i.test((err.portalCode || '') + ' ' + (err.message || ''))) && !opts._retried) {
+        // Not for the two requests that start the session: their retry would wait for the very session start that
+        // is waiting for them, and every later portal call hung until the app was restarted
+        if (isSessionError(err) && !opts._retried && !opts.sessionStart) {
           clearSession();
           return ensureSession(function (sErr) {
             if (sErr) return callback(err);
@@ -567,6 +658,7 @@
 
   var sessionStarting = false;
   var sessionWaiters = [];
+  var sessionAttempt = 0;
 
   function ensureSession(callback) {
     callback = callback || function () {};
@@ -582,6 +674,15 @@
 
     sessionStarting = true;
     session.ready = false;
+    // An attempt that gives no answer at all (a decrypt worker that died) is given up, so the next call can start
+    // another one; its late answers are ignored
+    var attempt = ++sessionAttempt;
+    var watchdog = setTimeout(function () {
+      if (attempt !== sessionAttempt || !sessionStarting) return;
+      console.warn('[MagisClient] session start gave no answer, giving up');
+      sessionAttempt++;
+      notifyWaiters(new Error('inicio de sesión: el portal no respondió'));
+    }, SESSION_START_MAX_MS);
 
     var fp = {};
     for (var k in FINGERPRINT_FIXED) {
@@ -596,6 +697,7 @@
     fp.wifiMac = identity.wifiMac;
 
     function notifyWaiters(err, res) {
+      clearTimeout(watchdog);
       sessionStarting = false;
       var list = sessionWaiters.slice(0);
       sessionWaiters = [];
@@ -604,7 +706,8 @@
       }
     }
 
-    call('v3/snToken', fp, { baseFields: false }, function (err, res) {
+    call('v3/snToken', fp, { baseFields: false, sessionStart: true }, function (err, res) {
+      if (attempt !== sessionAttempt) return;
       if (err) return notifyWaiters(err);
       var snToken = trim(res && res.snToken);
       if (!snToken) return notifyWaiters(new Error('No snToken returned'));
@@ -625,10 +728,12 @@
         signdata: ''
       };
 
-      call('v8/active', activePayload, { baseFields: false }, function (aErr, aRes) {
+      call('v8/active', activePayload, { baseFields: false, sessionStart: true }, function (aErr, aRes) {
+        if (attempt !== sessionAttempt) return;
         // Activation refused for this identity (seen as code 100024): try once more as a new device
         if (aErr && !freshIdentity && /100024$/.test(String(aErr.portalCode || ''))) {
           console.warn('[MagisClient] v8/active refused (' + aErr.portalCode + '), retrying with a new device identity');
+          clearTimeout(watchdog);
           sessionStarting = false;
           var waiting = sessionWaiters.slice(0);
           sessionWaiters = [];
@@ -746,22 +851,36 @@
   }
 
   var slbCache = null;
+  var slbWaiters = null;
   function getSlb(callback) {
     if (slbCache && Date.now() < slbCache.at + SLB_TTL) {
       return callback(null, slbCache.slb);
     }
+    // A request already on its way (warmSlb, or resolve asking early): wait for it instead of asking again
+    if (slbWaiters) return slbWaiters.push(callback);
+    slbWaiters = [callback];
+    function done(err, slb) {
+      var waiters = slbWaiters || [];
+      slbWaiters = null;
+      for (var i = 0; i < waiters.length; i++) waiters[i](err, slb);
+    }
     call('v15/getSlbInfo', slbBean(), function (err1, res1) {
       if (!err1 && vodCdns(res1).length) {
         slbCache = { at: Date.now(), slb: res1 };
-        return callback(null, res1);
+        return done(null, res1);
       }
       call('v14/getSlbInfo', slbBean(), function (err2, res2) {
-        if (err2) return callback(err2);
-        if (!vodCdns(res2).length) return callback(new Error('No free VOD CDN found'));
+        if (err2) return done(err2);
+        if (!vodCdns(res2).length) return done(new Error('No free VOD CDN found'));
         slbCache = { at: Date.now(), slb: res2 };
-        callback(null, res2);
+        done(null, res2);
       });
     });
+  }
+
+  /** Asks the CDN token ahead (on a title's page), so pressing Play waits only for the title itself */
+  function warmSlb() {
+    getSlb(function () {});
   }
 
   function collectTracks(episode) {
@@ -930,6 +1049,8 @@
     }
     opts = opts || {};
 
+    // The CDN token does not depend on the title: ask it now, while the title loads
+    warmSlb();
     loadPlay(contentId, seriesContentId, function (err, res) {
       if (err) return callback(err);
       var play = res.play;
@@ -1227,7 +1348,7 @@
       return callback(null, memPage.channels, memPage.hasMore);
     }
     try {
-      var rawPage = window.localStorage && localStorage.getItem('xuper_magis_page_v1_' + pageKey);
+      var rawPage = window.localStorage && localStorage.getItem(LIVE_PAGE_PREFIX + pageKey);
       if (rawPage) {
         var parsedPage = JSON.parse(rawPage);
         if (parsedPage && parsedPage.channels && parsedPage.channels.length && (Date.now() - (parsedPage.at || 0) < LIVE_PAGE_TTL)) {
@@ -1261,7 +1382,7 @@
           function handleLiveResponse(lErr, lRes) {
             release();
             if (lErr) {
-              if (!retried && (lErr.portalCode === 'aaa100028' || lErr.portalCode === 'aaa100027' || /aaa10002[0-9]|未登录|sesi[oó]n|login|token/i.test((lErr.portalCode || '') + ' ' + (lErr.message || '')))) {
+              if (!retried && isSessionError(lErr)) {
                 clearSession();
                 return runGetLiveData(true);
               }
@@ -1291,8 +1412,7 @@
                   fav: ch.isFav || false,
                   now: 'En vivo',
                   next: '',
-                  time: '',
-                  liveAddressList: ch.liveAddressList || []
+                  time: ''
                 };
                 channels.push(mapped);
                 liveChannelCache[ch.channelCode] = { at: Date.now(), channel: mapped };
@@ -1304,7 +1424,7 @@
               livePageCache[pageKey] = entry;
               try {
                 if (window.localStorage) {
-                  localStorage.setItem('xuper_magis_page_v1_' + pageKey, JSON.stringify(entry));
+                  localStorage.setItem(LIVE_PAGE_PREFIX + pageKey, JSON.stringify(entry));
                 }
               } catch (e) {}
             }
@@ -1385,10 +1505,16 @@
   }
 
   var liveResolveCache = {};
-  function resolveLive(channelCode, callback) {
+  // opts.fresh: the link just handed out stopped working (401/403, stream dropped): ask the portal again. Without it
+  // the "new" link came from this cache and was the same dead one for up to two minutes
+  function resolveLive(channelCode, callback, opts) {
     var code = trim(channelCode);
     if (!code) return callback(new Error('channelCode required'));
 
+    if (opts && opts.fresh) {
+      delete liveResolveCache[code];
+      slbCache = null;
+    }
     var cached = liveResolveCache[code];
     if (cached && Date.now() - cached.at < LIVE_RESOLVE_CACHE_MS) {
       return setTimeout(function () { callback(null, cached.stream); }, 0);
@@ -2205,9 +2331,13 @@
     });
   }
 
+  // Once the app has started: old channel pages go
+  setTimeout(function () { dropLivePages(LIVE_PAGE_KEEP_MS); }, 20000);
+
   window.MagisClient = {
     ensureSession: ensureSession,
     resolve: resolve,
+    warmSlb: warmSlb,
     mediaInfo: mediaInfo,
     mediaOptions: mediaOptions,
     detail: detail,

@@ -6,6 +6,7 @@
  * Server: the TizenXuper Bot Worker (TizenXuper Bot/src/tvApi.ts).
  * No relative imports, so test/accountService.test.ts can load this file in Node.
  */
+import { dropCaches } from '../lib/safeStorage.ts';
 export const ACCOUNT_API_RELAY = 'https://tizenxuper-tv.pages.dev';
 export const ACCOUNT_API = 'https://tizenxuper-bot.tizenxupertv.workers.dev';
 export const ACCOUNT_API_FALLBACK = 'https://tizenxuper-bot.juliochemoreno.workers.dev';
@@ -99,7 +100,12 @@ export function createAccountService(deps: AccountDeps) {
     try {
       if (value === null) deps.storage().removeItem(key);
       else deps.storage().setItem(key, value);
-    } catch (e) {}
+    } catch (e) {
+      // Store full: the channel caches make room for the session, once (a session that is not saved signs the TV out)
+      if (value !== null && dropCaches() > 0) {
+        try { deps.storage().setItem(key, value); } catch (e2) {}
+      }
+    }
   }
 
   /** Random id of this installation (not the TV's hardware id) */

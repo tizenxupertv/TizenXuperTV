@@ -7,8 +7,12 @@ export const PerfHud: React.FC = () => {
 
   useEffect(() => {
     (window as any).__togglePerfHud = () => setVisible(v => !v);
-    return subscribePerf(setStats);
   }, []);
+  // The monitor measures only while someone is subscribed: the HUD subscribes while it is shown
+  useEffect(() => {
+    if (!visible) return;
+    return subscribePerf(setStats);
+  }, [visible]);
 
   if (!visible) return null;
 

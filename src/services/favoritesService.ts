@@ -2,6 +2,8 @@ import { withoutFavorite } from '../lib/profileHistory.ts';
 import { pk } from '../lib/localProfiles.ts';
 import { isAdultItem } from '../lib/catalogOrganizer.ts';
 import { historyService } from './historyService.ts';
+import { readStoredJson } from '../lib/storedJson.ts';
+import { saveItem } from '../lib/safeStorage.ts';
 
 const PROFILE_KEY = pk('xuper_local_profile_v1');
 
@@ -35,6 +37,20 @@ function infoOf(item: FavoriteSource): FavoriteInfo {
 
 class FavoritesService {
   private listeners: Array<() => void> = [];
+  private migrationChecked = false;
+
+  /**
+   * The profile for reading only: parsed once per stored text (lib/storedJson.ts). getProfile() parses a copy of its
+   * own for the code that edits and saves it, and copies the main profile's favourites into a new profile; that check
+   * runs once per start here, not on every read. Never change what this returns
+   */
+  private readProfile(): any {
+    if (!this.migrationChecked) {
+      this.migrationChecked = true;
+      return this.getProfile();
+    }
+    return readStoredJson(PROFILE_KEY) || { favs: {} };
+  }
 
   private getProfile(): any {
     try {
@@ -53,7 +69,7 @@ class FavoritesService {
                   ...currentParsed,
                   favs: { ...mainParsed.favs, ...((currentParsed && currentParsed.favs) || {}) }
                 };
-                localStorage.setItem(PROFILE_KEY, JSON.stringify(mergedProfile));
+                saveItem(PROFILE_KEY, JSON.stringify(mergedProfile));
                 return mergedProfile;
               }
             }
@@ -68,7 +84,7 @@ class FavoritesService {
 
   public isFavorite(id: string | number): boolean {
     if (historyService.isRestricted({ id })) return false;
-    const profile = this.getProfile();
+    const profile = this.readProfile();
     return !!(profile.favs && profile.favs[String(id)]);
   }
 
@@ -86,9 +102,8 @@ class FavoritesService {
       const profile = this.getProfile();
       if (profile.favs && profile.favs[key]) {
         delete profile.favs[key];
-        try {
-          localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-        } catch (e) {}
+        saveItem(PROFILE_KEY, JSON.stringify(profile));
+        historyService.syncBackup();
         this.notify();
       }
       return false;
@@ -101,9 +116,9 @@ class FavoritesService {
     } else {
       delete profile.favs[key];
     }
-    try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-    } catch (e) {}
+    saveItem(PROFILE_KEY, JSON.stringify(profile));
+    // A favourite removed on purpose must not come back from the backup copy at the next start
+    if (!newState) historyService.syncBackup();
     this.notify();
     return newState;
   }
@@ -111,17 +126,18 @@ class FavoritesService {
   /** Removes one favorite. False if it could not be saved. */
   public removeFavorite(id: string | number): boolean {
     try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(withoutFavorite(this.getProfile(), id)));
+      if (!saveItem(PROFILE_KEY, JSON.stringify(withoutFavorite(this.getProfile(), id)))) return false;
     } catch (e) {
       return false;
     }
+    historyService.syncBackup();
     this.notify();
     return true;
   }
 
   /** Title, poster and kind saved with a favorite, when known */
   public getFavoriteInfo(id: string | number): FavoriteInfo | null {
-    const v = this.getProfile().favs?.[String(id)];
+    const v = this.readProfile().favs?.[String(id)];
     return v && typeof v === 'object' && v.title ? (v as FavoriteInfo) : null;
   }
 
@@ -131,14 +147,12 @@ class FavoritesService {
     const key = String(id);
     if (!profile.favs || !profile.favs[key]) return;
     profile.favs[key] = infoOf(item);
-    try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-    } catch (e) {}
+    saveItem(PROFILE_KEY, JSON.stringify(profile));
     this.notify();
   }
 
   public getFavoriteIds(): string[] {
-    const profile = this.getProfile();
+    const profile = this.readProfile();
     return profile.favs
       ? Object.keys(profile.favs).filter(k => {
           const val = profile.favs[k];
