@@ -67,6 +67,35 @@ export const UpdatedNotice: React.FC<{ version: string; onClose: () => void }> =
   );
 };
 
+/**
+ * The donation request, shown after a title ended and the player closed (lib/donateMoment decides when). OK or Back
+ * closes it: there is nothing to choose on the TV, the donation happens on the phone
+ */
+export const DonateMomentNotice: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  useNoticeKeys(onClose);
+  return (
+    <div className="upd-ready" role="dialog" aria-modal="true" aria-labelledby="donate-moment-title">
+      <div className="upd-ready-card">
+        <div className="upd-ready-title" id="donate-moment-title">¿Te gusta TizenXuper TV?</div>
+        <div className="upd-ready-desc">
+          Es un proyecto independiente y gratuito. Si te resulta útil, una donación voluntaria ayuda a mantenerlo y a seguir mejorándolo.
+        </div>
+        <div className="upd-done-news">
+          <div className="upd-done-qr">
+            <img className="upd-done-qr-img" src="assets/paypal-donation-qr.png" alt="Código QR de donación PayPal" />
+          </div>
+          <div className="upd-done-news-text">
+            <div className="upd-done-news-title">Apoya el proyecto</div>
+            <div>Escanea el código con la cámara del móvil para donar por PayPal.</div>
+          </div>
+        </div>
+        <div className="upd-done-hint">Puedes hacerlo cuando quieras en Ajustes › Apoyo y Donaciones.</div>
+        <div className="pf-btn is-focused upd-ready-btn" onClick={onClose}>Ahora no</div>
+      </div>
+    </div>
+  );
+};
+
 /** "New version" notice, shown once per version after the session check: how to update, and a QR to the guide */
 export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; onClose: () => void }> = ({ info, current, onClose }) => {
   useNoticeKeys(onClose);
