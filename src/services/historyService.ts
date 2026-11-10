@@ -4,6 +4,7 @@ import { isFinished } from '../lib/vodResume.ts';
 import { withoutHistory, withoutHistoryEntry } from '../lib/profileHistory.ts';
 import { pk } from '../lib/localProfiles.ts';
 import { isAdultItem } from '../lib/catalogOrganizer.ts';
+import { readStoredJson } from '../lib/storedJson.ts';
 
 const PROFILE_KEY = pk('xuper_local_profile_v1');
 const PRIVATE_IDS_KEY = 'xuper_private_ids_v1';
@@ -112,8 +113,17 @@ class HistoryService {
     return fresh;
   }
 
+  /**
+   * The profile for reading only: parsed once per stored text (lib/storedJson.ts), where getProfile() parses a copy of
+   * its own for the code that edits and saves it. Never change what this returns
+   */
+  private readProfile(): any {
+    if (!this.hasMergedAll) return this.getProfile();
+    return readStoredJson(PROFILE_KEY) || this.getProfile();
+  }
+
   public getHistory(): HistoryItem[] {
-    const profile = this.getProfile();
+    const profile = this.readProfile();
     const list: HistoryItem[] = (profile && Array.isArray(profile.history)) ? profile.history : [];
     return list.filter(h => !this.isRestricted(h));
   }

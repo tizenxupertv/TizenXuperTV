@@ -44,7 +44,6 @@ export const LANGUAGE_RULES: LanguageRules = {
 interface VodDetailViewProps {
   item: VodItem;
   focus: VodDetailFocus;
-  isFavorite: boolean;
   relatedItems?: VodItem[];
   onBack: () => void;
   onPlay: (item: VodItem, episode?: VodEpisode, isTrailer?: boolean) => void;
@@ -75,7 +74,6 @@ interface VodDetailViewProps {
 export const VodDetailView: React.FC<VodDetailViewProps> = ({
   item,
   focus,
-  isFavorite,
   relatedItems = [],
   onBack,
   onPlay,
