@@ -1,4 +1,6 @@
-import CryptoJS from 'crypto-js';
+// Only what is used: importing 'crypto-js' whole put the entire library (70 KB) in the bundle. The `.js` is for Node (tests)
+import AES from 'crypto-js/aes.js';
+import Utf8 from 'crypto-js/enc-utf8.js';
 
 const KEY_STR = 'RT1zdnBRcVZvSU1t';
 const IV_STR = 'bkmlmKnk9i5Khs9n';
@@ -49,16 +51,13 @@ export function decryptSportsPayload(encodedStr: string): string {
   const reversed = reverseBytes(swapped);
   const stageB64 = new TextDecoder().decode(reversed);
 
-  const key = CryptoJS.enc.Utf8.parse(KEY_STR);
-  const iv = CryptoJS.enc.Utf8.parse(IV_STR);
+  const key = Utf8.parse(KEY_STR);
+  const iv = Utf8.parse(IV_STR);
 
-  const decrypted = CryptoJS.AES.decrypt(stageB64, key, {
-    iv: iv,
-    mode: CryptoJS.mode.CBC,
-    padding: CryptoJS.pad.Pkcs7
-  });
+  // CBC with PKCS7 padding: crypto-js's defaults for AES
+  const decrypted = AES.decrypt(stageB64, key, { iv: iv });
 
-  const plaintext = decrypted.toString(CryptoJS.enc.Utf8);
+  const plaintext = decrypted.toString(Utf8);
   if (!plaintext) {
     throw new Error('Sports decryption returned empty plaintext');
   }

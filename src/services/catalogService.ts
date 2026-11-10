@@ -1,4 +1,5 @@
 import { kvGet, kvSet } from '../lib/kvStore.ts';
+import { liveCatalogSave } from '../lib/liveCatalog.ts';
 import type { VodItem, VodEpisode, VodSeason, PersonDetail, PersonResult } from '../types/vod';
 import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../lib/catalogOrganizer.ts';
 import { formatDuration } from '../lib/vodResume.ts';
@@ -153,6 +154,8 @@ const LIVE_ROOTS = ['featured', 'movies', 'series', 'kids', 'anime', 'free', 'ex
 const LIVE_WAIT_MS = 6000;
 const LIVE_FRESH_MS = 2 * 60 * 60 * 1000;
 const LIVE_REFRESH_AFTER_MS = 30 * 60 * 1000;
+/** A partial download saved for lack of anything better is due for a new download this soon */
+const LIVE_RETRY_SOON_MS = 5 * 60 * 1000;
 let liveInFlight: Promise<any[]> | null = null;
 let lastKeyAt = 0;
 if (typeof window !== 'undefined') window.addEventListener('keydown', () => { lastKeyAt = Date.now(); }, true);
@@ -212,20 +215,34 @@ function fetchLiveCatalog(low = false): Promise<any[]> {
     const check = () => (Date.now() - lastKeyAt >= 4000 ? resolve() : setTimeout(check, 1000));
     check();
   });
-  const roots: Promise<any[][]> = low
-    ? LIVE_ROOTS.reduce<Promise<any[][]>>(
-        (acc, root) => acc.then(lists => idle().then(() => homeRoot(root, true)).catch(() => [] as any[]).then(items => lists.concat([items]))),
+  // A root whose request fails is null, not an empty list: the saved copy is not replaced by a partial download
+  const roots: Promise<Array<any[] | null>> = low
+    ? LIVE_ROOTS.reduce<Promise<Array<any[] | null>>>(
+        (acc, root) => acc.then(lists => idle().then(() => homeRoot(root, true)).catch(() => null).then(items => lists.concat([items]))),
         Promise.resolve([])
       )
     : Promise.all([
-        ...LIVE_ROOTS.map(root => homeRoot(root, false).catch(() => [] as any[])),
+        ...LIVE_ROOTS.map(root => homeRoot(root, false).catch(() => null)),
         fetchCompositeHome().catch(() => [] as any[])
       ]);
-  liveInFlight = roots.then(lists => {
-    const items = ([] as any[]).concat(...lists);
-    console.log(`[catalog] live catalog: ${items.length} items in ${Date.now() - t0} ms`);
+  liveInFlight = roots.then(async lists => {
+    const items = ([] as any[]).concat(...lists.map(l => l || []));
+    const failed = lists.filter(l => l === null).length;
+    console.log(`[catalog] live catalog: ${items.length} items in ${Date.now() - t0} ms${failed ? `, ${failed} roots failed` : ''}`);
     if (items.length < 100) throw new Error(`live catalog too small (${items.length})`);
-    kvSet(LIVE_KEY, { at: Date.now(), v: LIVE_FORMAT, items });
+    let savedAgeMs: number | null = null;
+    if (failed) {
+      const saved = await readLiveCatalog();
+      savedAgeMs = saved ? Date.now() - saved.at : null;
+    }
+    const mode = liveCatalogSave(lists, savedAgeMs);
+    if (mode === 'keep-saved') {
+      console.log('[catalog] live catalog not saved: the saved copy is complete and recent');
+      return items;
+    }
+    // A partial copy counts as almost due, so it is downloaded again soon
+    const at = mode === 'save' ? Date.now() : Date.now() - LIVE_REFRESH_AFTER_MS + LIVE_RETRY_SOON_MS;
+    kvSet(LIVE_KEY, { at, v: LIVE_FORMAT, items });
     console.log(`[catalog] live catalog saved: ${items.length} items`);
     return items;
   });
