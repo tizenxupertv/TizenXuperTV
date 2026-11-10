@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildVodPlaylist, canPlayVodWithMse, cdnHeaders, fileAudioLanguages, mseAudioFits, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL, playlistLoader, VOD_ENGINE_KEY } from '../src/lib/vodMseEngine.ts';
+import { buildVodPlaylist, canPlayVodWithMse, cdnHeaders, fileAudioLanguages, indexDuration, mseAudioFits, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL, playlistLoader, VOD_ENGINE_KEY } from '../src/lib/vodMseEngine.ts';
 import { makeIdxg } from './helpers/idxg.ts';
 
 /** A TV window: MSE plays the given types, hls.js and the bridge factory are there */
@@ -86,6 +86,19 @@ test('the index becomes a byte-range playlist of ~6 s pieces, the size in its he
   assert.equal(requests[0].url, tsTitle.idxUrl);
   assert.equal(requests[0].headers['Content-Auth'], 'tok');
   assert.equal(requests[0].headers['User-Agent'], undefined);
+});
+
+test('the duration of a title comes from its index, for AVPlay on TVs that report none', async () => {
+  const entries = Array.from({ length: 12 }, (_, i) => ({ off: i * 188000, ts: i * 1000 }));
+  const index = makeIdxg(entries, { total: 12 * 188000, durationMs: 11500 });
+  const ok: any = async () => ({ ok: true, status: 200, arrayBuffer: async () => index.buffer, headers: { get: () => null } });
+  assert.equal(Math.round((await indexDuration(tsTitle, ok)) * 1000), 11500);
+  // No index, an index that is not there, or bytes that are not one: no duration, never an error
+  const missing: any = async () => ({ ok: false, status: 404, headers: { get: () => null } });
+  const garbage: any = async () => ({ ok: true, status: 200, arrayBuffer: async () => new Uint8Array(300).buffer, headers: { get: () => null } });
+  assert.equal(await indexDuration(tsTitle, missing), 0);
+  assert.equal(await indexDuration(tsTitle, garbage), 0);
+  assert.equal(await indexDuration({ ...tsTitle, idxUrl: undefined }, ok), 0);
 });
 
 test('a missing index is an error the player turns into the AVPlay fallback', async () => {
