@@ -24,3 +24,4 @@ signature1.xml
 
 # Local planning notes (not published)
 .agents/
+__pycache__/

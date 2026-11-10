@@ -1,6 +1,9 @@
 import type { SportCategory, SportsEvent, SportsStream } from '../types/sports.ts';
 import { decryptSportsPayload } from '../lib/sportsCrypto.ts';
-import CryptoJS from 'crypto-js';
+import SHA256 from 'crypto-js/sha256.js';
+import Latin1 from 'crypto-js/enc-latin1.js';
+import Hex from 'crypto-js/enc-hex.js';
+import { fetchWithTimeout } from '../lib/fetchTimeout.ts';
 
 const DEFAULT_BASE_URL = 'https://hello-how.pages.dev/';
 const CACHE_TTL_MS = 120_000; // 2 minutes
@@ -78,7 +81,7 @@ export class SportsService {
       return this.cachedPublicIp;
     }
     try {
-      const res = await fetch('https://api.ipify.org/');
+      const res = await fetchWithTimeout('https://api.ipify.org/', {}, 5000);
       if (res.ok) {
         this.cachedPublicIp = (await res.text()).trim();
         this.ipFetchTime = now;
@@ -108,7 +111,7 @@ export class SportsService {
             const now = Math.floor(Date.now() / 1000);
             const ip = await this.getPublicIp();
             const seed = channel + defaultStr + now + ip;
-            const hash = CryptoJS.SHA256(CryptoJS.enc.Latin1.parse(seed)).toString(CryptoJS.enc.Hex);
+            const hash = SHA256(Latin1.parse(seed)).toString(Hex);
             const token = `${hash}-${now + 77}-${now}`;
             const signedUrl = `${rawUrl}${rawUrl.includes('?') ? '&' : '?'}token=${token}`;
             return {
@@ -134,7 +137,7 @@ export class SportsService {
                 ? `/stream-proxy?url=${encodeURIComponent(pageUrl)}`
                 : pageUrl;
 
-              const pageRes = await fetch(fetchUrl);
+              const pageRes = await fetchWithTimeout(fetchUrl);
               if (!pageRes.ok) break;
 
               const html = await pageRes.text();
@@ -147,7 +150,7 @@ export class SportsService {
                 // connects directly to the final delivery CDN without losing CUSTOM_MESSAGE headers
                 if (typeof window !== 'undefined' && !isLocal && streamUrl.startsWith('http')) {
                   try {
-                    const headRes = await fetch(streamUrl, {
+                    const headRes = await fetchWithTimeout(streamUrl, {
                       method: 'GET',
                       headers: { 'Referer': `${origin}/` },
                       redirect: 'follow'
@@ -207,7 +210,7 @@ export class SportsService {
       ? linksPath
       : `${this.baseUrl}${linksPath.replace(/^\/+/, '')}`;
 
-    const resp = await fetch(fullUrl);
+    const resp = await fetchWithTimeout(fullUrl);
 
     if (!resp.ok) {
       throw new Error(`Failed to load streams: HTTP ${resp.status}`);
@@ -224,7 +227,7 @@ export class SportsService {
 
   private async fetchAndParseEvents(): Promise<SportsEvent[]> {
     const catalogUrl = `${this.baseUrl}events.txt`;
-    const resp = await fetch(catalogUrl);
+    const resp = await fetchWithTimeout(catalogUrl);
 
     if (!resp.ok) {
       throw new Error(`Failed to load sports events: HTTP ${resp.status}`);

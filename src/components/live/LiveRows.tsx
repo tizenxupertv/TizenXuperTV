@@ -40,7 +40,7 @@ export const ChannelRow = React.memo<ChannelRowProps>(({ ch, idx, focused, tuned
       </div>
       <div className="live-ch-info">
         <div className="live-ch-title">
-          <span>{ch.name}</span>
+          <span className="live-ch-name">{ch.name}</span>
           {tuned && <span className="live-playing-badge">▶ EN VIVO</span>}
           {fav && <span className="live-fav-icon">★</span>}
         </div>
@@ -65,5 +65,6 @@ export const CategoryRow = React.memo<CategoryRowProps>(({ cat, idx, active, cur
     onClick={() => onSelect && onSelect(idx)}
   >
     <span className="live-cat-vname">{cat.name}</span>
+    {cat.badge && <span className="live-cat-badge">{cat.badge}</span>}
   </div>
 ));

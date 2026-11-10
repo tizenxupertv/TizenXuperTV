@@ -28,6 +28,285 @@
     } catch (e) {}
   }
 
+  // 1. Polyfill HTMLMediaElement.play() for Tizen 3.0 WebKit (returns undefined instead of a Promise)
+  if (typeof window !== 'undefined' && window.HTMLMediaElement) {
+    try {
+      var origPlay = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () {
+        try {
+          var r = origPlay.apply(this, arguments);
+          if (r && typeof r.then === 'function') return r;
+          return Promise.resolve();
+        } catch (e) {
+          return Promise.resolve();
+        }
+      };
+    } catch (_) {}
+  }
+
+  // 2. Protect SourceBuffer against QuotaExceededError on memory-constrained Tizen 3.0 / 4.0 TVs
+  if (typeof window !== 'undefined' && window.SourceBuffer) {
+    try {
+      var origAppendBuffer = SourceBuffer.prototype.appendBuffer;
+      SourceBuffer.prototype.appendBuffer = function (buf) {
+        try {
+          return origAppendBuffer.call(this, buf);
+        } catch (err) {
+          if (err && (err.name === 'QuotaExceededError' || err.code === 22)) {
+            console.warn('[SourceBuffer] QuotaExceededError caught, trimming buffer...');
+            try {
+              if (this.buffered && this.buffered.length > 0 && !this.updating) {
+                var start = this.buffered.start(0);
+                var end = this.buffered.end(0);
+                if (end - start > 10) {
+                  this.remove(start, start + 8);
+                }
+              }
+            } catch (_) {}
+          }
+          throw err;
+        }
+      };
+    } catch (_) {}
+  }
+
+  // 3. Legacy Tizen 3.0 / 4.0 DOM & ES5 Shims (WebKit 538.1 / Chromium 56)
+  if (typeof globalThis === 'undefined') {
+    window.globalThis = window;
+  }
+  if (!window.crypto) window.crypto = {};
+  if (!window.crypto.getRandomValues) {
+    window.crypto.getRandomValues = function (arr) {
+      for (var i = 0; i < arr.length; i++) {
+        arr[i] = Math.floor(Math.random() * 256);
+      }
+      return arr;
+    };
+  }
+  if (typeof Object.assign !== 'function') {
+    Object.assign = function (target) {
+      if (target == null) throw new TypeError('Target is null');
+      var t = Object(target);
+      for (var i = 1; i < arguments.length; i++) {
+        var s = arguments[i];
+        if (s != null) {
+          for (var k in Object(s)) {
+            if (Object.prototype.hasOwnProperty.call(s, k)) t[k] = s[k];
+          }
+        }
+      }
+      return t;
+    };
+  }
+  if (!Array.from) {
+    // Iterables (Set, Map) and array-likes ({ length: n }), with the optional map function
+    Array.from = function (obj, mapFn, thisArg) {
+      if (obj == null) throw new TypeError('Array.from requires an array-like or iterable');
+      var out = [];
+      if (typeof Symbol !== 'undefined' && Symbol.iterator && typeof obj[Symbol.iterator] === 'function') {
+        var it = obj[Symbol.iterator](), step;
+        while (!(step = it.next()).done) out.push(step.value);
+      } else {
+        var len = Number(obj.length) || 0;
+        for (var i = 0; i < len; i++) out.push(obj[i]);
+      }
+      return typeof mapFn === 'function' ? out.map(mapFn, thisArg) : out;
+    };
+  }
+  if (!Object.values) {
+    Object.values = function (obj) { return Object.keys(obj).map(function (k) { return obj[k]; }); };
+  }
+  if (!Number.isSafeInteger) {
+    Number.isSafeInteger = function (n) {
+      return typeof n === 'number' && isFinite(n) && Math.floor(n) === n && Math.abs(n) <= 9007199254740991;
+    };
+  }
+  // As the standard: a string already at or over the length is returned whole, only the padding is cut
+  function padding(s, n, c) {
+    c = c === undefined ? ' ' : String(c);
+    var need = (n >> 0) - s.length;
+    if (need <= 0 || !c) return '';
+    var pad = '';
+    while (pad.length < need) pad += c;
+    return pad.slice(0, need);
+  }
+  if (!String.prototype.padStart) {
+    String.prototype.padStart = function (n, c) { var s = String(this); return padding(s, n, c) + s; };
+  }
+  if (!String.prototype.padEnd) {
+    String.prototype.padEnd = function (n, c) { var s = String(this); return s + padding(s, n, c); };
+  }
+  if (!String.prototype.includes) {
+    String.prototype.includes = function (v) { return this.indexOf(v) >= 0; };
+  }
+  if (!String.prototype.startsWith) {
+    String.prototype.startsWith = function (v) { return this.slice(0, v.length) === v; };
+  }
+  if (!String.prototype.endsWith) {
+    String.prototype.endsWith = function (v) { return this.slice(-v.length) === v; };
+  }
+  if (!Array.prototype.includes) {
+    Array.prototype.includes = function (v) { return this.indexOf(v) >= 0; };
+  }
+  if (!Array.prototype.find) {
+    Array.prototype.find = function (fn, thisArg) {
+      for (var i = 0; i < this.length; i++) {
+        if (fn.call(thisArg, this[i], i, this)) return this[i];
+      }
+      return undefined;
+    };
+  }
+  if (!Array.prototype.findIndex) {
+    Array.prototype.findIndex = function (fn, thisArg) {
+      for (var i = 0; i < this.length; i++) {
+        if (fn.call(thisArg, this[i], i, this)) return i;
+      }
+      return -1;
+    };
+  }
+  if (typeof Element !== 'undefined') {
+    if (!Element.prototype.matches) {
+      Element.prototype.matches =
+        Element.prototype.webkitMatchesSelector ||
+        Element.prototype.mozMatchesSelector ||
+        Element.prototype.msMatchesSelector ||
+        function (s) {
+          var matches = (this.document || this.ownerDocument).querySelectorAll(s);
+          var i = matches.length;
+          while (--i >= 0 && matches.item(i) !== this) {}
+          return i > -1;
+        };
+    }
+    if (!Element.prototype.closest) {
+      Element.prototype.closest = function (s) {
+        var el = this;
+        do {
+          if (el.matches && el.matches(s)) return el;
+          el = el.parentElement || el.parentNode;
+        } while (el !== null && el.nodeType === 1);
+        return null;
+      };
+    }
+  }
+  if (!window.AbortController) {
+    window.AbortController = function () {
+      var signal = (this.signal = {
+        aborted: false,
+        listeners: [],
+        addEventListener: function (e, fn) { if (e === 'abort') this.listeners.push(fn); },
+        removeEventListener: function (e, fn) { this.listeners = this.listeners.filter(function (x) { return x !== fn; }); }
+      });
+      this.abort = function () {
+        signal.aborted = true;
+        signal.listeners.forEach(function (fn) { fn(); });
+      };
+    };
+    // fetch on these engines ignores a signal: make abort() reject it, so timeouts (sign-in, updates) fire
+    if (typeof window.fetch === 'function') {
+      var nativeFetch = window.fetch;
+      var abortError = function () {
+        try { return new DOMException('The operation was aborted.', 'AbortError'); } catch (_) {
+          var e = new Error('The operation was aborted.'); e.name = 'AbortError'; return e;
+        }
+      };
+      window.fetch = function (input, init) {
+        var signal = init && init.signal;
+        var request = nativeFetch.call(window, input, init);
+        if (!signal || typeof signal.addEventListener !== 'function') return request;
+        if (signal.aborted) return Promise.reject(abortError());
+        return new Promise(function (resolve, reject) {
+          signal.addEventListener('abort', function () { reject(abortError()); });
+          request.then(resolve, reject);
+        });
+      };
+    }
+  }
+  if (!Array.prototype.flat) {
+    Array.prototype.flat = function (depth) {
+      var d = depth === undefined ? 1 : Number(depth) || 0;
+      var out = [];
+      (function add(list, level) {
+        for (var i = 0; i < list.length; i++) {
+          if (Array.isArray(list[i]) && level > 0) add(list[i], level - 1);
+          else if (i in list) out.push(list[i]);
+        }
+      })(this, d);
+      return out;
+    };
+  }
+  if (!Array.prototype.flatMap) {
+    Array.prototype.flatMap = function (fn, thisArg) { return Array.prototype.map.call(this, fn, thisArg).flat(); };
+  }
+  if (!String.prototype.trimStart) String.prototype.trimStart = function () { return String(this).replace(/^\s+/, ''); };
+  if (!String.prototype.trimEnd) String.prototype.trimEnd = function () { return String(this).replace(/\s+$/, ''); };
+  if (!Object.fromEntries) {
+    Object.fromEntries = function (entries) {
+      var out = {};
+      Array.from(entries).forEach(function (pair) { out[pair[0]] = pair[1]; });
+      return out;
+    };
+  }
+  if (typeof Promise !== 'undefined' && !Promise.prototype.finally) {
+    Promise.prototype.finally = function (fn) {
+      return this.then(
+        function (v) { return Promise.resolve(fn()).then(function () { return v; }); },
+        function (e) { return Promise.resolve(fn()).then(function () { throw e; }); }
+      );
+    };
+  }
+
+  // 3b. Flex gap (Chromium 84+, Tizen 6.5 and newer): older TVs ignore it and everything touches. Their pages get
+  // html.no-flexgap, and the styles give those boxes margins instead (src/styles/index.css)
+  try {
+    var probe = document.createElement('div');
+    probe.style.display = 'flex';
+    probe.style.flexDirection = 'column';
+    probe.style.rowGap = '1px';
+    probe.appendChild(document.createElement('div'));
+    probe.appendChild(document.createElement('div'));
+    document.documentElement.appendChild(probe);
+    var flexGap = probe.scrollHeight === 1;
+    probe.parentNode.removeChild(probe);
+    if (!flexGap) document.documentElement.className += ' no-flexgap';
+  } catch (_) {}
+
+  // 4. Universal resolution auto-scaler (720p, 1366x768, 1080p, 4K)
+  function fitResolution() {
+    try {
+      var sw = window.innerWidth || (document.documentElement && document.documentElement.clientWidth) || 1920;
+      var sh = window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 1080;
+      var root = document.getElementById('root');
+      if (!root) return;
+
+      if (sw !== 1920 || sh !== 1080) {
+        var scaleX = sw / 1920;
+        var scaleY = sh / 1080;
+        var scale = Math.min(scaleX, scaleY);
+        root.style.transform = 'scale(' + scale + ')';
+        root.style.transformOrigin = '0 0';
+        root.style.width = '1920px';
+        root.style.height = '1080px';
+        root.style.position = 'absolute';
+        root.style.left = Math.max(0, (sw - 1920 * scale) / 2) + 'px';
+        root.style.top = Math.max(0, (sh - 1080 * scale) / 2) + 'px';
+      } else {
+        root.style.transform = '';
+        root.style.position = 'relative';
+        root.style.left = '0px';
+        root.style.top = '0px';
+      }
+    } catch (e) {
+      console.warn('[fitResolution err]', e);
+    }
+  }
+
+  window.addEventListener('resize', fitResolution);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', fitResolution);
+  } else {
+    fitResolution();
+  }
+
   // ---- Key mapping ----
   if (isTizen) {
     if (window.tizen && tizen.tvinputdevice) {
@@ -99,14 +378,20 @@
   };
 
   // ---- Screensaver management (Jellyfin / Tizen pattern) ----
+  // Every key press asks for OFF: the TV is only told when the state changes. Coming back from another app the TV
+  // may have changed it on its own, so the state is unknown again
+  var screenSaverEnabled = null;
+  document.addEventListener('visibilitychange', function () { screenSaverEnabled = null; });
   window.XuperPlatform.setScreenSaver = function (enable) {
     if (!isTizen || !window.webapis || !webapis.appcommon || !webapis.appcommon.setScreenSaver) return;
+    enable = !!enable;
+    if (screenSaverEnabled === enable) return;
     try {
       var state = enable
         ? webapis.appcommon.AppCommonScreenSaverState.SCREEN_SAVER_ON
         : webapis.appcommon.AppCommonScreenSaverState.SCREEN_SAVER_OFF;
       webapis.appcommon.setScreenSaver(state);
-      console.log('[TizenBridge] ScreenSaver set to:', enable ? 'ON' : 'OFF');
+      screenSaverEnabled = enable;
     } catch (e) {
       console.warn('[TizenBridge] Failed to setScreenSaver:', e);
     }
@@ -699,6 +984,19 @@
             if ((self._gen || 0) !== gen) { self._recovering = false; return; }
             if (!err && newMeta && newMeta.url) {
               window.__xuperCurrentStreamMeta = newMeta;
+              reopen(newMeta.url, newMeta.headers);
+            } else {
+              reopen(self._lastUrl, self._lastHeaders);
+            }
+          }, { fresh: true });
+          return;
+        }
+        if (self.kind === 'vod' && meta && meta.contentId && window.MagisClient && typeof window.MagisClient.resolve === 'function') {
+          console.log('[XuperAVPlay] VOD stream dropped, refreshing SLB token before reopen...');
+          window.MagisClient.resolve(meta.contentId, meta.seasonId, { trackIndex: meta.trackIndex }, function (err, newMeta) {
+            if ((self._gen || 0) !== gen) { self._recovering = false; return; }
+            if (!err && newMeta && newMeta.url) {
+              window.__xuperCurrentStreamMeta = Object.assign({}, meta, newMeta);
               reopen(newMeta.url, newMeta.headers);
             } else {
               reopen(self._lastUrl, self._lastHeaders);
@@ -1385,9 +1683,32 @@
     });
   }
 
+  // Universal fragment loader that strips fake image/PNG prefixes (TikTok CDN / Perelman)
+  function createUniversalFragmentLoader(HlsClass) {
+    var Base = HlsClass.DefaultConfig.loader;
+    return class extends Base {
+      load(context, config, callbacks) {
+        var onSuccess = callbacks.onSuccess;
+        super.load(context, config, Object.assign({}, callbacks, {
+          onSuccess: function (response, stats, ctx, networkDetails) {
+            if (response && response.data instanceof ArrayBuffer) {
+              var bytes = new Uint8Array(response.data);
+              // Check PNG magic: 0x89 0x50 0x4E 0x47 and sync byte 0x47 at offset 67
+              if (bytes.length > 67 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[67] === 0x47) {
+                response.data = bytes.slice(67).buffer;
+              }
+            }
+            onSuccess(response, stats, ctx, networkDetails);
+          }
+        }));
+      }
+    };
+  }
+
   // `extra` adds or replaces options (the player passes its playlist loader)
   window.__xuperCreateHls = function (extra) {
     if (!window.Hls || !Hls.isSupported()) return null;
+    var defaultFLoader = createUniversalFragmentLoader(window.Hls);
     var config = {
       enableWorker: false,
       lowLatencyMode: false,
@@ -1398,6 +1719,7 @@
       manifestLoadingMaxRetry: 2,
       levelLoadingTimeOut: 8000,
       fragLoadingTimeOut: 10000,
+      fLoader: defaultFLoader,
       debug: false,
       xhrSetup: function (xhr, url) {
         function attachHeaders(reqUrl) {
@@ -1419,6 +1741,7 @@
               if (h['Content-License']) xhr.setRequestHeader('Content-License', h['Content-License']);
               if (h['App']) xhr.setRequestHeader('App', h['App']);
               if (h['App-Version']) xhr.setRequestHeader('App-Version', h['App-Version']);
+              if (h['X-Pulsera']) xhr.setRequestHeader('X-Pulsera', h['X-Pulsera']);
             } catch (e) {
               console.error('[HLS xhrSetup error]', e);
             }

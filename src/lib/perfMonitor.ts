@@ -52,10 +52,26 @@ let imageLoadCount = 0;
 let imageTotalDuration = 0;
 let hudListeners: Array<(state: PerfState) => void> = [];
 
-// RAF loop for FPS and frame latency
 if (typeof window !== 'undefined') {
   (window as any).__xuperPerf = perfState;
+}
 
+/** DOM size and JS heap, read when someone looks at them (walking the whole DOM is not free) */
+function measureDomAndHeap(): void {
+  perfState.domNodes = document.getElementsByTagName('*').length;
+  const memory = (performance as any).memory;
+  if (memory && memory.usedJSHeapSize) {
+    perfState.heapUsedMb = Math.round((memory.usedJSHeapSize / 1048576) * 10) / 10;
+    perfState.heapTotalMb = Math.round((memory.totalJSHeapSize / 1048576) * 10) / 10;
+  }
+}
+
+// RAF loop for FPS and frame latency. It runs only while the HUD is on screen (someone is subscribed): a callback
+// on every frame for the whole life of the app, also under a playing video, is work an old TV does not have to spare
+let rafId = 0;
+
+function startLoop(): void {
+  if (rafId || typeof window === 'undefined') return;
   let lastRaf = performance.now();
   let frameCount = 0;
   let fpsTimer = performance.now();
@@ -81,14 +97,7 @@ if (typeof window !== 'undefined') {
       frameCount = 0;
       fpsTimer = now;
 
-      // Update DOM count & heap
-      perfState.domNodes = document.getElementsByTagName('*').length;
-
-      const memory = (performance as any).memory;
-      if (memory && memory.usedJSHeapSize) {
-        perfState.heapUsedMb = Math.round((memory.usedJSHeapSize / 1048576) * 10) / 10;
-        perfState.heapTotalMb = Math.round((memory.totalJSHeapSize / 1048576) * 10) / 10;
-      }
+      measureDomAndHeap();
 
       // Notify HUD listeners
       for (const listener of hudListeners) {
@@ -96,10 +105,16 @@ if (typeof window !== 'undefined') {
       }
     }
 
-    requestAnimationFrame(rafLoop);
+    rafId = requestAnimationFrame(rafLoop);
   };
 
-  requestAnimationFrame(rafLoop);
+  rafId = requestAnimationFrame(rafLoop);
+}
+
+function stopLoop(): void {
+  if (!rafId) return;
+  cancelAnimationFrame(rafId);
+  rafId = 0;
 }
 
 /** Record render duration for a specific view */
@@ -152,8 +167,10 @@ export function useViewProfiler(viewName: string): void {
 /** Subscribe to live performance HUD updates */
 export function subscribePerf(listener: (state: PerfState) => void): () => void {
   hudListeners.push(listener);
+  startLoop();
   return () => {
     hudListeners = hudListeners.filter(l => l !== listener);
+    if (!hudListeners.length) stopLoop();
   };
 }
 
@@ -164,6 +181,8 @@ export function getPerfSnapshot(): PerfState {
 
 /** Prints a structured diagnostic report to the console and returns it as a string */
 export function logPerformanceReport(): string {
+  // FPS and frame time are measured only while the HUD is shown; DOM and memory are read now
+  if (typeof document !== 'undefined') measureDomAndHeap();
   const lines: string[] = [
     '====== [PERF DIAGNOSTIC REPORT] ======',
     `Active View: ${perfState.activeView} | FPS: ${perfState.fps} | Frame: ${perfState.frameMs}ms`,

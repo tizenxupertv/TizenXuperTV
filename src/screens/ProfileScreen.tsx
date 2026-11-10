@@ -12,7 +12,8 @@ import { iptvService, IPTV_LISTS } from '../services/iptvService';
 import { HIDEABLE_TABS, tabPrefs } from '../services/tabPrefs';
 import { accountService, tvBuildInfo } from '../services/accountService';
 import { updateService, type UpdateStatus } from '../services/updateService';
-import { playbackEvents } from '../lib/playbackLog';
+import { eventsWithinBudget, playbackEvents } from '../lib/playbackLog';
+import { VOD_ENGINE_KEY } from '../lib/vodMseEngine';
 import { formatSpeed, runSpeedTest, SpeedResult, streamingVerdict } from '../lib/speedTest';
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
@@ -74,7 +75,8 @@ const IPTV_COLUMNS = 3;
 const TELEGRAM_LINKS = [
   { name: 'Soporte', desc: 'Ayuda y reportes', url: 'https://t.me/TizenXuperSupportBot?start=soporte' },
   { name: 'Canal', desc: 'Novedades y versiones', url: 'https://t.me/+u72Cmxw-HDY0NGMx' },
-  { name: 'Comunidad', desc: 'Habla con otros usuarios', url: 'https://t.me/+jbQgGArewEozMzZh' }
+  { name: 'Comunidad', desc: 'Habla con otros usuarios', url: 'https://t.me/+jbQgGArewEozMzZh' },
+  { name: 'Beta Testers', desc: 'Pruebas por modelo de TV', url: 'https://t.me/+CTPQE5XuzFA3MDkx' }
 ];
 const MAX_LIST = 30;
 /** "Cerrar sesión" needs a second OK within this time */
@@ -86,6 +88,8 @@ const VERDICTS: Record<string, { cls: string; text: string }> = {
   ok: { cls: 'ok', text: 'Todo correcto: el portal y los servidores de video responden.' },
   'no-internet': { cls: 'bad', text: 'Sin conexión a internet. Revisa la red del televisor.' },
   'doh-blocked': { cls: 'bad', text: 'La red bloquea el DNS seguro. Fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en Configuración › General › Red › Estado de la red › Configuración de IP.' },
+  'dns-blocked': { cls: 'bad', text: 'Tu proveedor de internet bloquea el portal en su DNS: el DNS seguro lo encuentra, pero la TV no llega. Fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en Configuración › General › Red › Estado de la red › Configuración de IP.' },
+  'region-blocked': { cls: 'warn', text: 'El portal restringe el contenido en tu región o con tu proveedor de internet. Es un bloqueo del portal: cambiar el DNS no lo resuelve. Puedes probar con otra conexión a internet.' },
   'portal-down': { cls: 'warn', text: 'El portal no responde. Si está bloqueado en tu red, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en la red de la TV.' },
   'no-cdn': { cls: 'warn', text: 'El portal responde pero no hay servidor de video disponible. Prueba fijando la IP y el DNS en manual (1.1.1.1 o 8.8.8.8).' }
 };
@@ -162,6 +166,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     };
   }, []);
 
+  /** Below the 16 KB the server accepts (accents take two bytes) */
+  const REPORT_MAX_CHARS = 13000;
   // Problem report for support: TV, network, last network check and recent playback events
   const sendReport = () => {
     if (reportState === 'sending') return;
@@ -191,26 +197,35 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     const now = new Date();
     const local = `${now.getHours() < 10 ? '0' : ''}${now.getHours()}:${now.getMinutes() < 10 ? '0' : ''}${now.getMinutes()}`;
     const build = tvBuildInfo();
+    // Settings that change how videos play, and the browser engine (old Chromium explains layout and player bugs)
+    let vodEngine = 'auto';
+    try { vodEngine = localStorage.getItem(VOD_ENGINE_KEY) || 'auto'; } catch (e) {}
+    const chrome = (navigator.userAgent.match(/Chrome\/(\d+)/) || [])[1] || '?';
+    const st = updateService.status();
+    const settingsInfo = `Versiones beta ${updateService.channel() === 'beta' ? 'sí' : 'no'} · motor películas ${vodEngine} · Chrome ${chrome} · instalada ${st.packaged || '?'}`;
     const imgDiag = report?.images
       ? `Local: ${report.images.local.detail} · Póster (${report.images.vertical.host}): ${report.images.vertical.detail} · Fondo (${report.images.horizontal.host}): ${report.images.horizontal.detail} · Caché: ${report.images.cacheLoaded} OK / ${report.images.cacheFailed} err`
       : '';
-    accountService.sendReport({
+    const infoEvents = [
+      ...(build ? [{ at: now.getTime(), local, kind: 'info', channel: 'Televisor', detail: build }] : []),
+      { at: now.getTime(), local, kind: 'info', channel: 'Ajustes', detail: settingsInfo },
+      ...(caps ? [{ at: now.getTime(), local, kind: 'info', channel: 'Formatos del reproductor', detail: caps }] : []),
+      ...(imgDiag ? [{ at: now.getTime(), local, kind: 'info', channel: 'Carátulas / CDN', detail: imgDiag }] : []),
+      ...(speed ? [{
+        at: now.getTime(), local, kind: 'info', channel: 'Velocidad de internet',
+        detail: `${formatSpeed(speed.mbps)}${speed.latencyMs !== null ? ` · latencia ${speed.latencyMs} ms` : ''}`
+      }] : [])
+    ];
+    const head = {
       app: version,
       model,
       network,
       screen: `${window.screen.width}x${window.screen.height}`,
-      diag: report ? { verdict: report.verdict, portalMs: report.portalMs, cdns: report.cdns } : null,
-      events: [
-        ...playbackEvents(),
-        ...(build ? [{ at: now.getTime(), local, kind: 'info', channel: 'Televisor', detail: build }] : []),
-        ...(caps ? [{ at: now.getTime(), local, kind: 'info', channel: 'Formatos del reproductor', detail: caps }] : []),
-        ...(imgDiag ? [{ at: now.getTime(), local, kind: 'info', channel: 'Carátulas / CDN', detail: imgDiag }] : []),
-        ...(speed ? [{
-          at: now.getTime(), local, kind: 'info', channel: 'Velocidad de internet',
-          detail: `${formatSpeed(speed.mbps)}${speed.latencyMs !== null ? ` · latencia ${speed.latencyMs} ms` : ''}`
-        }] : [])
-      ]
-    }).then(setReportState);
+      diag: report ? { verdict: report.verdict, portalMs: report.portalMs, cdns: report.cdns } : null
+    };
+    // The server accepts 16 KB: the newest playback events that fit, then the TV and network lines
+    const used = JSON.stringify({ report: { ...head, events: infoEvents } }).length;
+    accountService.sendReport({ ...head, events: [...eventsWithinBudget(playbackEvents(), used, REPORT_MAX_CHARS), ...infoEvents] }).then(setReportState);
   };
 
   // First OK asks for confirmation; the second signs out and restarts at the sign-in screen
@@ -418,7 +433,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const st = updateService.status();
       if (st.canSelfUpdate) {
         // Restarting is reloading: the loader then starts the downloaded version (public/js/boot.js)
-        r.push([{ id: 'update-check', onActivate: checkUpdates }, ...(st.downloaded ? [{ id: 'update-restart', onActivate: () => window.location.reload() }] : [])]);
+        r.push([
+          { id: 'update-check', onActivate: checkUpdates },
+          ...(st.downloaded ? [{ id: 'update-restart', onActivate: () => window.location.reload() }] : [])
+        ]);
+        // Beta testers: pre-releases too, checked right away. A row of its own with a switch, like the +18 one
+        r.push([{ id: 'update-beta', onActivate: () => {
+          updateService.setChannel(updateService.channel() === 'beta' ? 'stable' : 'beta');
+          checkUpdates();
+        } }]);
       }
     } else if (id === 'donate') {
       r.push([{ id: 'donate-qr', onActivate: () => {} }]);
@@ -911,6 +934,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </div>
           )}
         </div>
+        {updateService.status().canSelfUpdate && (
+          <div className={`pf-row pf-row-wide pf-beta-row ${isF('update-beta') ? 'is-focused' : ''}`} onClick={tap('update-beta')}>
+            <div className="pf-row-label">
+              <div className="pf-row-title">Versiones beta</div>
+              <div className="pf-row-desc">
+                {updateService.channel() === 'beta'
+                  ? 'Activadas: recibes las versiones de prueba antes que nadie; pueden tener fallos. Cuéntalos en el grupo Beta de Telegram.'
+                  : 'Desactivadas: solo recibes las versiones estables.'}
+              </div>
+            </div>
+            <div className={`pf-switch ${updateService.channel() === 'beta' ? 'on' : 'off'}`}>
+              <span className="pf-switch-knob" />
+            </div>
+          </div>
+        )}
       </div>
     );
   };

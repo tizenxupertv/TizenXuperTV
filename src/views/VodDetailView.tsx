@@ -14,33 +14,23 @@ import { PREF_LANG_CODES, languageName, sameLanguage } from '../lib/subtitles';
 import { getResumeTarget, getEpisodeStatus, EpisodeStatus, formatDuration } from '../lib/vodResume';
 import { useViewProfiler } from '../lib/perfMonitor';
 
-export type SettingsCol = 'menu' | 'audio' | 'subs' | 'quality';
+import {
+  type SettingsCol,
+  type DetailFocusArea,
+  type SynopsisModalArea,
+  type VodDetailFocus,
+  EP_RANGE
+} from '../types/vod';
 
-export type DetailFocusArea = 'back' | 'synopsis' | 'actions' | 'quick' | 'seasons' | 'seasonMenu' | 'epRanges' | 'episodes' | 'cast' | 'related' | 'audioModal';
-
-export interface VodDetailFocus {
-  area: DetailFocusArea;
-  actionIndex: number;
-  seasonIndex: number;
-  episodeIndex: number;
-  relatedIndex: number;
-  castIndex?: number;
-  showSynopsisModal?: boolean;
-  /** Small buttons under the big ones: Mi lista, Ajustes, Tráiler */
-  quickIndex?: number;
-  /** Season highlighted in the open season list (the season loads only when picked) */
-  seasonMenuIndex?: number;
-  /** Range of 20 episodes focused in the ranges row ("1-20", "21-40"…) */
-  rangeIndex?: number;
-  /** Settings list: 'menu' (Audio / Subtítulos / Resolución) or the options of one of them */
-  modalCol?: SettingsCol;
-  modalIndex?: number;
-}
+export type {
+  SettingsCol,
+  DetailFocusArea,
+  SynopsisModalArea,
+  VodDetailFocus
+};
+export { EP_RANGE };
 
 const NO_EPISODES: VodEpisode[] = [];
-
-/** Episodes per range, as the official app: long series stay light and quick to cross */
-export const EP_RANGE = 20;
 
 export const AUDIO_OPTIONS = PREFERRED_LANGUAGES;
 export const SUB_OPTIONS = SUBTITLE_CHOICES;
@@ -54,7 +44,6 @@ export const LANGUAGE_RULES: LanguageRules = {
 interface VodDetailViewProps {
   item: VodItem;
   focus: VodDetailFocus;
-  isFavorite: boolean;
   relatedItems?: VodItem[];
   onBack: () => void;
   onPlay: (item: VodItem, episode?: VodEpisode, isTrailer?: boolean) => void;
@@ -77,13 +66,14 @@ interface VodDetailViewProps {
   onCloseAudioModal?: () => void;
   onSelectAudioOption?: (audio: string) => void;
   onSelectSubOption?: (sub: string) => void;
+  onOpenSynopsisModal?: () => void;
   onCloseSynopsisModal?: () => void;
+  onItemChange?: (item: VodItem) => void;
 }
 
 export const VodDetailView: React.FC<VodDetailViewProps> = ({
   item,
   focus,
-  isFavorite,
   relatedItems = [],
   onBack,
   onPlay,
@@ -103,7 +93,9 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   onSelectAudioOption,
   onSelectSubOption,
   onSelectSetting,
-  onCloseSynopsisModal
+  onOpenSynopsisModal,
+  onCloseSynopsisModal,
+  onItemChange
 }) => {
   useViewProfiler('Detalle VOD');
   const [detailData, setDetailData] = useState<{
@@ -113,19 +105,25 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  // Episodes of a season other than the opened one (portal: every season is its own content id)
-  const [seasonEps, setSeasonEps] = useState<{ seasonId: string; episodes: VodEpisode[] } | null>(null);
+  // Season details & episodes of a season other than the opened one
+  const [currentSeasonData, setCurrentSeasonData] = useState<{ item: VodItem; seasonId: string; episodes: VodEpisode[] } | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [historyTick, setHistoryTick] = useState(0);
-  const [isFav, setIsFav] = useState<boolean>(() => favoritesService.isFavorite(item.id));
+
+  const currentItem = currentSeasonData?.item || detailData?.item || item;
+  const [isFav, setIsFav] = useState<boolean>(() => favoritesService.isFavorite(currentItem.id));
   const [persons, setPersons] = useState<PersonResult>({ directors: [], actors: [] });
   const [selectedPerson, setSelectedPerson] = useState<PersonDetail | null>(null);
   const [localSynopsisModal, setLocalSynopsisModal] = useState<boolean>(false);
+  const activeCastRef = useRef<HTMLDivElement>(null);
+  const modalBodyRef = useRef<HTMLDivElement>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
-    if (item && item.id) {
-      getPersons(item.id)
+    if (currentItem && currentItem.id) {
+      getPersons(currentItem.id)
         .then(res => {
           if (alive) setPersons(res);
         })
@@ -134,15 +132,15 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     return () => {
       alive = false;
     };
-  }, [item.id]);
+  }, [currentItem.id]);
 
   useEffect(() => historyService.subscribe(() => setHistoryTick(t => t + 1)), []);
   useEffect(() => {
-    setIsFav(favoritesService.isFavorite(item.id));
+    setIsFav(favoritesService.isFavorite(currentItem.id));
     return favoritesService.subscribe(() => {
-      setIsFav(favoritesService.isFavorite(item.id));
+      setIsFav(favoritesService.isFavorite(currentItem.id));
     });
-  }, [item.id]);
+  }, [currentItem.id]);
 
   const episodesSliderRef = useRef<HTMLDivElement>(null);
   const castSliderRef = useRef<HTMLDivElement>(null);
@@ -158,7 +156,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     let isMounted = true;
     setIsLoading(true);
     setLoadError(false);
-    setSeasonEps(null);
+    setCurrentSeasonData(null);
     setLocalSynopsisModal(false);
 
     catalogService.getVodDetail(item).then(data => {
@@ -195,8 +193,6 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
       viewTokenRef.current++;
     };
   }, [item]);
-
-  const currentItem = detailData?.item || item;
 
   const effectiveDirectors = useMemo<PersonDetail[]>(() => {
     if (persons.directors.length > 0) return persons.directors;
@@ -238,6 +234,30 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
       onCastChangeRef.current(effectiveCast);
     }
   }, [effectiveCast]);
+
+  const modalArea: SynopsisModalArea = focus.synopsisModalArea || (effectiveCast.length > 0 ? 'cast' : 'text');
+
+  // Direct container scroll management for modal on Samsung Tizen
+  useEffect(() => {
+    if (!focus.showSynopsisModal && !localSynopsisModal) return;
+
+    if (modalArea === 'close' || modalArea === 'text') {
+      if (modalBodyRef.current) {
+        modalBodyRef.current.scrollTop = 0;
+      }
+    } else if (modalArea === 'cast' && activeCastRef.current && modalBodyRef.current) {
+      const body = modalBodyRef.current;
+      const target = activeCastRef.current;
+      const bodyRect = body.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+
+      if (targetRect.bottom > bodyRect.bottom - 12) {
+        body.scrollTop += Math.round(targetRect.bottom - bodyRect.bottom + 24);
+      } else if (targetRect.top < bodyRect.top + 12) {
+        body.scrollTop -= Math.round(bodyRect.top - targetRect.top + 24);
+      }
+    }
+  }, [focus.showSynopsisModal, localSynopsisModal, modalArea, focus.castIndex]);
   const seasons = useMemo(() => {
     const list = detailData?.seasons || [];
     const seenNumbers = new Set<number>();
@@ -256,13 +276,13 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   }, [detailData?.seasons]);
   // Memoized so effects below only run when the list really changes
   const episodes = useMemo<VodEpisode[]>(
-    () => (seasonEps ? seasonEps.episodes : (detailData?.episodes || NO_EPISODES)),
-    [seasonEps, detailData]
+    () => (currentSeasonData ? currentSeasonData.episodes : (detailData?.episodes || NO_EPISODES)),
+    [currentSeasonData, detailData]
   );
-  const currentSeasonId = seasonEps ? seasonEps.seasonId : String(item.id);
+  const currentSeasonId = currentSeasonData ? currentSeasonData.seasonId : String(item.id);
   const currentSeasonNumber = (seasons.find(s => String(s.id) === currentSeasonId) || seasons[focus.seasonIndex] || seasons[0])?.number;
 
-  // Load the episodes of the season selected in the season pills
+  // Load the episodes & details of the season selected in the season pills
   useEffect(() => {
     if (!detailData || seasons.length < 2) return;
     const target = seasons[focus.seasonIndex];
@@ -271,8 +291,43 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     let alive = true;
     setSeasonLoading(true);
     catalogService.getVodDetail({ ...item, id: String(target.id) })
-      .then(d => { if (alive && token === seasonTokenRef.current) setSeasonEps({ seasonId: String(target.id), episodes: d.episodes }); })
-      .catch(() => { if (alive && token === seasonTokenRef.current) setSeasonEps({ seasonId: String(target.id), episodes: [] }); })
+      .then(d => {
+        if (!alive || token !== seasonTokenRef.current) return;
+        const updatedItem: VodItem = {
+          ...d.item,
+          id: String(target.id),
+          backdrop: d.item.backdrop || detailData?.item.backdrop || item.backdrop,
+          poster: d.item.poster || detailData?.item.poster || item.poster,
+          landscape: d.item.landscape || detailData?.item.landscape || item.landscape,
+          isSeries: true,
+          kind: 'serie'
+        };
+        setCurrentSeasonData({
+          item: updatedItem,
+          seasonId: String(target.id),
+          episodes: d.episodes
+        });
+        if (onItemChange) {
+          onItemChange(updatedItem);
+        }
+      })
+      .catch(() => {
+        if (alive && token === seasonTokenRef.current) {
+          const fallbackItem: VodItem = {
+            ...item,
+            id: String(target.id),
+            title: target.name || item.title
+          };
+          setCurrentSeasonData({
+            item: fallbackItem,
+            seasonId: String(target.id),
+            episodes: []
+          });
+          if (onItemChange) {
+            onItemChange(fallbackItem);
+          }
+        }
+      })
       .then(() => { if (alive && token === seasonTokenRef.current) setSeasonLoading(false); });
     return () => {
       alive = false;
@@ -351,6 +406,8 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     setMedia(null);
     const client = (window as any).MagisClient;
     if (!playableId || !client || typeof client.mediaOptions !== 'function') return;
+    // The CDN token too, so Play finds everything ready
+    if (typeof client.warmSlb === 'function') client.warmSlb();
     let cancelled = false;
     client.mediaOptions(playableId, playableSeries, (err: any, m: TitleMedia) => {
       if (!cancelled && !err && m) setMedia(m);
@@ -397,7 +454,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         seasonsCount: seasons.length || (isSeries ? 1 : 0),
         episodesCount: episodes.length,
         relatedCount: relatedItems.length,
-        castCount: 0,
+        castCount: effectiveCast.length,
         isSeries,
         hasTrailer,
         choices
@@ -475,12 +532,16 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     if (focus.area === 'back' || focus.area === 'actions' || focus.area === 'quick' || focus.area === 'audioModal') {
       rootScrollRef.current.scrollTop = 0;
     } else if (focus.area === 'seasons' || focus.area === 'seasonMenu' || focus.area === 'epRanges' || focus.area === 'episodes') {
-      // The whole series section (selector, ranges, tiles) just under the header
+      // The series section (selector, ranges, tiles) scrolls only as far as it needs to be whole on screen: when it
+      // already fits under the hero the page stays at the top, and the hero stays in view
       const sec = seriesSectionRef.current;
-      rootScrollRef.current.scrollTop = sec ? Math.max(0, sec.offsetTop - 90) : 280;
-    } else if (focus.area === 'cast') {
-      const sec = castSectionRef.current;
-      rootScrollRef.current.scrollTop = sec ? Math.max(0, sec.offsetTop - 120) : 480;
+      const root = rootScrollRef.current;
+      if (!sec) {
+        root.scrollTop = 0;
+      } else {
+        const overflow = sec.offsetTop + sec.offsetHeight + 24 - root.clientHeight;
+        root.scrollTop = Math.max(0, Math.min(overflow, sec.offsetTop - 90));
+      }
     } else if (focus.area === 'related') {
       rootScrollRef.current.scrollTop = rootScrollRef.current.scrollHeight;
     }
@@ -556,7 +617,10 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                 <button
                   type="button"
                   className={`vod-synopsis-more-btn ${focus.area === 'synopsis' ? 'is-focused' : ''}`}
-                  onClick={() => setLocalSynopsisModal(true)}
+                  onClick={() => {
+                    if (onOpenSynopsisModal) onOpenSynopsisModal();
+                    else setLocalSynopsisModal(true);
+                  }}
                 >
                   Ver más
                 </button>
@@ -665,7 +729,10 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                 <button
                   key={q}
                   className={`vod-quick-btn ${focused ? 'is-focused' : ''}`}
-                  onClick={() => setLocalSynopsisModal(true)}
+                  onClick={() => {
+                    if (onOpenSynopsisModal) onOpenSynopsisModal();
+                    else setLocalSynopsisModal(true);
+                  }}
                   aria-label="Informacion y Reparto"
                 >
                   <span className="vod-quick-circle">
@@ -822,6 +889,8 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
           </section>
         )}
 
+        {/* Reparto y Equipo lives only in the Info dialog (below) */}
+
         {/* Recommended / Similar Titles Row */}
         {relatedItems && relatedItems.length > 0 && (
           <section className="vod-detail-related-section">
@@ -870,8 +939,9 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         >
           <div className="synopsis-modal-card" onClick={e => e.stopPropagation()}>
             <button
+              ref={modalArea === 'close' ? closeBtnRef : null}
               type="button"
-              className="synopsis-modal-close-btn"
+              className={`synopsis-modal-close-btn ${modalArea === 'close' ? 'is-focused' : ''}`}
               onClick={() => {
                 setLocalSynopsisModal(false);
                 if (onCloseSynopsisModal) onCloseSynopsisModal();
@@ -910,44 +980,60 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                     <span className="synopsis-meta-genres">{genres.join(' · ')}</span>
                   )}
                 </div>
-                <div className="synopsis-modal-body">
-                  <p className="synopsis-modal-text">{currentItem.synopsis}</p>
+                <div className="synopsis-modal-body" ref={modalBodyRef}>
+                  <div
+                    ref={modalArea === 'text' ? textRef : null}
+                    className={`synopsis-modal-text-wrap ${modalArea === 'text' ? 'is-focused' : ''}`}
+                    tabIndex={0}
+                  >
+                    <p className="synopsis-modal-text">{currentItem.synopsis}</p>
+                    {modalArea === 'text' && effectiveCast.length > 0 && (
+                      <div className="synopsis-modal-nav-hint">
+                        Presiona <b>[▼]</b> para ver Reparto y Equipo
+                      </div>
+                    )}
+                  </div>
 
                   {/* Reparto y Equipo inside the dialog */}
                   {effectiveCast.length > 0 && (
                     <div className="synopsis-modal-cast-section">
                       <h3 className="synopsis-modal-cast-title">Reparto y Equipo</h3>
                       <div className="synopsis-modal-cast-grid">
-                        {effectiveCast.map((p, pIdx) => (
-                          <div
-                            key={p.puId || `${p.name}-${pIdx}`}
-                            className="synopsis-modal-cast-card"
-                            role="button"
-                            onClick={() => {
-                              if (onSelectPerson) onSelectPerson(p);
-                              else setSelectedPerson(p);
-                            }}
-                          >
-                            <div className="synopsis-modal-cast-avatar">
-                              {p.icon ? (
-                                <img
-                                  src={p.icon}
-                                  alt={p.name}
-                                  loading="lazy"
-                                  onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
-                                />
-                              ) : null}
-                              <svg className="synopsis-modal-cast-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                <circle cx="12" cy="7" r="4" />
-                              </svg>
+                        {effectiveCast.map((p, pIdx) => {
+                          const isCastFocused = (focus.showSynopsisModal || localSynopsisModal) && modalArea === 'cast' && (focus.castIndex ?? 0) === pIdx;
+                          return (
+                            <div
+                              key={p.puId || `${p.name}-${pIdx}`}
+                              ref={isCastFocused ? activeCastRef : null}
+                              className={`synopsis-modal-cast-card ${isCastFocused ? 'is-focused' : ''}`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                if (onSelectPerson) onSelectPerson(p);
+                                else setSelectedPerson(p);
+                              }}
+                            >
+                              <div className="synopsis-modal-cast-avatar">
+                                {p.icon ? (
+                                  <img
+                                    src={p.icon}
+                                    alt={p.name}
+                                    loading="lazy"
+                                    onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                                  />
+                                ) : null}
+                                <svg className="synopsis-modal-cast-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                  <circle cx="12" cy="7" r="4" />
+                                </svg>
+                              </div>
+                              <div className="synopsis-modal-cast-meta">
+                                <span className="synopsis-modal-cast-name">{p.name}</span>
+                                <span className="synopsis-modal-cast-role">{p.personType === 1 ? 'Director' : 'Reparto'}</span>
+                              </div>
                             </div>
-                            <div className="synopsis-modal-cast-meta">
-                              <span className="synopsis-modal-cast-name">{p.name}</span>
-                              <span className="synopsis-modal-cast-role">{p.personType === 1 ? 'Director' : 'Reparto'}</span>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -960,7 +1046,19 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                   )}
                 </div>
                 <div className="synopsis-modal-footer">
-                  <span>Presiona <b>[Atrás]</b> o <b>[OK]</b> para cerrar</span>
+                  {modalArea === 'cast' && effectiveCast.length > 0 && (
+                    <span>Navega con <b>[◀ ▲ ▼ ▶]</b> · Presiona <b>[OK]</b> para filmografía · <b>[▲]</b> para volver arriba · <b>[Atrás]</b> para salir</span>
+                  )}
+                  {modalArea === 'text' && (
+                    <span>{effectiveCast.length > 0 ? (
+                      <>Presiona <b>[▼]</b> para ver Reparto y Equipo · <b>[▲]</b> para botón Cerrar · <b>[Atrás]</b> para salir</>
+                    ) : (
+                      <>Presiona <b>[▲]</b> para botón Cerrar · <b>[Atrás]</b> o <b>[OK]</b> para cerrar</>
+                    )}</span>
+                  )}
+                  {modalArea === 'close' && (
+                    <span>Presiona <b>[OK]</b> o <b>[Atrás]</b> para cerrar · <b>[▼]</b> para volver al contenido</span>
+                  )}
                 </div>
               </div>
             </div>

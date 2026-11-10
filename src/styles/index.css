@@ -863,6 +863,8 @@ html, body {
 
 .poster-card-img-element.is-loaded {
   opacity: 1;
+  /* The fade is over: no layer of its own for every loaded card */
+  will-change: auto;
 }
 
 /* Brand badge top-right corner */
@@ -1105,8 +1107,8 @@ html, body {
 
 /* Columna 1: Categorías Verticales */
 .live-col-categories {
-  flex: 0 0 clamp(190px, 16vw, 260px);
-  width: clamp(190px, 16vw, 260px);
+  flex: 0 0 clamp(220px, 17vw, 300px);
+  width: clamp(220px, 17vw, 300px);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -1247,6 +1249,26 @@ html, body {
   flex: 1;
 }
 
+.live-cat-badge {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 229, 255, 0.2);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  line-height: 1.2;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.live-cat-vrow.is-focused .live-cat-badge {
+  background: rgba(0, 0, 0, 0.85);
+  color: #00e5ff;
+  border-color: transparent;
+}
+
 .live-cat-vrow.is-focused .live-cat-vname {
   color: #000000 !important;
   font-weight: 800 !important;
@@ -1295,7 +1317,8 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 24px;
+  padding: 24px 84px;
+  box-sizing: border-box;
   text-align: center;
   background: rgba(7, 9, 14, 0.86);
   pointer-events: none;
@@ -1429,6 +1452,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1437,6 +1461,7 @@ html, body {
 .live-fav-icon {
   color: var(--color-gold);
   font-size: 13px;
+  flex-shrink: 0;
 }
 
 .live-ch-now {
@@ -1471,6 +1496,9 @@ html, body {
 .live-grand-preview-box {
   /* 16:9 like the channels, as wide as the column; the channel card below only needs its natural height
      (the portal sends no programme guide), so the picture takes the rest of the column */
+  /* Old engines (no min() before Chromium 79): the same width, capped by the column */
+  width: calc((100vh - 300px) * 16 / 9);
+  max-width: 100%;
   width: min(100%, calc((100vh - 300px) * 16 / 9));
   height: auto;
   aspect-ratio: 16 / 9;
@@ -1485,6 +1513,9 @@ html, body {
 }
 
 .live-preview-video {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1885,8 +1916,17 @@ html, body {
   background: rgba(0, 229, 255, 0.2);
   color: #00e5ff;
   border: 1px solid rgba(0, 229, 255, 0.5);
-  margin-left: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
   letter-spacing: 0.5px;
+}
+
+.live-ch-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 
@@ -2695,6 +2735,15 @@ html, body {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.synopsis-modal-close-btn.is-focused {
+  /* Solid white like the rest of the app's focus: no glow, no scale (nothing can end up cut) */
+  background: #ffffff;
+  border-color: #ffffff;
+  box-shadow: none;
+  transform: none;
+  color: #000000;
+}
+
 .synopsis-modal-title {
   margin: 0;
   font-size: 32px;
@@ -2730,6 +2779,32 @@ html, body {
   scrollbar-width: thin;
 }
 
+.synopsis-modal-text-wrap {
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  outline: none;
+}
+
+.synopsis-modal-text-wrap.is-focused {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #ffffff;
+  box-shadow: none;
+}
+
+.synopsis-modal-nav-hint {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
 .synopsis-modal-text {
   font-size: 19px;
   line-height: 32px;
@@ -2751,23 +2826,43 @@ html, body {
 }
 .synopsis-modal-cast-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
 .synopsis-modal-cast-card {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 12px;
+  padding: 7px 11px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  /* 2px always, so the focus changes only its colour: no size change, nothing outside the card to be clipped by
+     the scrolling body */
+  border: 2px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: all 0.15s ease;
+  outline: none;
 }
 .synopsis-modal-cast-card:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(56, 189, 248, 0.4);
+}
+.synopsis-modal-cast-card.is-focused {
+  background: #ffffff;
+  border-color: #ffffff;
+  box-shadow: none;
+  transform: none;
+}
+.synopsis-modal-cast-card.is-focused .synopsis-modal-cast-name {
+  color: #000000;
+  font-weight: 800;
+}
+.synopsis-modal-cast-card.is-focused .synopsis-modal-cast-role {
+  color: #334155;
+}
+.synopsis-modal-cast-card.is-focused .synopsis-modal-cast-avatar {
+  border-color: #cbd5e1;
+  box-shadow: none;
 }
 .synopsis-modal-cast-avatar {
   width: 44px;
@@ -3920,6 +4015,109 @@ html, body {
   font-size: 12px;
 }
 
+/* Historial vertical de búsquedas recientes debajo del teclado */
+.search-recent-panel {
+  flex: 1;
+  min-height: 0;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.search-recent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.search-recent-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #94a3b8;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.search-recent-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scrollbar-width: none;
+  padding: 2px 2px 8px 2px;
+}
+
+.search-recent-list::-webkit-scrollbar {
+  display: none;
+}
+
+.search-recent-item {
+  height: 48px;
+  min-height: 48px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 3px solid transparent;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-size: 17px;
+  font-weight: 800;
+  color: #e2e8f0;
+  cursor: pointer;
+  box-shadow: none !important;
+}
+
+.search-recent-item.is-focused {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+  box-shadow: none !important;
+  transform: none;
+}
+
+.search-recent-item.is-focused .search-recent-item-remove {
+  color: #000000;
+}
+
+.search-recent-item-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-recent-item-remove {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.search-recent-clear-item {
+  color: #94a3b8;
+  font-size: 15px;
+}
+
+.search-recent-clear-item.is-focused {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #ffffff;
+  font-weight: 800;
+  box-shadow: none !important;
+  transform: none;
+}
+
 .search-channels-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -4401,6 +4599,27 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+}
+
+.pc-cat-badge {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(0, 229, 255, 0.2);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  line-height: 1.2;
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+
+.pc-cat.is-focused .pc-cat-badge {
+  background: rgba(0, 0, 0, 0.85);
+  color: #00e5ff;
+  border-color: transparent;
 }
 
 .pc-cat.is-current {
@@ -4624,6 +4843,8 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+  max-height: calc(1080px - 140px);
 }
 
 .search-left-panel .search-input-wrapper {
@@ -4642,8 +4863,9 @@ html, body {
 
 .search-left-panel .search-input-wrapper.is-focused {
   border-color: #00e5ff;
-  background: rgba(0, 229, 255, 0.06);
-  box-shadow: 0 0 20px rgba(0, 229, 255, 0.2);
+  border-width: 2px;
+  background: rgba(0, 229, 255, 0.08);
+  box-shadow: none !important;
 }
 
 .search-left-panel .search-keyboard-wrap {
@@ -4820,6 +5042,18 @@ html, body {
 }
 
 /* Next Episode Card (Clean & Fast, Apple TV Grays) */
+/* "Siguiente episodio" button over the credits: no card, same corner */
+.vod-next-button-wrap {
+  position: absolute;
+  right: 54px;
+  bottom: 140px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
 .vod-next-episode {
   position: absolute;
   right: 54px;
@@ -5235,12 +5469,29 @@ html.xuper-vod-avplay .app-root,
   left: 0;
   top: 0;
   bottom: 0;
+  width: 100%;
   border-radius: 3px;
   background: #ffffff;
+  transform-origin: 0 50%;
+  transition: transform 0.25s linear;
+  will-change: transform;
+}
+
+/* Full-width rail moved by translateX(p%): the thumb at its left edge lands at p% of the track */
+.vp-thumb-rail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  pointer-events: none;
+  transition: transform 0.25s linear;
+  will-change: transform;
 }
 
 .vp-thumb {
   position: absolute;
+  left: 0;
   top: 50%;
   width: 22px;
   height: 22px;
@@ -5464,7 +5715,9 @@ html.xuper-vod-avplay .app-root,
   display: flex;
   gap: 12px;
   padding: 4px 0 6px !important;
-  transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1);
+  /* Short and linear: with 0.22 s the list was still sliding when the next key arrived, over a playing video */
+  transition: transform 0.08s linear;
+  will-change: transform;
   box-sizing: border-box;
   width: max-content !important;
   min-width: 100%;
@@ -5483,6 +5736,9 @@ html.xuper-vod-avplay .app-root,
   border: 2px solid rgba(255, 255, 255, 0.18);
   box-sizing: border-box;
   transform: none !important;
+  /* No shadow and no transition per tile: each move repainted every blurred shadow above the video */
+  box-shadow: none;
+  transition: none;
 }
 
 .vp-episodes .vod-ep-tile.is-watched {
@@ -5500,7 +5756,7 @@ html.xuper-vod-avplay .app-root,
   background: #ffffff !important;
   border: 2px solid #ffffff !important;
   color: #000000 !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
+  box-shadow: none;
   transform: none !important;
   z-index: 5;
 }
@@ -7704,26 +7960,19 @@ html.xuper-vod-avplay .app-root,
   color: #000;
   box-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
 }
-.tg-login-btn-help {
-  border: 2px solid rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
-}
-.tg-login-btn-help.is-focused {
-  background: #38bdf8;
-  color: #0b1020;
-  border-color: #38bdf8;
-  box-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
-}
-.tg-login-btn-diag {
-  border: 2px solid rgba(168, 85, 247, 0.45);
-  color: #c084fc;
-}
-.tg-login-btn-diag.is-focused {
-  background: #a855f7;
-  color: #080b11;
-  border-color: #a855f7;
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.55);
-}
+/* The sign-in buttons share the app's neutral button style (.pf-btn): no per-button colours */
+/* Error state: two rows of two buttons of the same width */
+.tg-login-btn-row + .tg-login-btn-row { margin-top: 14px; }
+.tg-login-btn-row.is-pair > .tg-login-btn { flex: 1; min-width: 0; text-align: center; }
+
+/* Sign-in report: the QR for the phone at the left, the steps and the TV's data at the right */
+.tg-login-report-body { display: flex; align-items: center; gap: 32px; margin-bottom: 24px; }
+.tg-login-report-qr { padding: 12px; border-radius: 16px; background: #ffffff; line-height: 0; flex-shrink: 0; }
+.tg-login-report-wait { width: 230px; height: 230px; display: flex; align-items: center; justify-content: center; color: #0f1422; }
+.tg-login-report-info { min-width: 0; flex: 1; }
+.tg-login-report-steps { font-size: 17px; line-height: 1.7; color: #e2e8f0; }
+.tg-login-report-data { margin-top: 18px; padding: 14px 18px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); font-size: 15px; line-height: 1.7; color: var(--text-muted); }
+.tg-login-report-data b { color: #ffffff; }
 
 /* Keyframe Animations */
 @keyframes tg-shimmer {
@@ -8108,7 +8357,7 @@ html.xuper-vod-avplay .app-root,
 
 /* Perfil › Sobre nosotros: update actions and the Telegram QR codes */
 .pf-about-actions { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
-.pf-tg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1380px; margin-top: 16px; }
+.pf-tg-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 1440px; margin-top: 16px; }
 .pf-tg-card {
   display: flex;
   align-items: center;
@@ -8139,6 +8388,11 @@ html.xuper-vod-avplay .app-root,
 .pf-update-bar-title { font-size: 19px; font-weight: 800; color: #ffffff; }
 .pf-update-bar-desc { margin-top: 4px; font-size: 15px; color: #94a3b8; }
 .pf-update-bar-actions { display: flex; gap: 12px; flex-shrink: 0; }
+/* Versiones beta: its own row under the update bar, the switch at the right */
+.pf-row.pf-row-wide.pf-beta-row { margin-top: 14px; width: 100%; }
+html.no-flexgap .pf-row-wide .pf-switch { margin-left: 32px; }
+html.no-flexgap .pf-update-bar-actions .pf-btn + .pf-btn { margin-left: 12px; }
+html.no-flexgap .pf-update-bar-actions { margin-left: 24px; }
 
 .pf-about-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1380px; margin-top: 22px; }
 .pf-about-card { padding: 18px 22px; border-radius: 16px; background: rgba(255, 255, 255, 0.04); }
@@ -8888,3 +9142,50 @@ html.xuper-vod-avplay .app-root,
 .upd-done-qr { flex-shrink: 0; padding: 10px; border-radius: 14px; background: #fff; line-height: 0; }
 .upd-done-news-text { font-size: 18px; line-height: 1.5; color: #94a3b8; }
 .upd-done-news-title { font-size: 21px; font-weight: 800; color: #ffffff; margin-bottom: 4px; }
+
+/* Engines without aspect-ratio (Chromium < 88: Tizen 6.5 and older) gave these boxes no height at all */
+@supports not (aspect-ratio: 1 / 1) {
+  .live-grand-preview-box { height: calc(100vh - 300px); }
+  .synopsis-modal-poster-wrap { height: 345px; }
+  .svc-poster-wrap { height: 0; padding-top: 150%; }
+  .svc-poster-wrap .svc-poster { position: absolute; top: 0; left: 0; }
+  .filter-grid .svc-poster-wrap { height: auto; padding-top: 0; }
+  .filter-grid .svc-poster-wrap .svc-poster { position: static; }
+}
+
+/* The splash in index.html uses inset (Chromium 87+): older engines get the same box from the app's styles, which
+   travel in the self-update (index.html is part of the installed shell) */
+#xuper-splash { top: 0; right: 0; bottom: 0; left: 0; }
+
+/* Sign-in screen on engines without flex gap (html.no-flexgap, set by public/js/tizen-bridge.js on Tizen 6.0 and
+   older): the same spacing as margins, so the card, the steps, the notice and the buttons do not touch */
+html.no-flexgap .tg-login-body > * + * { margin-left: 64px; }
+html.no-flexgap .tg-login-left-col > * + * { margin-top: 14px; }
+html.no-flexgap .tg-login-placeholder-card > * + * { margin-top: 18px; }
+html.no-flexgap .tg-login-skeleton-card > * + * { margin-top: 20px; }
+html.no-flexgap .tg-login-timer > * + * { margin-left: 8px; }
+html.no-flexgap .tg-login-timeline-item > * + * { margin-left: 16px; }
+html.no-flexgap .tg-login-notice-content > * + * { margin-top: 3px; }
+html.no-flexgap .tg-login-notice-desc > * { margin-right: 8px; }
+html.no-flexgap .tg-login-btn-row > * + * { margin-left: 16px; }
+html.no-flexgap .tg-login-help-steps > * + * { margin-top: 18px; }
+html.no-flexgap .tg-login-help-item > * + * { margin-left: 16px; }
+html.no-flexgap .tg-login-diag-checks > * + * { margin-top: 10px; }
+html.no-flexgap .tg-login-diag-check-item > * + * { margin-left: 14px; }
+html.no-flexgap .tg-login-diag-check-info > * + * { margin-top: 2px; }
+html.no-flexgap .tg-login-diag-verdict-box > * + * { margin-top: 6px; }
+html.no-flexgap .tg-login-diag-verdict-title > * + * { margin-left: 8px; }
+html.no-flexgap .tg-login-diag-footer > * + * { margin-left: 14px; }
+html.no-flexgap .tg-login-report-body > * + * { margin-left: 32px; }
+
+/* Version on the sign-in screen: support can tell at a glance what a TV runs, even before it signs in */
+.tg-login-brand { position: relative; }
+.tg-login-version { position: absolute; top: 34px; right: 48px; font-size: 15px; font-weight: 600; color: var(--text-dim); }
+
+/* Tizen 6.0 and older (html.legacy-video, set in main.tsx): a Tizen 5.5 TV played the preview's sound without its
+   picture while the same <video> showed in fullscreen. To test there: the preview box without what fullscreen does
+   not have, rounded clipping and the gradient over the video */
+html.legacy-video .live-grand-preview-box { border-radius: 0; overflow: visible; }
+html.legacy-video .live-grand-preview-box.is-focused::after { border-radius: 0; }
+html.legacy-video .live-preview-video { object-fit: contain; }
+html.legacy-video .live-preview-overlay { display: none; }

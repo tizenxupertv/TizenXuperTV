@@ -8,6 +8,7 @@
  * (~650 KB) downloads once. TVs without WebCrypto or without the boot loader never self-update (manual notice).
  */
 import { ACCOUNT_APIS } from './accountService';
+import { updateQuery, type UpdateChannel } from '../lib/updateChannel';
 import {
   compareVersions, judge, readBundle, readManifest, record, waitAfter, type CheckRecord
 } from '../lib/updateCore';
@@ -20,6 +21,9 @@ const FIRST_CHECK_MS = 60 * 1000;
 const WAKE_GAP_MS = 2 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 30 * 1000;
 const LAST_KEY = 'xuper_update_last';
+/** 'beta': this TV also takes pre-releases (Sobre nosotros › Versiones beta); for the whole TV, not per profile */
+const CHANNEL_KEY = 'xuper_update_channel';
+
 /** Last running update version the "Actualizado" notice was shown for */
 const SEEN_RUN_KEY = 'xuper_update_seen_run';
 
@@ -118,6 +122,17 @@ class UpdateService {
     }
   }
 
+  /** Update channel of this TV */
+  channel(): UpdateChannel {
+    return read(CHANNEL_KEY) === 'beta' ? 'beta' : 'stable';
+  }
+
+  /** Beta versions on or off; takes effect from the next check (an installed beta is not undone) */
+  setChannel(channel: UpdateChannel): void {
+    write(CHANNEL_KEY, channel);
+    this.notify();
+  }
+
   status(): UpdateStatus {
     const boot = this.boot();
     return {
@@ -188,7 +203,7 @@ class UpdateService {
       let base = UPDATE_APIS[0];
       try {
         // The running version rides along so the server can count versions; the answer is the same for everyone
-        const got = await getBytesAny(`/tv/update?v=${encodeURIComponent(boot.info.running)}`);
+        const got = await getBytesAny(`/tv/update${updateQuery(boot.info.running, this.channel())}`);
         manifestBytes = got.bytes;
         base = got.base;
       } catch (e) {

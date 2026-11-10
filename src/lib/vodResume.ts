@@ -19,6 +19,34 @@ export function continueWatchingItems(history: HistoryItem[]): HistoryItem[] {
   return history.filter(h => !isFinished(h.position, h.duration));
 }
 
+/** Seconds around the position a title was asked to continue at that count as being there */
+export const RESUME_NEAR_S = 15;
+/** Seconds watched from somewhere else after which that is the viewer's position */
+export const RESUME_KEEP_S = 120;
+
+/** The player got to the position it was asked to continue at, or past it (`goal` 0: nothing was asked) */
+export function reachedResumeGoal(time: number, goal: number): boolean {
+  return goal > 0 && time >= goal - RESUME_NEAR_S;
+}
+
+/**
+ * Whether a playback time may replace the saved position. While a title asked to continue at `goal` has not got
+ * there, the TV may be playing it from the start because it refused the jump: that time stays out of the history
+ * until the viewer has watched RESUME_KEEP_S from there (then it is their position)
+ */
+export function canSaveProgress(time: number, goal: number): boolean {
+  if (time < 1) return false;
+  return !(goal > 0 && time < goal - RESUME_NEAR_S && time < RESUME_KEEP_S);
+}
+
+/**
+ * Where a retry of the same title reopens: where it is, or, when it never got to the position it was asked to
+ * continue at (the player failed before its first frame), that position
+ */
+export function retryStartAt(current: number, wanted: number, goal: number): number {
+  return current > 5 || goal === 0 ? current : wanted;
+}
+
 function episodeNumber(ep: VodEpisode, index: number): number {
   return parseInt(String(ep.number ?? ep.seriesNumber ?? ''), 10) || index + 1;
 }
