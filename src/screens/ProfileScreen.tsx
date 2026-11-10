@@ -166,8 +166,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     };
   }, []);
 
-  /** Below the 16 KB the server accepts (accents take two bytes) */
-  const REPORT_MAX_CHARS = 13000;
+  // The bot accepts 32 kB and keeps 110 events. 24000 characters leave room for the accents and other characters
+  // that take more than one byte, and fit the 100 playback events the app keeps
+  const REPORT_MAX_CHARS = 24000;
   // Problem report for support: TV, network, last network check and recent playback events
   const sendReport = () => {
     if (reportState === 'sending') return;
