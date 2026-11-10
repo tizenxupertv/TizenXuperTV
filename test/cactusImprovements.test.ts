@@ -27,31 +27,7 @@ import {
 } from '../src/lib/imageCache.ts';
 import { probeImage } from '../src/services/diagnosticService.ts';
 import { historyService } from '../src/services/historyService.ts';
-
-/** Helper to construct a valid binary `.idxg` buffer for unit tests */
-function makeIdxgBuffer(name: string, entries: Array<{ off: number; ts: number }>): Uint8Array {
-  const tableStart = 48; // >= 32 and leaves 32 bytes for header + filename
-  const buf = new Uint8Array(tableStart + entries.length * 12);
-  // Magic "idxg" at bytes 4..7
-  buf[4] = 0x69;
-  buf[5] = 0x64;
-  buf[6] = 0x78;
-  buf[7] = 0x67;
-  // Filename at byte 16
-  for (let i = 0; i < name.length && 16 + i < tableStart - 1; i++) {
-    buf[16 + i] = name.charCodeAt(i);
-  }
-  const view = new DataView(buf.buffer);
-  for (let i = 0; i < entries.length; i++) {
-    const pos = tableStart + i * 12;
-    const hi = Math.floor(entries[i].off / 4294967296);
-    const lo = entries[i].off >>> 0;
-    view.setUint32(pos, hi, false);
-    view.setUint32(pos + 4, lo, false);
-    view.setUint32(pos + 8, entries[i].ts, false);
-  }
-  return buf;
-}
+import { makeIdxg } from './helpers/idxg.ts';
 
 describe('Point 1: Search Artwork Recovery & Image Fallback Cascade', () => {
   it('detects placeholder URLs and keeps only usable artwork URLs', () => {
@@ -186,7 +162,7 @@ describe('Point 3: VOD .idxg Parser & Media Size Recovery', () => {
     { off: 376000, ts: 4000 },
     { off: 564000, ts: 6000 }
   ];
-  const sampleBuf = makeIdxgBuffer('movie_1080p.ts', sampleEntries);
+  const sampleBuf = makeIdxg(sampleEntries, { name: 'movie_1080p.ts' });
 
   it('finds the last valid byte offset via indexEnd()', () => {
     assert.equal(indexEnd(sampleBuf), 564000);

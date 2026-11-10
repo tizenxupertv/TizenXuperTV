@@ -3,11 +3,11 @@ import { VodItem, VodEpisode, VodSeason } from '../types/vod';
 import { historyService } from '../services/historyService';
 import { playerService } from '../services/playerService';
 import { catalogService } from '../services/catalogService';
-import { getEpisodeStatus } from '../lib/vodResume';
+import { getEpisodeStatus, canSaveProgress, reachedResumeGoal, retryStartAt } from '../lib/vodResume';
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
-import { buildVodPlaylist, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
+import { buildVodPlaylist, fileAudioLanguages, mseAudioFits, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
 import { friendlyPortalError } from '../lib/portalErrors';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
@@ -62,9 +62,11 @@ const SUB_SIZE_LABELS = ['Normal', 'Grande', 'Pequeño'];
 const SUB_STYLE_LABELS = ['Blanco', 'Amarillo', 'Con fondo'];
 
 interface AudioOption {
-  kind: 'avplay' | 'portal';
+  /** 'file': another audio inside the same file while MSE plays it; choosing it reopens the title with AVPlay */
+  kind: 'avplay' | 'portal' | 'file';
   index: number;
   label: string;
+  lang?: string;
 }
 
 function formatTime(seconds: number): string {
@@ -146,6 +148,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const [mseRes, setMseRes] = useState<any>(null);
   /** MSE failed in this player: the rest of the session (retries, audio changes) uses AVPlay */
   const mseFailedRef = useRef(false);
+  /** Audio language picked in this player among the ones inside the file ('' = the profile preference) */
+  const fileAudioRef = useRef('');
   const [avMode, setAvMode] = useState(false);
 
   // Audio / subtitles chosen from the player menus (bottom-right buttons)
@@ -173,6 +177,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   // Resuming at the saved position: until the TV confirms that seek, its time (0:00, 0:10…) is not the
   // viewer's and must never be saved over the saved position
   const resumePendingRef = useRef(false);
+  /** Position this play was asked to continue at, until the player gets there (0: nothing pending) */
+  const resumeGoalRef = useRef(0);
   /** When this play started and when the portal answered, to log how long the first frame took */
   const startTimingRef = useRef<{ at: number; resolvedAt: number; logged: boolean } | null>(null);
   const lastTokenRenewalRef = useRef<number>(Date.now());
@@ -272,8 +278,9 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const saveProgress = useCallback(() => {
     if (isTrailer) return;
     const { t, d } = timeRef.current;
-    if (t < 1) return;
     if (resumePendingRef.current && t < 3) return;
+    // Asked to continue further ahead and not there yet: the saved position is not replaced (lib/vodResume.ts)
+    if (!canSaveProgress(t, resumeGoalRef.current)) return;
     historyService.savePlayback(item, t, d, episode, false, { id: seriesId, number: seasonNumber });
   }, [isTrailer, item, episode, seriesId, seasonNumber]);
 
@@ -399,7 +406,9 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     setIsBuffering(true);
     setBrowserUrl(null);
     setMseRes(null);
-    startedAtRef.current = retryTick > 0 ? timeRef.current.t : startAt;
+    // A retry reopens where the title is; when it never played (MSE failed before its first frame), where it was asked to
+    startedAtRef.current = retryTick > 0 ? retryStartAt(timeRef.current.t, startedAtRef.current, resumeGoalRef.current) : startAt;
+    resumeGoalRef.current = startedAtRef.current > 5 ? startedAtRef.current : 0;
 
     // The live preview shares the single AVPlay instance: stop it first
     playerService.stop();
@@ -465,7 +474,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           console.log('[VodPlayer] AVPlay audio tracks', audios.length);
           if (audios.length > 1) {
             setAudioOptions(audios);
-            const prefCode = PREF_LANG_CODES[settingsService.get().audio] || 'es';
+            const prefCode = fileAudioRef.current || PREF_LANG_CODES[settingsService.get().audio] || 'es';
             const wantedIdx = Math.max(0, audios.findIndex(a => sameLanguage(a.label, prefCode)));
             setAudioIndex(wantedIdx);
             if (wantedIdx > 0) {
@@ -592,7 +601,11 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         const audioInPref = sameLanguage(res.audio, pref);
         setSubIndex(settings.subtitle && !audioInPref ? subs.findIndex(sb => sameLanguage(sb.lang, pref)) : -1);
       }
-      const mseWhyNot = mseFailedRef.current ? 'MSE falló en esta reproducción' : mseUnsupportedReason(res);
+      // MSE plays only the first audio of the file: a title whose wanted audio is another one goes to AVPlay
+      const audioWanted = fileAudioRef.current || PREF_LANG_CODES[settingsService.get().audio] || 'es';
+      const mseWhyNot = mseFailedRef.current
+        ? 'MSE falló en esta reproducción'
+        : mseUnsupportedReason(res) || (mseAudioFits(res.audio, l => sameLanguage(l, audioWanted)) ? '' : 'el audio elegido no es el primero del archivo');
       if (hasAvPlay() && !isTrailer) {
         // Which player and why, for the problem report (the first thing to know when a title misbehaves)
         const resumeAt = startedAtRef.current > 5 ? ` · retomar en ${Math.round(startedAtRef.current)} s` : '';
@@ -601,6 +614,16 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       if (hasAvPlay() && !isTrailer && !mseWhyNot) {
         // Indexed .ts on a TV with MSE: pieces by byte range, instant seeks inside the buffer
         window.__xuperCurrentStreamMeta = { ...res, contentId, seasonId, trackIndex: portalTrackRef.current, startedAt: Date.now() };
+        // The other audios inside the file stay in the menu: choosing one reopens the title with AVPlay
+        const fileLangs: AudioOption[] = [];
+        fileAudioLanguages(res.audio).forEach((lang, i) => {
+          const label = languageName(lang);
+          if (!fileLangs.some(o => o.label === label)) fileLangs.push({ kind: 'file', index: i, label, lang });
+        });
+        if (tracks.length <= 1 && fileLangs.length > 1) {
+          setAudioOptions(fileLangs);
+          setAudioIndex(0);
+        }
         setMseRes(res);
       } else if (hasAvPlay()) {
         playOnTv(res);
@@ -950,15 +973,24 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           const took = Date.now() - seekAt;
           if (took > 1500) logPlayback({ kind: 'stall', player: 'AVPlay', detail: `seek ${Math.round(target)} s tardó ${took} ms` });
           if (pendingSeekRef.current && pendingSeekRef.current.target === target) pendingSeekRef.current.until = Date.now() + 2000;
+          // The viewer moved the video themself: where they are is their position
+          resumeGoalRef.current = 0;
           onSeekDone();
         }, (err: any) => {
           logPlayback({ kind: 'error', player: 'AVPlay', detail: `seek ${Math.round(target)} s: ${(err && (err.name || err.message)) || err} (${avPlayState()})` });
-          if (pendingSeekRef.current && pendingSeekRef.current.target === target) pendingSeekRef.current = null;
+          if (pendingSeekRef.current && pendingSeekRef.current.target === target) {
+            pendingSeekRef.current = null;
+            // The TV stayed where it was: so do the timeline and the position that gets saved
+            const real = window.XuperAVPlay.currentTimeSec || 0;
+            timeRef.current.t = real;
+            setCurrentTime(real);
+          }
           flash('No se pudo mover el video a ese punto');
         });
       } else if (videoRef.current) {
         const v = videoRef.current;
         v.currentTime = target;
+        resumeGoalRef.current = 0;
         if (hasAvPlay()) {
           // On the TV this is the MSE player: slow seeks and seeks that never land go to the playback log
           const seekAt = Date.now();
@@ -983,15 +1015,16 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   // Player time updates while a seek is pending / settling
   const acceptTime = (t: number): boolean => {
     const pending = pendingSeekRef.current;
-    if (!pending) return true;
-    const reached = Math.abs(t - pending.target) <= 8;
-    const expired = pending.until > 0 && Date.now() > pending.until;
-    if (reached || expired) {
+    if (pending) {
+      const reached = Math.abs(t - pending.target) <= 8;
+      const expired = pending.until > 0 && Date.now() > pending.until;
+      if (!reached && !expired) return false;
       pendingSeekRef.current = null;
       resumePendingRef.current = false;
-      return true;
     }
-    return false;
+    // The player is where it was asked to continue: from here its time is the viewer's
+    if (reachedResumeGoal(t, resumeGoalRef.current)) resumeGoalRef.current = 0;
+    return true;
   };
 
   acceptTimeRef.current = acceptTime;
@@ -1011,6 +1044,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     if (audioPrefIdx !== -1) settingsService.set({ audio: audioPrefIdx });
     if (opt.kind === 'avplay') {
       try { window.webapis.avplay.setSelectTrack('AUDIO', opt.index); } catch (e) {}
+    } else if (opt.kind === 'file') {
+      // Another audio of the same file: MSE cannot switch to it, AVPlay reopens the title at the same position
+      fileAudioRef.current = opt.lang || '';
+      setRetryTick(t => t + 1);
     } else {
       // Another audio language is another file on the portal: reload it at the same position
       portalTrackRef.current = opt.index;

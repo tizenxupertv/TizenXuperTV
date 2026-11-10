@@ -1,21 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildVodPlaylist, canPlayVodWithMse, cdnHeaders, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL, playlistLoader, VOD_ENGINE_KEY } from '../src/lib/vodMseEngine.ts';
-
-/** `.idxg` index like the portal's: magic, file name, then 12-byte entries (u64 offset, u32 ms) */
-function idxg(entries: Array<{ off: number; ts: number }>): Uint8Array {
-  const tableStart = 48;
-  const buf = new Uint8Array(tableStart + entries.length * 12);
-  buf[4] = 0x69; buf[5] = 0x64; buf[6] = 0x78; buf[7] = 0x67;
-  const view = new DataView(buf.buffer);
-  entries.forEach((e, i) => {
-    const pos = tableStart + i * 12;
-    view.setUint32(pos, Math.floor(e.off / 4294967296), false);
-    view.setUint32(pos + 4, e.off >>> 0, false);
-    view.setUint32(pos + 8, e.ts, false);
-  });
-  return buf;
-}
+import { buildVodPlaylist, canPlayVodWithMse, cdnHeaders, fileAudioLanguages, mseAudioFits, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL, playlistLoader, VOD_ENGINE_KEY } from '../src/lib/vodMseEngine.ts';
+import { makeIdxg } from './helpers/idxg.ts';
 
 /** A TV window: MSE plays the given types, hls.js and the bridge factory are there */
 function tvWindow(supported: string[], extra: Record<string, unknown> = {}): any {
@@ -61,6 +47,18 @@ test('the localStorage switch turns MSE off on a TV where it misbehaves', () => 
   assert.equal(canPlayVodWithMse(tsTitle, w), false);
 });
 
+test('MSE plays the first audio of the file: a title whose wanted audio is another one is left to AVPlay', () => {
+  const wants = (code: string) => (lang: string) => lang === code;
+  assert.deepEqual(fileAudioLanguages('spa, eng'), ['spa', 'eng']);
+  assert.deepEqual(fileAudioLanguages(undefined), []);
+  assert.equal(mseAudioFits('spa,eng', wants('spa')), true, 'the wanted audio is the first one');
+  assert.equal(mseAudioFits('spa,eng', wants('eng')), false, 'English is the second audio: AVPlay can select it');
+  assert.equal(mseAudioFits('spa,spa,spa,spa,eng', wants('spa')), true);
+  assert.equal(mseAudioFits('spa,eng', wants('por')), true, 'the file does not have the wanted audio: nothing to select');
+  assert.equal(mseAudioFits('eng', wants('spa')), true, 'a single audio');
+  assert.equal(mseAudioFits(undefined, wants('spa')), true);
+});
+
 test('only the headers the CDN checks are sent (User-Agent cannot be set from a page)', () => {
   assert.deepEqual(
     cdnHeaders({ 'Content-Auth': 'a', 'Content-License': 'l', 'User-Agent': 'ua', App: 'x', 'App-Version': '1' }),
@@ -68,15 +66,14 @@ test('only the headers the CDN checks are sent (User-Agent cannot be set from a 
   );
 });
 
-test('the index becomes a byte-range playlist of ~6 s pieces, the file size closing the last one', async () => {
+test('the index becomes a byte-range playlist of ~6 s pieces, the size in its header closing the last one', async () => {
   // Twelve 1 s entries of 188 * 1000 bytes
   const entries = Array.from({ length: 12 }, (_, i) => ({ off: i * 188000, ts: i * 1000 }));
-  const size = 12 * 188000;
+  const index = makeIdxg(entries, { total: 12 * 188000, durationMs: 12000 });
   const requests: Array<{ url: string; headers: any }> = [];
   const fetchFn: any = async (url: string, init: any) => {
     requests.push({ url, headers: init.headers });
-    if (url.endsWith('.idxg')) return { ok: true, status: 200, arrayBuffer: async () => idxg(entries).buffer, headers: { get: () => null } };
-    return { ok: true, status: 206, headers: { get: (h: string) => (h === 'Content-Range' ? `bytes 0-0/${size}` : null) } };
+    return { ok: true, status: 200, arrayBuffer: async () => index.buffer, headers: { get: () => null } };
   };
   const res = await buildVodPlaylist({ ...tsTitle, headers: { 'Content-Auth': 'tok', 'User-Agent': 'ua' } }, fetchFn);
   assert.equal(res.pieces, 2);
@@ -84,10 +81,11 @@ test('the index becomes a byte-range playlist of ~6 s pieces, the file size clos
   assert.match(res.playlist, /#EXT-X-BYTERANGE:1128000@0\n/);
   assert.match(res.playlist, /#EXT-X-BYTERANGE:1128000@1128000\n/);
   assert.match(res.playlist, /#EXT-X-ENDLIST/);
-  assert.equal(requests.length, 2);
+  // One request, for the index: the media file is not asked for its size
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, tsTitle.idxUrl);
   assert.equal(requests[0].headers['Content-Auth'], 'tok');
   assert.equal(requests[0].headers['User-Agent'], undefined);
-  assert.equal(requests[1].headers.Range, 'bytes=0-0');
 });
 
 test('a missing index is an error the player turns into the AVPlay fallback', async () => {
