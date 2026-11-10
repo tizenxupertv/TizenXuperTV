@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { backBufferFor, isLowMemoryTv } from '../src/lib/tvMemory.ts';
+import { backBufferFor, isLegacyVideoTv, isLowMemoryTv } from '../src/lib/tvMemory.ts';
 import { mseHlsConfig } from '../src/lib/vodMseEngine.ts';
 
 const TIZEN_3 = 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 3.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/3.0 TV Safari/538.1';
@@ -25,4 +25,14 @@ test('low-memory TVs keep at most 10 s behind the playhead; others keep the requ
   assert.equal(backBufferFor(20, TIZEN_9), 20);
   // In Node (no navigator) the requested value is kept
   assert.equal(mseHlsConfig({ DefaultConfig: { loader: class {} } }, '', 0).backBufferLength, 20);
+});
+
+test('Tizen 6.0 and older get the plain preview box (their engines show the preview sound without the picture)', () => {
+  const ua = (v: string) => `Mozilla/5.0 (SMART-TV; LINUX; Tizen ${v}) AppleWebKit/537.36 (KHTML, like Gecko) Version/${v} TV Safari/537.36`;
+  assert.equal(isLegacyVideoTv(ua('4.0')), true);
+  assert.equal(isLegacyVideoTv(ua('5.5')), true);
+  assert.equal(isLegacyVideoTv(ua('6.0')), true);
+  assert.equal(isLegacyVideoTv(ua('6.5')), false);
+  assert.equal(isLegacyVideoTv(ua('9.0')), false);
+  assert.equal(isLegacyVideoTv('Mozilla/5.0 (Macintosh) Chrome/130.0 Safari/537.36'), false, 'a desktop browser');
 });
