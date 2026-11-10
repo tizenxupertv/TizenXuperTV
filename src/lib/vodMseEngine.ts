@@ -26,23 +26,30 @@ export interface MseVodSource {
   headers?: Record<string, string>;
 }
 
-/** MPEG-TS title with an index, on a TV whose MSE plays its video codec, with hls.js loaded */
-export function canPlayVodWithMse(res: MseVodSource | null | undefined, w: any = window): boolean {
-  if (!res || !res.idxUrl || res.mime !== 'video/mp2t') return false;
+/** Why this title cannot play through MSE on this TV ('' when it can), for the playback log */
+export function mseUnsupportedReason(res: MseVodSource | null | undefined, w: any = window): string {
+  if (!res) return 'sin datos del video';
+  if (!res.idxUrl) return 'sin índice .idxg';
+  if (res.mime !== 'video/mp2t') return `formato ${res.mime || 'desconocido'}`;
   try {
-    if (w.localStorage && w.localStorage.getItem(VOD_ENGINE_KEY) === 'avplay') return false;
+    if (w.localStorage && w.localStorage.getItem(VOD_ENGINE_KEY) === 'avplay') return 'desactivado en esta TV';
   } catch {
     // no storage: use the default
   }
   const MS = w.MediaSource;
-  if (!MS || typeof MS.isTypeSupported !== 'function') return false;
-  if (!w.Hls || typeof w.Hls.isSupported !== 'function' || !w.Hls.isSupported()) return false;
-  if (typeof w.__xuperCreateHls !== 'function') return false;
-  const codec = String(res.codec || '').toUpperCase();
-  const types = /265|HEVC/.test(codec)
+  if (!MS || typeof MS.isTypeSupported !== 'function') return 'sin MediaSource';
+  if (!w.Hls || typeof w.Hls.isSupported !== 'function' || !w.Hls.isSupported()) return 'sin hls.js';
+  if (typeof w.__xuperCreateHls !== 'function') return 'sin hls.js';
+  const hevc = /265|HEVC/.test(String(res.codec || '').toUpperCase());
+  const types = hevc
     ? ['video/mp4; codecs="hvc1.1.6.L120.90"', 'video/mp4; codecs="hev1.1.6.L120.90"']
     : ['video/mp4; codecs="avc1.640028"', 'video/mp4; codecs="avc1.4d401f"'];
-  return types.some(t => MS.isTypeSupported(t));
+  return types.some(t => MS.isTypeSupported(t)) ? '' : `MSE no decodifica ${hevc ? 'HEVC' : 'H264'}`;
+}
+
+/** MPEG-TS title with an index, on a TV whose MSE plays its video codec, with hls.js loaded */
+export function canPlayVodWithMse(res: MseVodSource | null | undefined, w: any = window): boolean {
+  return mseUnsupportedReason(res, w) === '';
 }
 
 /** The portal headers the CDN checks (User-Agent cannot be set from a page) */

@@ -7,7 +7,7 @@ import { getEpisodeStatus } from '../lib/vodResume';
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
-import { buildVodPlaylist, canPlayVodWithMse, mseHlsConfig, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
+import { buildVodPlaylist, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
 import { friendlyPortalError } from '../lib/portalErrors';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
@@ -82,6 +82,14 @@ function formatTime(seconds: number): string {
 /** AVPlay (hardware player) is only available on the Samsung TV */
 function hasAvPlay(): boolean {
   return !!(window.XuperAVPlay && window.webapis && window.webapis.avplay);
+}
+
+/** AVPlay state and the duration it reports, for the playback log (a 0 s duration means it cannot seek) */
+function avPlayState(): string {
+  let state = '?';
+  try { state = window.webapis.avplay.getState(); } catch (e) {}
+  const dur = Math.round((window.XuperAVPlay && window.XuperAVPlay.durationSec) || 0);
+  return `estado ${state} · duración TV ${dur} s`;
 }
 
 export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
@@ -426,6 +434,9 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       (video as any).onresumeseek = (ok: boolean) => {
         if (!isCurrent()) return;
         resumePendingRef.current = false;
+        const resumeSec = Math.round(startedAtRef.current);
+        if (ok) logPlayback({ kind: 'info', player: 'AVPlay', detail: `retomó en ${resumeSec} s` });
+        else logPlayback({ kind: 'error', player: 'AVPlay', detail: `no pudo retomar en ${resumeSec} s (${avPlayState()})` });
         if (ok) {
           if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + 1500;
         } else {
@@ -481,7 +492,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         if (timing && !timing.logged && !isTrailer) {
           timing.logged = true;
           const now = Date.now();
-          logPlayback({ kind: 'start', player: 'AVPlay', detail: `inicio ${now - timing.at} ms (portal ${timing.resolvedAt - timing.at} ms, TV ${now - timing.resolvedAt} ms)` });
+          logPlayback({ kind: 'start', player: 'AVPlay', detail: `inicio ${now - timing.at} ms (portal ${timing.resolvedAt - timing.at} ms, TV ${now - timing.resolvedAt} ms) · ${avPlayState()}` });
         }
         setIsBuffering(false);
         setIsPlaying(true);
@@ -581,7 +592,13 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         const audioInPref = sameLanguage(res.audio, pref);
         setSubIndex(settings.subtitle && !audioInPref ? subs.findIndex(sb => sameLanguage(sb.lang, pref)) : -1);
       }
-      if (hasAvPlay() && !isTrailer && !mseFailedRef.current && canPlayVodWithMse(res)) {
+      const mseWhyNot = mseFailedRef.current ? 'MSE falló en esta reproducción' : mseUnsupportedReason(res);
+      if (hasAvPlay() && !isTrailer) {
+        // Which player and why, for the problem report (the first thing to know when a title misbehaves)
+        const resumeAt = startedAtRef.current > 5 ? ` · retomar en ${Math.round(startedAtRef.current)} s` : '';
+        logPlayback({ kind: 'info', player: 'VOD', detail: `${mseWhyNot ? `motor AVPlay (${mseWhyNot})` : 'motor MSE'}${res.codec ? ` · ${res.codec}` : ''}${resumeAt}` });
+      }
+      if (hasAvPlay() && !isTrailer && !mseWhyNot) {
         // Indexed .ts on a TV with MSE: pieces by byte range, instant seeks inside the buffer
         window.__xuperCurrentStreamMeta = { ...res, contentId, seasonId, trackIndex: portalTrackRef.current, startedAt: Date.now() };
         setMseRes(res);
@@ -715,6 +732,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         timing.logged = true;
         const now = Date.now();
         logPlayback({ kind: 'start', player: 'MSE', detail: `inicio ${now - timing.at} ms (portal ${timing.resolvedAt - timing.at} ms, TV ${now - timing.resolvedAt} ms)` });
+        const wanted = startedAtRef.current;
+        if (wanted > 5 && Math.abs(video.currentTime - wanted) > 15) {
+          logPlayback({ kind: 'error', player: 'MSE', detail: `no retomó: empezó en ${Math.round(video.currentTime)} s (pedido ${Math.round(wanted)} s)` });
+        }
       }
     };
     const onWaiting = () => setIsBuffering(true);
@@ -867,6 +888,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   // seek is sent once, 220 ms after the last press.
   const accumulatedSkipRef = useRef(0);
   const wasPlayingBeforeSeekRef = useRef(false);
+  /** Last MSE seek target: a later seek cancels the "did it land" check of the previous one */
+  const lastSeekTargetRef = useRef<number | null>(null);
   const isSeekingBurstRef = useRef(false);
   // Holding ◄ ► (or ⏪ ⏩) makes the jumps grow: 10 s, 30 s, 1, 2, 5 min (lib/seekAccel.ts)
   const seekHoldRef = useRef(createSeekHold());
@@ -929,12 +952,28 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           if (pendingSeekRef.current && pendingSeekRef.current.target === target) pendingSeekRef.current.until = Date.now() + 2000;
           onSeekDone();
         }, (err: any) => {
-          logPlayback({ kind: 'error', player: 'AVPlay', detail: `seek ${Math.round(target)} s: ${(err && (err.name || err.message)) || err}` });
+          logPlayback({ kind: 'error', player: 'AVPlay', detail: `seek ${Math.round(target)} s: ${(err && (err.name || err.message)) || err} (${avPlayState()})` });
           if (pendingSeekRef.current && pendingSeekRef.current.target === target) pendingSeekRef.current = null;
           flash('No se pudo mover el video a ese punto');
         });
       } else if (videoRef.current) {
-        videoRef.current.currentTime = target;
+        const v = videoRef.current;
+        v.currentTime = target;
+        if (hasAvPlay()) {
+          // On the TV this is the MSE player: slow seeks and seeks that never land go to the playback log
+          const seekAt = Date.now();
+          lastSeekTargetRef.current = target;
+          v.addEventListener('seeked', () => {
+            const took = Date.now() - seekAt;
+            if (took > 1500) logPlayback({ kind: 'stall', player: 'MSE', detail: `seek ${Math.round(target)} s tardó ${took} ms` });
+          }, { once: true });
+          setTimeout(() => {
+            if (lastSeekTargetRef.current !== target || videoRef.current !== v) return;
+            if (Math.abs(v.currentTime - target) > 10) {
+              logPlayback({ kind: 'error', player: 'MSE', detail: `seek ${Math.round(target)} s no llegó (va en ${Math.round(v.currentTime)} s)` });
+            }
+          }, 6000);
+        }
         onSeekDone();
         if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + 2500;
       }

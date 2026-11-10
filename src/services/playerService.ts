@@ -223,6 +223,14 @@ class PlayerService {
     }
   }
 
+  /** Preview box or fullscreen and the size of the video element on screen (sound without picture in the
+   *  preview but not in fullscreen points to how the TV draws that box, not to the stream) */
+  private screenInfo(): string {
+    const v = this.currentVideoEl;
+    const size = v ? ` ${v.clientWidth}x${v.clientHeight}` : '';
+    return ` · ${this.isFullscreen ? 'pantalla completa' : 'vista previa'}${size}`;
+  }
+
   /** Player of the current channel, for the problem report */
   private playerName(): string {
     return window.__xuperPreviewHls ? 'HLS.js' : 'AVPlay';
@@ -233,7 +241,7 @@ class PlayerService {
 
   private setStatus(code: string, state: LiveSignal, reason?: 'isp' | 'region') {
     if (state === 'playing' && !(this.status.code === code && this.status.state === 'playing')) {
-      logPlayback({ kind: 'start', player: this.playerName(), detail: `reproduciendo${this.pictureInfo()}` });
+      logPlayback({ kind: 'start', player: this.playerName(), detail: `reproduciendo${this.pictureInfo()}${this.screenInfo()}` });
     }
     if (this.status.code === code && this.status.state === state && this.status.reason === reason) return;
     this.status = reason ? { code, state, reason } : { code, state };
@@ -360,7 +368,12 @@ class PlayerService {
   }
 
   public setFullscreen(fullscreen: boolean) {
+    const changed = this.isFullscreen !== fullscreen;
     this.isFullscreen = fullscreen;
+    if (changed && this.activeChannelCode && this.status.state === 'playing') {
+      // After the layout settles, so the size is the one on screen
+      setTimeout(() => logPlayback({ kind: 'info', player: this.playerName(), detail: `cambio a${this.screenInfo().slice(2)} · imagen${this.pictureInfo()}` }), 1500);
+    }
     if (fullscreen) {
       if (window.XuperAVPlay && typeof window.XuperAVPlay.switchToFullscreen === 'function') {
         window.XuperAVPlay.switchToFullscreen();
