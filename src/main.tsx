@@ -12,8 +12,12 @@ import './styles/index.css';
 import './styles/textSize.css';
 import { installTvDebug } from './debug/tvDebug';
 import { logPlayback } from './lib/playbackLog';
+import { isLegacyVideoTv } from './lib/tvMemory';
 
 installTvDebug();
+
+// Tizen 6.0 and older: plain live preview box (html.legacy-video in index.css)
+if (isLegacyVideoTv()) document.documentElement.classList.add('legacy-video');
 
 // Each launch opens a new stretch of the playback log: a launch right after a video means the app closed or crashed
 {
