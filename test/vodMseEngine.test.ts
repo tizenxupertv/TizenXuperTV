@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildVodPlaylist, canPlayVodWithMse, cdnHeaders, mseHlsConfig, MSE_PLAYLIST_URL, playlistLoader, VOD_ENGINE_KEY } from '../src/lib/vodMseEngine.ts';
+import { buildVodPlaylist, canPlayVodWithMse, cdnHeaders, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL, playlistLoader, VOD_ENGINE_KEY } from '../src/lib/vodMseEngine.ts';
 
 /** `.idxg` index like the portal's: magic, file name, then 12-byte entries (u64 offset, u32 ms) */
 function idxg(entries: Array<{ off: number; ts: number }>): Uint8Array {
@@ -41,6 +41,18 @@ test('MSE is used only for indexed .ts titles whose video codec the TV plays thr
   assert.equal(canPlayVodWithMse({ ...tsTitle, mime: 'video/mp4' }, tvWindow([HEVC])), false, 'not MPEG-TS');
   assert.equal(canPlayVodWithMse(tsTitle, tvWindow([HEVC], { MediaSource: undefined })), false, 'no MSE');
   assert.equal(canPlayVodWithMse(tsTitle, tvWindow([HEVC], { __xuperCreateHls: undefined })), false, 'no hls factory');
+});
+
+test('the report says why a title does not use MSE', () => {
+  assert.equal(mseUnsupportedReason(tsTitle, tvWindow([HEVC])), '');
+  assert.equal(mseUnsupportedReason({ ...tsTitle, idxUrl: undefined }, tvWindow([HEVC])), 'sin índice .idxg');
+  assert.equal(mseUnsupportedReason({ ...tsTitle, mime: 'video/mp4' }, tvWindow([HEVC])), 'formato video/mp4');
+  assert.equal(mseUnsupportedReason(tsTitle, tvWindow([AVC])), 'MSE no decodifica HEVC');
+  assert.equal(mseUnsupportedReason(tsTitle, tvWindow([HEVC], { MediaSource: undefined })), 'sin MediaSource');
+  assert.equal(mseUnsupportedReason(tsTitle, tvWindow([HEVC], { __xuperCreateHls: undefined })), 'sin hls.js');
+  const off = tvWindow([HEVC]);
+  off.localStorage.setItem(VOD_ENGINE_KEY, 'avplay');
+  assert.equal(mseUnsupportedReason(tsTitle, off), 'desactivado en esta TV');
 });
 
 test('the localStorage switch turns MSE off on a TV where it misbehaves', () => {

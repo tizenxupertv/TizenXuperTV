@@ -12,7 +12,8 @@ import { iptvService, IPTV_LISTS } from '../services/iptvService';
 import { HIDEABLE_TABS, tabPrefs } from '../services/tabPrefs';
 import { accountService, tvBuildInfo } from '../services/accountService';
 import { updateService, type UpdateStatus } from '../services/updateService';
-import { playbackEvents } from '../lib/playbackLog';
+import { eventsWithinBudget, playbackEvents } from '../lib/playbackLog';
+import { VOD_ENGINE_KEY } from '../lib/vodMseEngine';
 import { formatSpeed, runSpeedTest, SpeedResult, streamingVerdict } from '../lib/speedTest';
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
@@ -165,6 +166,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     };
   }, []);
 
+  /** Below the 16 KB the server accepts (accents take two bytes) */
+  const REPORT_MAX_CHARS = 13000;
   // Problem report for support: TV, network, last network check and recent playback events
   const sendReport = () => {
     if (reportState === 'sending') return;
@@ -194,26 +197,35 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     const now = new Date();
     const local = `${now.getHours() < 10 ? '0' : ''}${now.getHours()}:${now.getMinutes() < 10 ? '0' : ''}${now.getMinutes()}`;
     const build = tvBuildInfo();
+    // Settings that change how videos play, and the browser engine (old Chromium explains layout and player bugs)
+    let vodEngine = 'auto';
+    try { vodEngine = localStorage.getItem(VOD_ENGINE_KEY) || 'auto'; } catch (e) {}
+    const chrome = (navigator.userAgent.match(/Chrome\/(\d+)/) || [])[1] || '?';
+    const st = updateService.status();
+    const settingsInfo = `Versiones beta ${updateService.channel() === 'beta' ? 'sí' : 'no'} · motor películas ${vodEngine} · Chrome ${chrome} · instalada ${st.packaged || '?'}`;
     const imgDiag = report?.images
       ? `Local: ${report.images.local.detail} · Póster (${report.images.vertical.host}): ${report.images.vertical.detail} · Fondo (${report.images.horizontal.host}): ${report.images.horizontal.detail} · Caché: ${report.images.cacheLoaded} OK / ${report.images.cacheFailed} err`
       : '';
-    accountService.sendReport({
+    const infoEvents = [
+      ...(build ? [{ at: now.getTime(), local, kind: 'info', channel: 'Televisor', detail: build }] : []),
+      { at: now.getTime(), local, kind: 'info', channel: 'Ajustes', detail: settingsInfo },
+      ...(caps ? [{ at: now.getTime(), local, kind: 'info', channel: 'Formatos del reproductor', detail: caps }] : []),
+      ...(imgDiag ? [{ at: now.getTime(), local, kind: 'info', channel: 'Carátulas / CDN', detail: imgDiag }] : []),
+      ...(speed ? [{
+        at: now.getTime(), local, kind: 'info', channel: 'Velocidad de internet',
+        detail: `${formatSpeed(speed.mbps)}${speed.latencyMs !== null ? ` · latencia ${speed.latencyMs} ms` : ''}`
+      }] : [])
+    ];
+    const head = {
       app: version,
       model,
       network,
       screen: `${window.screen.width}x${window.screen.height}`,
-      diag: report ? { verdict: report.verdict, portalMs: report.portalMs, cdns: report.cdns } : null,
-      events: [
-        ...playbackEvents(),
-        ...(build ? [{ at: now.getTime(), local, kind: 'info', channel: 'Televisor', detail: build }] : []),
-        ...(caps ? [{ at: now.getTime(), local, kind: 'info', channel: 'Formatos del reproductor', detail: caps }] : []),
-        ...(imgDiag ? [{ at: now.getTime(), local, kind: 'info', channel: 'Carátulas / CDN', detail: imgDiag }] : []),
-        ...(speed ? [{
-          at: now.getTime(), local, kind: 'info', channel: 'Velocidad de internet',
-          detail: `${formatSpeed(speed.mbps)}${speed.latencyMs !== null ? ` · latencia ${speed.latencyMs} ms` : ''}`
-        }] : [])
-      ]
-    }).then(setReportState);
+      diag: report ? { verdict: report.verdict, portalMs: report.portalMs, cdns: report.cdns } : null
+    };
+    // The server accepts 16 KB: the newest playback events that fit, then the TV and network lines
+    const used = JSON.stringify({ report: { ...head, events: infoEvents } }).length;
+    accountService.sendReport({ ...head, events: [...eventsWithinBudget(playbackEvents(), used, REPORT_MAX_CHARS), ...infoEvents] }).then(setReportState);
   };
 
   // First OK asks for confirmation; the second signs out and restarts at the sign-in screen
