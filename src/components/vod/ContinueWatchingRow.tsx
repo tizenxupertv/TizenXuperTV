@@ -3,6 +3,10 @@ import { HistoryItem } from '../../types/history';
 import { ContinueWatchingCard } from './ContinueWatchingCard';
 import { scrollHorizontalSlider } from '../../utils/scrollHelper';
 import { preloadCardNeighbors } from '../../lib/imageCache';
+import { isOlderTv } from '../../lib/tvMemory';
+
+/** Older TVs: no decoding ahead (every card of this row is already mounted) */
+const OLDER_TV = isOlderTv();
 
 interface ContinueWatchingRowProps {
   items: HistoryItem[];
@@ -23,7 +27,7 @@ const ContinueWatchingRowComponent: React.FC<ContinueWatchingRowProps> = ({
     if (focusedIndex !== null && sliderRef.current) {
       const target = sliderRef.current.children[focusedIndex] as HTMLElement;
       scrollHorizontalSlider(sliderRef.current, target, focusedIndex, 48, 160);
-      preloadCardNeighbors(items, focusedIndex, 3, false);
+      if (!OLDER_TV) preloadCardNeighbors(items, focusedIndex, 3, false);
     }
   }, [focusedIndex, items]);
 

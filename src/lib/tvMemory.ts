@@ -28,3 +28,11 @@ export function isLegacyVideoTv(ua: string = typeof navigator !== 'undefined' ? 
   const major = parseInt(m[1], 10);
   return major < 6 || (major === 6 && parseInt(m[2], 10) === 0);
 }
+
+/**
+ * Tizen 6.0 and older, with about 1 to 1.5 GB of RAM: the home frees the images of the rows far from the focus and
+ * does not decode posters ahead of time (a poster decoded off screen is decoded at full size, up to 2000x3000)
+ */
+export function isOlderTv(ua?: string): boolean {
+  return isLegacyVideoTv(ua);
+}
