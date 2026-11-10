@@ -46,6 +46,12 @@
   );
 
   var RATE_MS = 250;
+  // One host may go this long without sending a byte, and this long in all; a whole request, over every host, this long
+  var HOST_IDLE_MS = 8000;
+  var HOST_MAX_MS = 30000;
+  var REQUEST_MAX_MS = 64000;
+  // Starting a session (two requests) that gives no answer at all is given up after this long
+  var SESSION_START_MAX_MS = 180000;
   var SLB_TTL = 300000;
   var PLAY_TTL = 60000;
   var SEARCH_TTL = 180000;
@@ -385,10 +391,17 @@
       var task = queue.length ? queue.shift() : lowQueue.shift();
       session.busy = true;
       lastCallAt = Date.now();
-      task(function () {
+      try {
+        task(function () {
+          session.busy = false;
+          drain();
+        });
+      } catch (e) {
+        // A task that throws must not leave the queue marked busy for good
+        console.error('[MagisClient] queued task failed:', e);
         session.busy = false;
-        drain();
-      });
+        setTimeout(drain, 0);
+      }
     }
   }
 
@@ -434,7 +447,7 @@
 
     function tryHost() {
       if (finished) return;
-      if (idx >= hosts.length) {
+      if (idx >= hosts.length || Date.now() - tStart >= REQUEST_MAX_MS) {
         finished = true;
         return done(new Error(path + ': el portal no respondió'));
       }
@@ -443,7 +456,35 @@
 
       var xhr = new XMLHttpRequest();
       xhr.open('POST', url, true);
-      xhr.timeout = 8000;
+      // The limit is 8 s without receiving anything, not 8 s for the whole answer: a ~1 MB answer on a slow
+      // connection was cut at 8 s and asked again from the next host, eight times over, with the queue waiting
+      var settled = false;
+      var idleTimer = null;
+      var hardTimer = null;
+      var disarm = function () {
+        clearTimeout(idleTimer);
+        clearTimeout(hardTimer);
+      };
+      var expire = function () {
+        if (settled || finished) return;
+        settled = true;
+        disarm();
+        try { xhr.abort(); } catch (e) {}
+        if (isBrowserEnv) {
+          finished = true;
+          return done(new Error(path + ': timeout en navegador local.'));
+        }
+        tryHost();
+      };
+      var arm = function () {
+        if (settled) return;
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(expire, HOST_IDLE_MS);
+      };
+      hardTimer = setTimeout(expire, HOST_MAX_MS);
+      arm();
+      xhr.onprogress = arm;
+      xhr.onreadystatechange = function () { if (xhr.readyState >= 2) arm(); };
       try { xhr.setRequestHeader('apk', APP_ID); } catch (e) {}
       try { xhr.setRequestHeader('apkVer', APK_VER_HEADER); } catch (e) {}
       try { xhr.setRequestHeader('spkgVer', SPKG_VER); } catch (e) {}
@@ -451,7 +492,9 @@
       try { xhr.setRequestHeader('Content-Type', CONTENT_TYPE); } catch (e) {}
 
       xhr.onload = function () {
-        if (finished) return;
+        if (settled || finished) return;
+        settled = true;
+        disarm();
         if (xhr.status >= 200 && xhr.status < 300) {
           var resp;
           try {
@@ -470,6 +513,7 @@
           if (code !== '' && code !== '0') {
             var pErr = new Error(path + ' -> ' + code + ' ' + text(resp.errorMessage));
             pErr.portalCode = code;
+            pErr.portalText = text(resp.errorMessage);
             finished = true;
             return done(pErr);
           }
@@ -501,16 +545,12 @@
       };
 
       xhr.onerror = function () {
+        if (settled || finished) return;
+        settled = true;
+        disarm();
         if (isBrowserEnv) {
           finished = true;
           return done(new Error(path + ': CORS restringido en navegador de escritorio. Usando catálogo local.'));
-        }
-        tryHost();
-      };
-      xhr.ontimeout = function () {
-        if (isBrowserEnv) {
-          finished = true;
-          return done(new Error(path + ': timeout en navegador local.'));
         }
         tryHost();
       };
@@ -518,6 +558,17 @@
     }
 
     tryHost();
+  }
+
+  /**
+   * The portal answered that the session is not valid any more (its codes, or its words). Only what the portal said
+   * counts: a network failure of 'v3/snToken' carries "token" in its message (the path) and used to pass for an
+   * expired session
+   */
+  function isSessionError(err) {
+    if (!err || !err.portalCode) return false;
+    if (err.portalCode === 'aaa100028' || err.portalCode === 'aaa100027') return true;
+    return /aaa10002[0-9]|未登录|sesi[oó]n|login|token/i.test(err.portalCode + ' ' + (err.portalText || ''));
   }
 
   function call(endpoint, payload, opts, callback) {
@@ -552,7 +603,9 @@
       }
       postHttp(endpoint, fullPayload, function (err, res) {
         releaseOnce();
-        if (err && (err.portalCode === 'aaa100028' || err.portalCode === 'aaa100027' || /aaa10002[0-9]|未登录|sesi[oó]n|login|token/i.test((err.portalCode || '') + ' ' + (err.message || ''))) && !opts._retried) {
+        // Not for the two requests that start the session: their retry would wait for the very session start that
+        // is waiting for them, and every later portal call hung until the app was restarted
+        if (isSessionError(err) && !opts._retried && !opts.sessionStart) {
           clearSession();
           return ensureSession(function (sErr) {
             if (sErr) return callback(err);
@@ -567,6 +620,7 @@
 
   var sessionStarting = false;
   var sessionWaiters = [];
+  var sessionAttempt = 0;
 
   function ensureSession(callback) {
     callback = callback || function () {};
@@ -582,6 +636,15 @@
 
     sessionStarting = true;
     session.ready = false;
+    // An attempt that gives no answer at all (a decrypt worker that died) is given up, so the next call can start
+    // another one; its late answers are ignored
+    var attempt = ++sessionAttempt;
+    var watchdog = setTimeout(function () {
+      if (attempt !== sessionAttempt || !sessionStarting) return;
+      console.warn('[MagisClient] session start gave no answer, giving up');
+      sessionAttempt++;
+      notifyWaiters(new Error('inicio de sesión: el portal no respondió'));
+    }, SESSION_START_MAX_MS);
 
     var fp = {};
     for (var k in FINGERPRINT_FIXED) {
@@ -596,6 +659,7 @@
     fp.wifiMac = identity.wifiMac;
 
     function notifyWaiters(err, res) {
+      clearTimeout(watchdog);
       sessionStarting = false;
       var list = sessionWaiters.slice(0);
       sessionWaiters = [];
@@ -604,7 +668,8 @@
       }
     }
 
-    call('v3/snToken', fp, { baseFields: false }, function (err, res) {
+    call('v3/snToken', fp, { baseFields: false, sessionStart: true }, function (err, res) {
+      if (attempt !== sessionAttempt) return;
       if (err) return notifyWaiters(err);
       var snToken = trim(res && res.snToken);
       if (!snToken) return notifyWaiters(new Error('No snToken returned'));
@@ -625,10 +690,12 @@
         signdata: ''
       };
 
-      call('v8/active', activePayload, { baseFields: false }, function (aErr, aRes) {
+      call('v8/active', activePayload, { baseFields: false, sessionStart: true }, function (aErr, aRes) {
+        if (attempt !== sessionAttempt) return;
         // Activation refused for this identity (seen as code 100024): try once more as a new device
         if (aErr && !freshIdentity && /100024$/.test(String(aErr.portalCode || ''))) {
           console.warn('[MagisClient] v8/active refused (' + aErr.portalCode + '), retrying with a new device identity');
+          clearTimeout(watchdog);
           sessionStarting = false;
           var waiting = sessionWaiters.slice(0);
           sessionWaiters = [];
@@ -1277,7 +1344,7 @@
           function handleLiveResponse(lErr, lRes) {
             release();
             if (lErr) {
-              if (!retried && (lErr.portalCode === 'aaa100028' || lErr.portalCode === 'aaa100027' || /aaa10002[0-9]|未登录|sesi[oó]n|login|token/i.test((lErr.portalCode || '') + ' ' + (lErr.message || '')))) {
+              if (!retried && isSessionError(lErr)) {
                 clearSession();
                 return runGetLiveData(true);
               }
