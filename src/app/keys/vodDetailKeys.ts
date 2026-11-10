@@ -186,7 +186,8 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
   const seasonsCount = detailCounts.seasonsCount;
   const episodesCount = detailCounts.episodesCount;
   const relatedCount = currentRelatedItems.length;
-  const castCount = detailCast.length || detailCounts.castCount || 0;
+  // The detail page has no cast row: Reparto y Equipo is only in the Info dialog (handled above)
+  const castCount = 0;
   const hasTrailer = Boolean(detailCounts.hasTrailer || activeDetailItem.trailerUrl || (activeDetailItem as any).trailer);
   // One row: Reproducir ('actions'), then the round buttons ('quick'): Mi lista, Info, Ajustes, Tráiler
   const quick: ('fav' | 'info' | 'settings' | 'trailer')[] = ['fav', 'info', 'settings', ...(hasTrailer ? ['trailer' as const] : [])];

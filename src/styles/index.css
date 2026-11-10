@@ -2736,11 +2736,12 @@ html, body {
 }
 
 .synopsis-modal-close-btn.is-focused {
-  background: rgba(56, 189, 248, 0.35);
-  border-color: #38bdf8;
-  box-shadow: 0 0 0 3px #38bdf8, 0 0 20px rgba(56, 189, 248, 0.7);
-  transform: scale(1.15);
-  color: #ffffff;
+  /* Solid white like the rest of the app's focus: no glow, no scale (nothing can end up cut) */
+  background: #ffffff;
+  border-color: #ffffff;
+  box-shadow: none;
+  transform: none;
+  color: #000000;
 }
 
 .synopsis-modal-title {
@@ -2788,8 +2789,8 @@ html, body {
 
 .synopsis-modal-text-wrap.is-focused {
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(56, 189, 248, 0.55);
-  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.4);
+  border-color: #ffffff;
+  box-shadow: none;
 }
 
 .synopsis-modal-nav-hint {
@@ -2832,9 +2833,11 @@ html, body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 12px;
+  padding: 7px 11px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  /* 2px always, so the focus changes only its colour: no size change, nothing outside the card to be clipped by
+     the scrolling body */
+  border: 2px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -2845,18 +2848,21 @@ html, body {
   border-color: rgba(56, 189, 248, 0.4);
 }
 .synopsis-modal-cast-card.is-focused {
-  background: rgba(56, 189, 248, 0.28);
-  border-color: #38bdf8;
-  box-shadow: 0 0 0 3px #38bdf8, 0 4px 20px rgba(56, 189, 248, 0.5);
-  transform: scale(1.04);
+  background: #ffffff;
+  border-color: #ffffff;
+  box-shadow: none;
+  transform: none;
 }
 .synopsis-modal-cast-card.is-focused .synopsis-modal-cast-name {
-  color: #38bdf8;
+  color: #000000;
   font-weight: 800;
 }
+.synopsis-modal-cast-card.is-focused .synopsis-modal-cast-role {
+  color: #334155;
+}
 .synopsis-modal-cast-card.is-focused .synopsis-modal-cast-avatar {
-  border-color: #38bdf8;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+  border-color: #cbd5e1;
+  box-shadow: none;
 }
 .synopsis-modal-cast-avatar {
   width: 44px;
@@ -5036,6 +5042,18 @@ html, body {
 }
 
 /* Next Episode Card (Clean & Fast, Apple TV Grays) */
+/* "Siguiente episodio" button over the credits: no card, same corner */
+.vod-next-button-wrap {
+  position: absolute;
+  right: 54px;
+  bottom: 140px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
 .vod-next-episode {
   position: absolute;
   right: 54px;
