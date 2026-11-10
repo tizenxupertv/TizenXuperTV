@@ -23,6 +23,27 @@ export interface SearchModalProps {
 
 // Cached catalog items across search modal mounts for instant opening
 let cachedAllVodItems: VodItem[] | null = null;
+const searchResultCache = new Map<string, { items: VodItem[]; total: number; at: number }>();
+
+const RECENT_SEARCHES_KEY = 'xuper_recent_searches_v1';
+const MAX_RECENT = 6;
+
+function loadRecentSearches(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_SEARCHES_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr.filter(s => typeof s === 'string' && s.trim().length > 0).slice(0, MAX_RECENT);
+    }
+  } catch (_) {}
+  return [];
+}
+
+function saveRecentSearches(list: string[]): void {
+  try {
+    localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(list.slice(0, MAX_RECENT)));
+  } catch (_) {}
+}
 
 export const SearchModal: React.FC<SearchModalProps> = ({
   isOpen,
@@ -36,7 +57,9 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const [query, setQuery] = useState<string>('');
   const [submittedQuery, setSubmittedQuery] = useState<string>('');
   const [focusedResultIndex, setFocusedResultIndex] = useState<number>(0);
-  const [focusArea, setFocusArea] = useState<'keyboard' | 'results' | 'refresh'>('keyboard');
+  const [focusArea, setFocusArea] = useState<'keyboard' | 'results' | 'refresh' | 'recent'>('keyboard');
+  const [recentSearches, setRecentSearches] = useState<string[]>(loadRecentSearches);
+  const [recentIndex, setRecentIndex] = useState<number>(0);
   const [kb, setKb] = useState<KbState>(KB_INITIAL);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
 
@@ -47,6 +70,29 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     setSubmittedQuery(targetQ);
     setFocusedResultIndex(0);
     setFocusArea('results');
+
+    if (targetQ.length >= 2) {
+      setRecentSearches(prev => {
+        const next = [targetQ, ...prev.filter(s => s.toLowerCase() !== targetQ.toLowerCase())].slice(0, MAX_RECENT);
+        saveRecentSearches(next);
+        return next;
+      });
+    }
+  };
+
+  const clearRecentSearches = () => {
+    setRecentSearches([]);
+    saveRecentSearches([]);
+    setFocusArea('keyboard');
+  };
+
+  const removeRecentSearch = (term: string) => {
+    setRecentSearches(prev => {
+      const next = prev.filter(s => s.toLowerCase() !== term.toLowerCase());
+      saveRecentSearches(next);
+      return next;
+    });
+    setRecentIndex(0);
   };
 
   // Responsive columns: 6 columns on 1080p/desktop (>=1300px), 5 on smaller screens (<1300px), 2 for live TV
@@ -143,6 +189,16 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       setRemoteTotal(0);
       return;
     }
+
+    const normQ = q.toLowerCase();
+    const cached = searchResultCache.get(normQ);
+    if (cached && (Date.now() - cached.at < 10 * 60 * 1000)) {
+      setRemoteVod(cached.items);
+      setRemoteTotal(cached.total);
+      setRemoteState('done');
+      return;
+    }
+
     const token = ++searchTokenRef.current;
     let alive = true;
     setRemoteState('loading');
@@ -163,8 +219,11 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           isSeries: it.type === 'teleplay' || it.kind === 'serie',
           posterAlternates: collectPosterAlternates(it.poster, it.posterAlternates, it.landscape, it.backdrop)
         }));
-        setRemoteVod(enrichSearchItems(mapped, allVodItems, true));
-        setRemoteTotal(res.total || mapped.length);
+        const enriched = enrichSearchItems(mapped, allVodItems, true);
+        const total = res.total || mapped.length;
+        searchResultCache.set(normQ, { items: enriched, total, at: Date.now() });
+        setRemoteVod(enriched);
+        setRemoteTotal(total);
         setRemoteState('done');
       }, { pageSize: 60 });
     }, 200);
@@ -289,6 +348,43 @@ export const SearchModal: React.FC<SearchModalProps> = ({
         return;
       }
 
+      // Recent searches vertical list navigation
+      if (focusArea === 'recent') {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+        if (e.key === 'ArrowDown') {
+          setRecentIndex(prev => Math.min(recentSearches.length, prev + 1));
+        } else if (e.key === 'ArrowUp') {
+          if (recentIndex === 0) {
+            setFocusArea('keyboard');
+            setKb(prev => ({ ...prev, r: 5 }));
+          } else {
+            setRecentIndex(prev => Math.max(0, prev - 1));
+          }
+        } else if (e.key === 'ArrowRight') {
+          if (totalResults > 0) {
+            setFocusArea('results');
+            setFocusedResultIndex(0);
+          }
+        } else if (e.key === 'ArrowLeft') {
+          setFocusArea('keyboard');
+          setKb(prev => ({ ...prev, r: 5 }));
+        } else if (e.key === 'Enter') {
+          if (recentIndex === recentSearches.length) {
+            clearRecentSearches();
+          } else {
+            const selected = recentSearches[recentIndex];
+            if (selected) {
+              setQuery(selected);
+              submitSearch(selected);
+            }
+          }
+        }
+        return;
+      }
+
       // "Actualizar" button above the popular titles
       if (focusArea === 'refresh') {
         if (e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'Enter' || e.key === 'ArrowUp' || e.key === 'ArrowRight') {
@@ -315,10 +411,23 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           typeKey(e.key === ' ' ? 'space' : e.key);
           return;
         }
-        if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        if (e.key === 'ArrowDown') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          const dir = e.key === 'ArrowUp' ? 'up' : e.key === 'ArrowDown' ? 'down' : e.key === 'ArrowLeft' ? 'left' : 'right';
+          if (kb.r >= 5 && recentSearches.length > 0) {
+            // ↓ from the bottom row of keyboard moves into recent searches!
+            setFocusArea('recent');
+            setRecentIndex(0);
+            return;
+          }
+          const next = moveCursor(kb, 'down');
+          if (next) setKb(next);
+          return;
+        }
+        if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          const dir = e.key === 'ArrowUp' ? 'up' : e.key === 'ArrowLeft' ? 'left' : 'right';
           const next = moveCursor(kb, dir);
           if (next) {
             setKb(next);
@@ -350,14 +459,29 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         e.stopImmediatePropagation();
-        if (focusedResultIndex < cols && showingPopular) setFocusArea('refresh');
-        else setFocusedResultIndex(prev => Math.max(0, prev - cols));
+        if (focusedResultIndex < cols) {
+          if (showingPopular) {
+            setFocusArea('refresh');
+          } else {
+            setFocusArea('keyboard');
+          }
+        } else {
+          setFocusedResultIndex(prev => Math.max(0, prev - cols));
+        }
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         e.stopImmediatePropagation();
-        // ← from the first column goes back to the keyboard on the left
-        if (focusedResultIndex % cols === 0) setFocusArea('keyboard');
-        else setFocusedResultIndex(prev => Math.max(0, prev - 1));
+        // ← from the first column goes back to the left panel (keyboard or recent)
+        if (focusedResultIndex % cols === 0) {
+          if (recentSearches.length > 0 && focusedResultIndex >= cols) {
+            setFocusArea('recent');
+            setRecentIndex(0);
+          } else {
+            setFocusArea('keyboard');
+          }
+        } else {
+          setFocusedResultIndex(prev => Math.max(0, prev - 1));
+        }
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -453,10 +577,56 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                 okLabel="Buscar"
               />
             </div>
+
+            {/* Historial vertical de búsquedas recientes */}
+            {recentSearches.length > 0 && (
+              <div className="search-recent-panel">
+                <div className="search-recent-header">
+                  <span className="search-recent-title">Búsquedas recientes</span>
+                </div>
+                <div className="search-recent-list">
+                  {recentSearches.map((s, idx) => {
+                    const isFoc = focusArea === 'recent' && recentIndex === idx;
+                    return (
+                      <div
+                        key={s}
+                        className={`search-recent-item ${isFoc ? 'is-focused' : ''}`}
+                        onClick={() => {
+                          setQuery(s);
+                          submitSearch(s);
+                        }}
+                      >
+                        <span className="search-recent-item-text">{s}</span>
+                        <button
+                          type="button"
+                          className="search-recent-item-remove"
+                          title="Eliminar de historial"
+                          onClick={e => {
+                            e.stopPropagation();
+                            removeRecentSearch(s);
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <div
+                    className={`search-recent-item search-recent-clear-item ${
+                      focusArea === 'recent' && recentIndex === recentSearches.length ? 'is-focused' : ''
+                    }`}
+                    onClick={clearRecentSearches}
+                  >
+                    <span className="search-recent-item-text">Limpiar historial</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Results Area */}
           <div className="search-results-area">
+
           {showingPopular ? (
             <div className="search-results-counter search-popular-head">
               <span className="search-popular-title">Búsqueda popular</span>
@@ -499,7 +669,12 @@ export const SearchModal: React.FC<SearchModalProps> = ({
             </div>
           ) : totalResults === 0 ? (
             <div className="search-empty-state">
-              <div className="search-empty-icon">🔍</div>
+              <div className="search-empty-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </div>
               <div className="search-empty-title">
                 {!isTvSearch && remoteState === 'loading' ? `Buscando "${submittedQuery}" en todo el catálogo…` : `No se encontraron resultados para "${submittedQuery}"`}
               </div>

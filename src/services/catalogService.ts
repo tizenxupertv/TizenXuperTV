@@ -1088,24 +1088,29 @@ export function portalRootId(root: string): number | undefined {
 }
 
 /** opts.special: restricted children too (adult section, opened after the PIN) */
-export function getPortalColumns(columnId: number, opts?: { special?: boolean }): Promise<PortalColumn[]> {
+export async function getPortalColumns(columnId: number, opts?: { special?: boolean }): Promise<PortalColumn[]> {
   const special = !!(opts && opts.special);
   const key = `xuper_columns_v1_${columnId}${special ? '_s' : ''}`;
-  return new Promise<PortalColumn[]>((resolve, reject) => {
+  
+  // SWR: return cached immediately if available
+  const saved = await kvGet<PortalColumn[]>(key);
+
+  const fetchPromise = new Promise<PortalColumn[]>((resolve, reject) => {
     const client = window.MagisClient;
     if (!client || typeof client.columns !== 'function') return reject(new Error('no portal client'));
     client.columns(columnId, (err: any, list: PortalColumn[]) => (err ? reject(err) : resolve(list || [])), { special });
-  }).then(
-    list => {
-      if (list.length) kvSet(key, list);
-      return list;
-    },
-    async err => {
-      const saved = await kvGet<PortalColumn[]>(key);
-      if (saved && saved.length) return saved;
-      throw err;
-    }
-  );
+  }).then(list => {
+    if (list && list.length) kvSet(key, list);
+    return list;
+  });
+
+  if (saved && saved.length) {
+    // Background revalidation
+    fetchPromise.catch(() => {});
+    return saved;
+  }
+
+  return fetchPromise;
 }
 
 // ---------- Filter screen (v3/filterGenre values, v3/filterByContent titles)
@@ -1167,31 +1172,76 @@ export async function getPopularSearchPage(pageNum: number, pageSize: number): P
   return getPortalColumnPage(cols[0].id, pageNum, pageSize);
 }
 
-export function getPortalColumnPage(
+// Memory + KV cache for column pages (SWR pattern)
+const columnPageMemoryCache = new Map<string, { items: VodItem[]; total: number; at: number }>();
+
+export async function getPortalColumnPage(
   columnId: number,
   pageNum: number,
   pageSize: number,
   opts?: { restricted?: boolean }
 ): Promise<{ items: VodItem[]; total: number }> {
+  const isRestricted = Boolean(opts?.restricted || columnId === 76300);
+  const cacheKey = `xuper_col_page_${columnId}_p${pageNum}_s${pageSize}${isRestricted ? '_r' : ''}`;
+
+  // 1. In-memory instant check (< 1ms)
+  const mem = columnPageMemoryCache.get(cacheKey);
+  if (mem && (Date.now() - mem.at < 15 * 60 * 1000)) {
+    return { items: mem.items, total: mem.total };
+  }
+
+  // 2. IndexedDB instant check (< 10ms)
+  const saved = await kvGet<{ items: any[]; total: number; at: number }>(cacheKey);
+  if (saved && Array.isArray(saved.items) && saved.items.length > 0) {
+    const mapped = {
+      items: saved.items.map((raw, i) => normalizeItem(raw, (pageNum - 1) * pageSize + i)),
+      total: saved.total || saved.items.length
+    };
+    columnPageMemoryCache.set(cacheKey, { ...mapped, at: saved.at || Date.now() });
+
+    // Background revalidation if older than 10 minutes
+    if (Date.now() - (saved.at || 0) > 10 * 60 * 1000) {
+      new Promise<{ items: VodItem[]; total: number }>((resolve, reject) => {
+        const client = window.MagisClient;
+        if (!client || typeof client.columnPage !== 'function') return reject(new Error('no portal client'));
+        client.columnPage(columnId, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
+          if (err) return reject(err);
+          const rawItems = res.items || [];
+          kvSet(cacheKey, { items: rawItems, total: res.total || 0, at: Date.now() });
+          resolve({ items: rawItems, total: res.total || 0 });
+        }, opts);
+      }).catch(() => {});
+    }
+
+    return mapped;
+  }
+
+  // 3. Network fetch
   return new Promise((resolve, reject) => {
     const client = window.MagisClient;
     if (!client || typeof client.columnPage !== 'function') return reject(new Error('no portal client'));
     client.columnPage(columnId, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
       if (err) return reject(err);
       const offset = (pageNum - 1) * pageSize;
-      const isRestricted = Boolean(opts?.restricted || columnId === 76300);
-      resolve({
-        items: (res.items || []).map((raw, i) => {
-          const item = normalizeItem(isRestricted ? { ...raw, restricted: true, privateContent: true, category: raw?.category || 'adult' } : raw, offset + i);
-          if (isRestricted) {
-            item.restricted = true;
-            item.privateContent = true;
-            if (!item.category) item.category = 'adult';
-          }
-          return item;
-        }),
-        total: res.total || 0
+      const rawList = res.items || [];
+      const items = rawList.map((raw, i) => {
+        const item = normalizeItem(isRestricted ? { ...raw, restricted: true, privateContent: true, category: raw?.category || 'adult' } : raw, offset + i);
+        if (isRestricted) {
+          item.restricted = true;
+          item.privateContent = true;
+          if (!item.category) item.category = 'adult';
+        }
+        return item;
       });
+      const total = res.total || 0;
+      
+      // Save in cache
+      columnPageMemoryCache.set(cacheKey, { items, total, at: Date.now() });
+      if (items.length) {
+        kvSet(cacheKey, { items: rawList, total, at: Date.now() });
+      }
+
+      resolve({ items, total });
     }, opts);
   });
 }
