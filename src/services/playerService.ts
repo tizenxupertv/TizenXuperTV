@@ -743,7 +743,7 @@ class PlayerService {
                 // No new token: handle the original error as usual (backups, retries, the error on screen)
                 onHlsError(event, data);
               }
-            });
+            }, { fresh: true });
             return;
           }
           // What the server sent instead of a playlist (an ISP block page, a portal error): links removed

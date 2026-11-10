@@ -51,6 +51,9 @@ import { pk } from './lib/localProfiles';
 import { ProfileMenu, type ProfileMenuAction } from './components/layout/ProfileMenu';
 import { ProfilePickerScreen } from './screens/ProfilePickerScreen';
 
+/** The home's hero stops rotating after this long without a key press */
+const HERO_IDLE_MS = 2 * 60 * 1000;
+
 export const App: React.FC = () => {
   // Read initial tab from URL if present (useful for deep-links & testing)
   const initialTabParam = (new URLSearchParams(window.location.search).get('tab') as TabId) || 'destacados';
@@ -336,6 +339,9 @@ export const App: React.FC = () => {
     if (heroCount <= 1) return;
 
     const timer = setInterval(() => {
+      // Not while the app is hidden, nor after two minutes without a key: each change re-renders the app and decodes
+      // a full-size background, about 450 times an hour on a TV left on the home screen. The next key resumes it
+      if (document.hidden || Date.now() - screensaverResetAtRef.current > HERO_IDLE_MS) return;
       setActiveHeroIndex(prev => (prev + 1) % heroCount);
     }, 8000);
 

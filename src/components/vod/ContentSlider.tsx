@@ -3,6 +3,10 @@ import { VodItem } from '../../types/vod';
 import { PosterCard } from './PosterCard';
 import { scrollHorizontalSlider } from '../../utils/scrollHelper';
 import { preloadCardNeighbors } from '../../lib/imageCache';
+import { isOlderTv } from '../../lib/tvMemory';
+
+/** Older TVs: no decoding ahead (the cards it would cover are already mounted) */
+const OLDER_TV = isOlderTv();
 
 interface ContentSliderProps {
   title: string;
@@ -13,6 +17,8 @@ interface ContentSliderProps {
   focusedIndex: number | null; // index if this row is focused, null if not
   /** The row is on screen or next to it: its first cards load their images */
   nearFocus: boolean;
+  /** The row is far from the focus on a TV short of memory: it lets go of its images until it is near again */
+  releaseImages?: boolean;
   onActivate: (item: VodItem) => void;
   /** Adds a last "Ver todo" card (focus index = items.length) */
   onSeeAll?: () => void;
@@ -26,21 +32,27 @@ const ContentSliderComponent: React.FC<ContentSliderProps> = ({
   isWide,
   focusedIndex,
   nearFocus,
+  releaseImages,
   onActivate,
   onSeeAll
 }) => {
   const sliderRef = useRef<HTMLDivElement>(null);
-  // Images load only for the cards on screen plus a few ahead, and stay once loaded:
-  // portal images are full size and decoding all of them at once stalls the TV
+  // Images load only for the cards on screen plus a few ahead, and stay once loaded (portal images are full size
+  // and decoding all of them at once stalls the TV), except on a TV short of memory, where a row far from the focus
+  // gives them back
   const ahead = isWide ? 4 : 7;
   const [loadCount, setLoadCount] = useState(nearFocus || focusedIndex !== null ? ahead : 0);
   useEffect(() => {
+    if (releaseImages) {
+      setLoadCount(0);
+      return;
+    }
     if (!nearFocus && focusedIndex === null) {
       return;
     }
     const wanted = (focusedIndex || 0) + ahead;
     setLoadCount(c => (wanted > c ? wanted : c));
-  }, [nearFocus, focusedIndex, ahead]);
+  }, [nearFocus, focusedIndex, ahead, releaseImages]);
 
   useLayoutEffect(() => {
     if (focusedIndex !== null && sliderRef.current) {
@@ -51,7 +63,7 @@ const ContentSliderComponent: React.FC<ContentSliderProps> = ({
 
   // Decoupled predictive preloading: runs after frame paint to keep D-pad navigation instant
   useEffect(() => {
-    if (focusedIndex !== null) {
+    if (focusedIndex !== null && !OLDER_TV) {
       const t = setTimeout(() => {
         preloadCardNeighbors(items, focusedIndex, isWide ? 3 : 5, isWide);
       }, 50);
@@ -105,6 +117,7 @@ export const ContentSlider = React.memo<ContentSliderProps>(
     if (prev.isRanked !== next.isRanked) return false;
     if (prev.isWide !== next.isWide) return false;
     if (prev.nearFocus !== next.nearFocus) return false;
+    if (!!prev.releaseImages !== !!next.releaseImages) return false;
     if (!!prev.onSeeAll !== !!next.onSeeAll) return false;
     return true;
   }
