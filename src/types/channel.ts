@@ -18,6 +18,7 @@ export interface LiveCategory {
   name: string;
   isFav?: boolean;
   isEspn?: boolean;
+  isEpicSports?: boolean;
   isM3u?: boolean;
   badge?: string;
   /** Free IPTV list shown as this category (services/iptvService) */

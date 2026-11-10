@@ -2,6 +2,7 @@ import { LiveChannel } from '../types/channel';
 import { normalizeChannel } from '../lib/channelKey';
 import { hostOf, isIspBlockPage, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSequenceFixer } from '../lib/mediaSequence';
+import { epicSportsService } from './epicSportsService';
 
 declare global {
   interface Window {
@@ -46,6 +47,29 @@ function sequenceFixingLoader(Hls: any): any {
         ...callbacks,
         onSuccess: (response: any, stats: any, ctx: any, networkDetails: any) => {
           if (response && typeof response.data === 'string') response.data = fix(response.data);
+          onSuccess(response, stats, ctx, networkDetails);
+        }
+      });
+    }
+  };
+}
+
+/** HLS.js fragment loader that strips the 67-byte fake PNG prefix from Epic Sports / Perelman segments */
+function epicFragmentLoader(Hls: any): any {
+  const Base = Hls.DefaultConfig.loader;
+  return class extends Base {
+    load(context: any, config: any, callbacks: any) {
+      const onSuccess = callbacks.onSuccess;
+      super.load(context, config, {
+        ...callbacks,
+        onSuccess: (response: any, stats: any, ctx: any, networkDetails: any) => {
+          if (response && response.data instanceof ArrayBuffer) {
+            const bytes = new Uint8Array(response.data);
+            // Check PNG magic: 0x89 0x50 0x4E 0x47 and sync byte 0x47 at offset 67
+            if (bytes.length > 67 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[67] === 0x47) {
+              response.data = bytes.slice(67).buffer;
+            }
+          }
           onSuccess(response, stats, ctx, networkDetails);
         }
       });
@@ -294,6 +318,60 @@ class PlayerService {
   }
 
   // ---------------------------------------------------------------------------
+  // Pre-warming & Zero-Latency Zapping (DNS / Socket pre-connect + Stream Pre-Resolve)
+  // ---------------------------------------------------------------------------
+  private prewarmedCodes = new Set<string>();
+
+  /**
+   * Pre-warms network connection and stream URL in background without interrupting playback.
+   * Can be called on cursor hover (dwell ~350ms) or for adjacent channels (CH- / CH+).
+   */
+  public prewarm(channel: LiveChannel | null | undefined): void {
+    if (!channel) return;
+    const code = String(channel.code || channel.id);
+    if (!code || this.prewarmedCodes.has(code) || this.activeChannelCode === code) return;
+    this.prewarmedCodes.add(code);
+
+    // Limit cache set size
+    if (this.prewarmedCodes.size > 25) {
+      const it = this.prewarmedCodes.values();
+      this.prewarmedCodes.delete(it.next().value!);
+    }
+
+    try {
+      if (channel.url && channel.url.startsWith('http')) {
+        // Direct stream: pre-connect TCP/TLS to host
+        const match = channel.url.match(/^(https?:\/\/[^/]+)/i);
+        if (match && match[1]) {
+          const origin = match[1];
+          if (!document.querySelector(`link[rel="preconnect"][href="${origin}"]`)) {
+            const link = document.createElement('link');
+            link.rel = 'preconnect';
+            link.href = origin;
+            document.head.appendChild(link);
+          }
+        }
+        if (channel.url.includes('epictvparaiphone.top') || channel.url.includes('playlatam.site')) {
+          epicSportsService.getPulseraToken().catch(() => {});
+        }
+      } else if (window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
+        // Portal stream: pre-resolve so it gets stored in liveResolveCache[code]
+        window.MagisClient.resolveLive(code, (err: any, meta: any) => {
+          if (!err && meta && meta.url) {
+            const m = meta.url.match(/^(https?:\/\/[^/]+)/i);
+            if (m && m[1]) {
+              const link = document.createElement('link');
+              link.rel = 'preconnect';
+              link.href = m[1];
+              document.head.appendChild(link);
+            }
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------------------
   // Replays (catch-up programmes played as a channel): seek and pause like a movie
   // ---------------------------------------------------------------------------
   private replayTarget: number | null = null;
@@ -365,8 +443,23 @@ class PlayerService {
     this.usingAvPreview = false;
     this.watchStart(code, videoEl);
 
-    // If channel has direct stream URL (M3U / IPTV)
+    // If channel has direct stream URL (M3U / IPTV / Epic Sports)
     if (channel.url && channel.url.startsWith('http')) {
+      if (channel.url.includes('epictvparaiphone.top') || channel.url.includes('playlatam.site')) {
+        epicSportsService.getPulseraToken().then(token => {
+          if (this.activeChannelCode !== code) return;
+          window.__xuperCurrentStreamMeta = {
+            url: channel.url,
+            headers: { 'X-Pulsera': token }
+          };
+          this.streamHls(channel.url!, videoEl, window.__xuperCurrentStreamMeta, code);
+        }).catch(() => {
+          if (this.activeChannelCode !== code) return;
+          this.streamHls(channel.url!, videoEl, undefined, code);
+        });
+        return;
+      }
+
       if (channel.url.includes('.m3u8')) {
         this.streamHls(channel.url, videoEl, undefined, code);
       } else if (fullscreen && window.XuperAVPlay && window.XuperAVPlay.playStream) {
@@ -465,9 +558,10 @@ class PlayerService {
     if (window.__xuperCreateHls || (window.Hls && window.Hls.isSupported())) {
       try {
         const pLoader = sequenceFixingLoader(window.Hls);
+        const fLoader = epicFragmentLoader(window.Hls);
         const hls = window.__xuperCreateHls
-          ? window.__xuperCreateHls({ pLoader })
-          : new window.Hls({ enableWorker: false, lowLatencyMode: false, backBufferLength: 15, pLoader });
+          ? window.__xuperCreateHls({ pLoader, fLoader })
+          : new window.Hls({ enableWorker: false, lowLatencyMode: false, backBufferLength: 15, pLoader, fLoader });
         window.__xuperPreviewHls = hls;
 
         let backupIdx = 0;
