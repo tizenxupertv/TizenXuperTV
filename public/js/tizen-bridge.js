@@ -1677,9 +1677,32 @@
     });
   }
 
+  // Universal fragment loader that strips fake image/PNG prefixes (TikTok CDN / Perelman)
+  function createUniversalFragmentLoader(HlsClass) {
+    var Base = HlsClass.DefaultConfig.loader;
+    return class extends Base {
+      load(context, config, callbacks) {
+        var onSuccess = callbacks.onSuccess;
+        super.load(context, config, Object.assign({}, callbacks, {
+          onSuccess: function (response, stats, ctx, networkDetails) {
+            if (response && response.data instanceof ArrayBuffer) {
+              var bytes = new Uint8Array(response.data);
+              // Check PNG magic: 0x89 0x50 0x4E 0x47 and sync byte 0x47 at offset 67
+              if (bytes.length > 67 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[67] === 0x47) {
+                response.data = bytes.slice(67).buffer;
+              }
+            }
+            onSuccess(response, stats, ctx, networkDetails);
+          }
+        }));
+      }
+    };
+  }
+
   // `extra` adds or replaces options (the player passes its playlist loader)
   window.__xuperCreateHls = function (extra) {
     if (!window.Hls || !Hls.isSupported()) return null;
+    var defaultFLoader = createUniversalFragmentLoader(window.Hls);
     var config = {
       enableWorker: false,
       lowLatencyMode: false,
@@ -1690,6 +1713,7 @@
       manifestLoadingMaxRetry: 2,
       levelLoadingTimeOut: 8000,
       fragLoadingTimeOut: 10000,
+      fLoader: defaultFLoader,
       debug: false,
       xhrSetup: function (xhr, url) {
         function attachHeaders(reqUrl) {
@@ -1711,6 +1735,7 @@
               if (h['Content-License']) xhr.setRequestHeader('Content-License', h['Content-License']);
               if (h['App']) xhr.setRequestHeader('App', h['App']);
               if (h['App-Version']) xhr.setRequestHeader('App-Version', h['App-Version']);
+              if (h['X-Pulsera']) xhr.setRequestHeader('X-Pulsera', h['X-Pulsera']);
             } catch (e) {
               console.error('[HLS xhrSetup error]', e);
             }

@@ -69,6 +69,7 @@ interface VodDetailViewProps {
   onSelectSubOption?: (sub: string) => void;
   onOpenSynopsisModal?: () => void;
   onCloseSynopsisModal?: () => void;
+  onItemChange?: (item: VodItem) => void;
 }
 
 export const VodDetailView: React.FC<VodDetailViewProps> = ({
@@ -95,7 +96,8 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   onSelectSubOption,
   onSelectSetting,
   onOpenSynopsisModal,
-  onCloseSynopsisModal
+  onCloseSynopsisModal,
+  onItemChange
 }) => {
   useViewProfiler('Detalle VOD');
   const [detailData, setDetailData] = useState<{
@@ -105,11 +107,13 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  // Episodes of a season other than the opened one (portal: every season is its own content id)
-  const [seasonEps, setSeasonEps] = useState<{ seasonId: string; episodes: VodEpisode[] } | null>(null);
+  // Season details & episodes of a season other than the opened one
+  const [currentSeasonData, setCurrentSeasonData] = useState<{ item: VodItem; seasonId: string; episodes: VodEpisode[] } | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
   const [historyTick, setHistoryTick] = useState(0);
-  const [isFav, setIsFav] = useState<boolean>(() => favoritesService.isFavorite(item.id));
+
+  const currentItem = currentSeasonData?.item || detailData?.item || item;
+  const [isFav, setIsFav] = useState<boolean>(() => favoritesService.isFavorite(currentItem.id));
   const [persons, setPersons] = useState<PersonResult>({ directors: [], actors: [] });
   const [selectedPerson, setSelectedPerson] = useState<PersonDetail | null>(null);
   const [localSynopsisModal, setLocalSynopsisModal] = useState<boolean>(false);
@@ -120,8 +124,8 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
 
   useEffect(() => {
     let alive = true;
-    if (item && item.id) {
-      getPersons(item.id)
+    if (currentItem && currentItem.id) {
+      getPersons(currentItem.id)
         .then(res => {
           if (alive) setPersons(res);
         })
@@ -130,15 +134,15 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     return () => {
       alive = false;
     };
-  }, [item.id]);
+  }, [currentItem.id]);
 
   useEffect(() => historyService.subscribe(() => setHistoryTick(t => t + 1)), []);
   useEffect(() => {
-    setIsFav(favoritesService.isFavorite(item.id));
+    setIsFav(favoritesService.isFavorite(currentItem.id));
     return favoritesService.subscribe(() => {
-      setIsFav(favoritesService.isFavorite(item.id));
+      setIsFav(favoritesService.isFavorite(currentItem.id));
     });
-  }, [item.id]);
+  }, [currentItem.id]);
 
   const episodesSliderRef = useRef<HTMLDivElement>(null);
   const castSliderRef = useRef<HTMLDivElement>(null);
@@ -154,7 +158,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     let isMounted = true;
     setIsLoading(true);
     setLoadError(false);
-    setSeasonEps(null);
+    setCurrentSeasonData(null);
     setLocalSynopsisModal(false);
 
     catalogService.getVodDetail(item).then(data => {
@@ -191,8 +195,6 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
       viewTokenRef.current++;
     };
   }, [item]);
-
-  const currentItem = detailData?.item || item;
 
   const effectiveDirectors = useMemo<PersonDetail[]>(() => {
     if (persons.directors.length > 0) return persons.directors;
@@ -276,13 +278,13 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   }, [detailData?.seasons]);
   // Memoized so effects below only run when the list really changes
   const episodes = useMemo<VodEpisode[]>(
-    () => (seasonEps ? seasonEps.episodes : (detailData?.episodes || NO_EPISODES)),
-    [seasonEps, detailData]
+    () => (currentSeasonData ? currentSeasonData.episodes : (detailData?.episodes || NO_EPISODES)),
+    [currentSeasonData, detailData]
   );
-  const currentSeasonId = seasonEps ? seasonEps.seasonId : String(item.id);
+  const currentSeasonId = currentSeasonData ? currentSeasonData.seasonId : String(item.id);
   const currentSeasonNumber = (seasons.find(s => String(s.id) === currentSeasonId) || seasons[focus.seasonIndex] || seasons[0])?.number;
 
-  // Load the episodes of the season selected in the season pills
+  // Load the episodes & details of the season selected in the season pills
   useEffect(() => {
     if (!detailData || seasons.length < 2) return;
     const target = seasons[focus.seasonIndex];
@@ -291,8 +293,43 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     let alive = true;
     setSeasonLoading(true);
     catalogService.getVodDetail({ ...item, id: String(target.id) })
-      .then(d => { if (alive && token === seasonTokenRef.current) setSeasonEps({ seasonId: String(target.id), episodes: d.episodes }); })
-      .catch(() => { if (alive && token === seasonTokenRef.current) setSeasonEps({ seasonId: String(target.id), episodes: [] }); })
+      .then(d => {
+        if (!alive || token !== seasonTokenRef.current) return;
+        const updatedItem: VodItem = {
+          ...d.item,
+          id: String(target.id),
+          backdrop: d.item.backdrop || detailData?.item.backdrop || item.backdrop,
+          poster: d.item.poster || detailData?.item.poster || item.poster,
+          landscape: d.item.landscape || detailData?.item.landscape || item.landscape,
+          isSeries: true,
+          kind: 'serie'
+        };
+        setCurrentSeasonData({
+          item: updatedItem,
+          seasonId: String(target.id),
+          episodes: d.episodes
+        });
+        if (onItemChange) {
+          onItemChange(updatedItem);
+        }
+      })
+      .catch(() => {
+        if (alive && token === seasonTokenRef.current) {
+          const fallbackItem: VodItem = {
+            ...item,
+            id: String(target.id),
+            title: target.name || item.title
+          };
+          setCurrentSeasonData({
+            item: fallbackItem,
+            seasonId: String(target.id),
+            episodes: []
+          });
+          if (onItemChange) {
+            onItemChange(fallbackItem);
+          }
+        }
+      })
       .then(() => { if (alive && token === seasonTokenRef.current) setSeasonLoading(false); });
     return () => {
       alive = false;
@@ -419,7 +456,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         seasonsCount: seasons.length || (isSeries ? 1 : 0),
         episodesCount: episodes.length,
         relatedCount: relatedItems.length,
-        castCount: 0,
+        castCount: effectiveCast.length,
         isSeries,
         hasTrailer,
         choices
@@ -847,6 +884,51 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                 {captionEp.duration && <span className="vod-ep-caption-meta">{captionEp.duration}</span>}
               </div>
             )}
+          </section>
+        )}
+
+        {/* Cast / Reparto Section */}
+        {effectiveCast && effectiveCast.length > 0 && (
+          <section className="vod-detail-cast-section" ref={castSectionRef}>
+            <h2 className="section-title">Reparto y Equipo</h2>
+            <div className="vod-cast-slider" ref={castSliderRef}>
+              {effectiveCast.map((p, pIdx) => {
+                const isCastFocused = focus.area === 'cast' && (focus.castIndex ?? 0) === pIdx;
+                return (
+                  <div
+                    key={p.puId || `${p.name}-${pIdx}`}
+                    className={`poster-card apple-poster-card vod-cast-card ${isCastFocused ? 'is-focused' : ''}`}
+                    tabIndex={0}
+                    onClick={() => {
+                      if (onSelectPerson) onSelectPerson(p);
+                      else setSelectedPerson(p);
+                    }}
+                  >
+                    <div className="poster-card-img-wrap">
+                      <div className="vod-cast-poster-placeholder">
+                        <svg className="vod-cast-person-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                      </div>
+                      {p.icon ? (
+                        <img
+                          src={p.icon}
+                          alt={p.name}
+                          className="poster-card-img"
+                          loading="lazy"
+                          onError={e => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                        />
+                      ) : null}
+                    </div>
+                    <div className="poster-card-footer">
+                      <div className="poster-card-title">{p.name}</div>
+                      <div className="poster-card-meta">{p.personType === 1 ? 'Director' : 'Reparto'}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </section>
         )}
 

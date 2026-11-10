@@ -347,6 +347,9 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
       setLiveTvFocus(prev => ({ ...prev, channelIndex: nextIdx }));
       setTunedLiveChannel(liveChannels[nextIdx]);
       triggerOsd();
+      // Zero-Latency Zapping: Pre-warm adjacent channel for the next step
+      const peekIdx = (nextIdx - 1 + liveChannels.length) % liveChannels.length;
+      if (liveChannels[peekIdx]) playerService.prewarm(liveChannels[peekIdx]);
     }
     return true;
   }
@@ -356,6 +359,9 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
       setLiveTvFocus(prev => ({ ...prev, channelIndex: nextIdx }));
       setTunedLiveChannel(liveChannels[nextIdx]);
       triggerOsd();
+      // Zero-Latency Zapping: Pre-warm adjacent channel for the next step
+      const peekIdx = (nextIdx + 1) % liveChannels.length;
+      if (liveChannels[peekIdx]) playerService.prewarm(liveChannels[peekIdx]);
     }
     return true;
   }

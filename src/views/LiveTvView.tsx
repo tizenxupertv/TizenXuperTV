@@ -14,6 +14,7 @@ import { CatchupModal } from '../components/live/CatchupModal';
 import { normalizeText } from '../utils/normalizeText';
 import { getChannelEntry, setChannelEntry } from '../lib/channelCache';
 import { pk } from '../lib/localProfiles';
+import { epicSportsService } from '../services/epicSportsService';
 
 declare global {
   interface Window {
@@ -24,10 +25,11 @@ declare global {
 }
 
 export const DEFAULT_LIVE_CATEGORIES: LiveCategory[] = [
-  { id: 'favs', name: '★ Favoritos', isFav: true },
-  { id: 'espn', name: 'ESPN', isEspn: true },
+  { id: 'favs', name: 'Favoritos', isFav: true },
   { id: 76182, name: 'Todos los canales' },
   { id: 76206, name: 'Deportes en Vivo' },
+  { id: 'espn', name: 'ESPN', isEspn: true, badge: 'BETA' },
+  { id: 'epic-sports', name: 'Deportes+', isEpicSports: true, badge: 'BETA' },
   { id: 76205, name: 'Cine & Series 24/7' },
   { id: 76188, name: 'Colombia' },
   { id: 76191, name: 'España' },
@@ -471,11 +473,32 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             .map(c => ({ id: c.id || c.columnId, name: c.name || c.title }))
             // The adult category ("18+") exists only while the +18 section is on
             .filter(c => adultOn || !parentalService.isAdultCategory(c.name));
-          const allCats = withIptvCategories([
-            { id: 'favs', name: '★ Favoritos', isFav: true },
-            { id: 'espn', name: 'ESPN', isEspn: true },
-            ...formatted
-          ]);
+          // Find position of "Deportes" or insert after Favorites/Todos
+          const sportsIdx = formatted.findIndex(c => /deportes/i.test(c.name));
+          const espnCat: LiveCategory = { id: 'espn', name: 'ESPN', isEspn: true, badge: 'BETA' };
+          const epicCat: LiveCategory = { id: 'epic-sports', name: 'Deportes+', isEpicSports: true, badge: 'BETA' };
+
+          let ordered: LiveCategory[] = [];
+          if (sportsIdx !== -1) {
+            // Insert ESPN and Deportes+ right after the Deportes category
+            ordered = [
+              { id: 'favs', name: 'Favoritos', isFav: true },
+              ...formatted.slice(0, sportsIdx + 1),
+              espnCat,
+              epicCat,
+              ...formatted.slice(sportsIdx + 1)
+            ];
+          } else {
+            // Fallback if no category matches "deportes"
+            ordered = [
+              { id: 'favs', name: 'Favoritos', isFav: true },
+              espnCat,
+              epicCat,
+              ...formatted
+            ];
+          }
+
+          const allCats = withIptvCategories(ordered);
           setCategories(allCats);
           if (onCategoriesLoaded) onCategoriesLoaded(allCats);
         } else {
@@ -515,7 +538,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       }
       const cat = categories[idx++];
 
-      if (!cat || cat.id === 'favs' || cat.id === 'espn') {
+      if (!cat || cat.id === 'favs' || cat.id === 'espn' || cat.id === 'epic-sports' || cat.isEpicSports) {
         setTimeout(prefetchStep, 40);
         return;
       }
@@ -585,8 +608,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       });
     };
 
-    // Wait until the first screens are interactive before downloading every category
-    const startTimer = setTimeout(prefetchStep, 5000);
+    // Wait until the first screens are interactive before downloading every category (start prefetch after 800ms)
+    const startTimer = setTimeout(prefetchStep, 800);
     return () => {
       isCancelled = true;
       clearTimeout(startTimer);
@@ -596,6 +619,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   // Fetch Channels when active category changes (0ms instant if cached in memory!)
   useEffect(() => {
     if (!activeCategory) return;
+    let alive = true;
     const catId = String(activeCategory.id);
 
     if (activeCategory.isFav) {
@@ -658,6 +682,44 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       return;
     }
 
+    // Epic Sports (Deportes Latam) category: 27 channels with custom pulsera handshake
+    if (activeCategory.id === 'epic-sports' || activeCategory.isEpicSports) {
+      // 1. Render immediately from memory/static list (0ms delay)
+      const initialRaw = epicSportsService.getStaticChannels();
+      const initialFeeds: LiveChannel[] = initialRaw.map(c => ({
+        ...c,
+        isFav: !!favMap[channelKey(c)]
+      }));
+      initialFeeds.forEach(c => {
+        channelMasterCache.current[String(c.id || c.code)] = c;
+      });
+      const visible = filterLockedChannels(initialFeeds, categories, 'epic-sports');
+      setChannels(visible);
+      categoryChannelsCache.set('epic-sports', initialFeeds);
+      setChannelEntry('epic-sports', initialFeeds);
+      setIsLoadingChannels(false);
+      if (onChannelsLoaded) onChannelsLoaded(visible);
+
+      // 2. Fetch fresh dynamic list in the background
+      epicSportsService.getChannels().then(rawChannels => {
+        const freshFeeds: LiveChannel[] = rawChannels.map(c => ({
+          ...c,
+          isFav: !!favMap[channelKey(c)]
+        }));
+        freshFeeds.forEach(c => {
+          channelMasterCache.current[String(c.id || c.code)] = c;
+        });
+        const freshVisible = filterLockedChannels(freshFeeds, categories, 'epic-sports');
+        setChannels(freshVisible);
+        categoryChannelsCache.set('epic-sports', freshFeeds);
+        setChannelEntry('epic-sports', freshFeeds);
+        if (onChannelsLoaded) onChannelsLoaded(freshVisible);
+      }).catch(err => {
+        console.warn('[LiveTvView] Failed background sync for Epic channels:', err);
+      });
+      return;
+    }
+
     // Free IPTV list: memory, saved copy or download (once), see iptvService
     if (activeCategory.iptvListId) {
       const listId = activeCategory.iptvListId;
@@ -689,12 +751,39 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       return () => { alive = false; };
     }
 
-    // 1. In-memory cache: 0ms instant display!
+    // 1. In-memory cache: 0ms instant display! Background revalidate if older than 10 mins
     if (categoryChannelsCache.has(catId)) {
       const cached = filterLockedChannels(categoryChannelsCache.get(catId)!, categories, catId);
       setChannels(cached);
       setIsLoadingChannels(false);
       if (onChannelsLoaded) onChannelsLoaded(cached);
+
+      // Silent background revalidation: keep live EPG / channel updates fresh without flickering
+      const parsedEntry = getChannelEntry(catId);
+      const isFresh = parsedEntry && (Date.now() - parsedEntry.at < 10 * 60 * 1000);
+      if (!isFresh && window.MagisClient && typeof window.MagisClient.getLiveChannels === 'function') {
+        window.MagisClient.getLiveChannels(catId, 1, 50, (err: any, list: any[]) => {
+          if (!alive || err || !Array.isArray(list) || !list.length) return;
+          const chs: LiveChannel[] = list.map((c, idx) => ({
+            id: c.channelCode || c.id || idx,
+            name: c.name || c.channelName || 'Canal',
+            code: c.channelCode || String(c.id || ''),
+            url: c.streamUrl || '',
+            logo: c.logo || c.channelLogo || '',
+            now: realText(c.now || c.currentProgram),
+            next: realText(c.next || c.nextProgram),
+            time: c.time || 'EN VIVO',
+            isFav: !!favMap[channelKey(c)]
+          }));
+          chs.forEach(c => {
+            channelMasterCache.current[String(c.id || c.code)] = c;
+          });
+          categoryChannelsCache.set(catId, chs);
+          const visible = filterLockedChannels(chs, categories, catId);
+          setChannels(visible);
+          setChannelEntry(catId, chs);
+        });
+      }
       return;
     }
 
@@ -712,6 +801,32 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           });
           setIsLoadingChannels(false);
           if (onChannelsLoaded) onChannelsLoaded(visible);
+
+          // Silent background revalidation if data is older than 10 mins
+          const isFresh = (Date.now() - parsed.at < 10 * 60 * 1000);
+          if (!isFresh && window.MagisClient && typeof window.MagisClient.getLiveChannels === 'function') {
+            window.MagisClient.getLiveChannels(catId, 1, 50, (err: any, list: any[]) => {
+              if (!alive || err || !Array.isArray(list) || !list.length) return;
+              const chs: LiveChannel[] = list.map((c, idx) => ({
+                id: c.channelCode || c.id || idx,
+                name: c.name || c.channelName || 'Canal',
+                code: c.channelCode || String(c.id || ''),
+                url: c.streamUrl || '',
+                logo: c.logo || c.channelLogo || '',
+                now: realText(c.now || c.currentProgram),
+                next: realText(c.next || c.nextProgram),
+                time: c.time || 'EN VIVO',
+                isFav: !!favMap[channelKey(c)]
+              }));
+              chs.forEach(c => {
+                channelMasterCache.current[String(c.id || c.code)] = c;
+              });
+              categoryChannelsCache.set(catId, chs);
+              const visibleFresh = filterLockedChannels(chs, categories, catId);
+              setChannels(visibleFresh);
+              setChannelEntry(catId, chs);
+            });
+          }
           return;
         }
       }
@@ -721,6 +836,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     setIsLoadingChannels(true);
     if (window.MagisClient && typeof window.MagisClient.getLiveChannels === 'function') {
       window.MagisClient.getLiveChannels(catId, 1, 50, (err: any, list: any[]) => {
+        if (!alive) return;
         if (!err && Array.isArray(list) && list.length) {
           const chs: LiveChannel[] = list.map((c, idx) => ({
             id: c.channelCode || c.id || idx,
@@ -753,6 +869,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       if (onChannelsLoaded) onChannelsLoaded([]);
       setIsLoadingChannels(false);
     }
+    return () => { alive = false; };
   }, [activeCategory, favMap, categories, lockTick]);
 
   // When channels load and nothing is tuned yet (first run), tune the saved channel or the first one.
@@ -799,6 +916,16 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
 
   // Which channel is currently under cursor vs which channel is tuned/playing
   const focusedChannel = channels[focus.channelIndex] || tunedChannel || channels[0] || null;
+
+  // Zero-Latency Zapping: Pre-warm network connection and stream URL on cursor dwell (~350ms)
+  useEffect(() => {
+    if (!focusedChannel || isSameChannel(focusedChannel, tunedChannel)) return;
+    const timer = setTimeout(() => {
+      playerService.prewarm(focusedChannel);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [focusedChannel, tunedChannel]);
+
   // The info panel always describes the channel that is playing in the preview
   const displayChannel = tunedChannel || focusedChannel;
 
@@ -894,7 +1021,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           ) : channels.length === 0 ? (
             <div className="live-empty-msg">
               {activeCategory.isFav
-                ? 'Aún no tienes canales en ★ Favoritos.\nSintoniza un canal y presiona Añadir a Favoritos.'
+                ? 'Aún no tienes canales en Favoritos.\nSintoniza un canal y presiona Añadir a Favoritos.'
                 : activeCategory.iptvListId && channelsError
                   ? channelsError
                   : 'No hay canales disponibles en esta categoría.\nSi no carga ningún canal, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en Configuración › General › Red › Estado de la red › Configuración de IP.'}
@@ -1168,6 +1295,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                     }`}
                   >
                     <span className="pc-cat-name">{cat.name}</span>
+                    {cat.badge && <span className="pc-cat-badge">{cat.badge}</span>}
                     {!cat.isFav && parentalService.isAdultCategory(cat.name) && <span className="pc-cat-lock">🔒</span>}
                   </div>
                 ))}
@@ -1178,7 +1306,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                 {drawerChannels.length === 0 ? (
                   <div className="pc-empty-msg">
                     {drawerSearching ? `Sin resultados para "${drawerQuery.trim()}"` : activeCategory.isFav
-                      ? 'Aún no tienes canales en ★ Favoritos.\nEn el reproductor usa el botón ☆ Favorito para guardarlos.'
+                      ? 'Aún no tienes canales en Favoritos.\nEn el reproductor usa el botón ☆ Favorito para guardarlos.'
                       : 'No hay canales disponibles en esta categoría'}
                   </div>
                 ) : (
