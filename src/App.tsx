@@ -156,20 +156,25 @@ export const App: React.FC = () => {
 
   // Inactivity screensaver for OLED/QLED panels (5 minutes without remote input)
   const screensaverTimerRef = useRef<any>(null);
+  const screensaverResetAtRef = useRef(0);
   const resetScreensaverTimer = useCallback(() => {
+    // A held key repeats ~15 times a second: once a second is enough to keep the 5 minutes running
+    const now = Date.now();
+    if (now - screensaverResetAtRef.current < 1000) return;
+    screensaverResetAtRef.current = now;
     if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
       window.XuperPlatform.setScreenSaver(false);
     }
     if (screensaverTimerRef.current) clearTimeout(screensaverTimerRef.current);
     screensaverTimerRef.current = setTimeout(() => {
       // Only engage screensaver if not actively playing fullscreen video
-      if (!activeVodPlayer && !isFullscreenLive) {
+      if (!playingRef.current) {
         if (window.XuperPlatform && window.XuperPlatform.setScreenSaver) {
           window.XuperPlatform.setScreenSaver(true);
         }
       }
     }, 5 * 60 * 1000);
-  }, [activeVodPlayer, isFullscreenLive]);
+  }, []);
 
   // ---------- A downloaded update (services/updateService.ts): a TV app is rarely started from scratch, so it is not
   // left for the next launch. Restarting = reloading the page (public/js/boot.js starts the new version).
@@ -193,12 +198,19 @@ export const App: React.FC = () => {
   useEffect(() => {
     resetScreensaverTimer();
     const onActivity = () => resetScreensaverTimer();
-    window.addEventListener('keydown', onActivity, { passive: true });
+    // Capture phase, registered once at start: Search, Explorar, Perfil and the PIN dialog stop their keys before
+    // the bubble phase, and the 5 minutes ran out while the viewer was using them
+    window.addEventListener('keydown', onActivity, { capture: true, passive: true });
     return () => {
-      window.removeEventListener('keydown', onActivity);
+      window.removeEventListener('keydown', onActivity, { capture: true });
       if (screensaverTimerRef.current) clearTimeout(screensaverTimerRef.current);
     };
   }, [resetScreensaverTimer]);
+  // A video that starts or ends without a key (the last episode finishing) restarts the 5 minutes too
+  useEffect(() => {
+    screensaverResetAtRef.current = 0;
+    resetScreensaverTimer();
+  }, [isPlaying, resetScreensaverTimer]);
 
   const detail = useVodDetail(featuredItems, movieItems, seriesItems);
   const {
@@ -304,6 +316,11 @@ export const App: React.FC = () => {
   const currentHeroItems = useMemo<VodItem[]>(
     () => heroItemsForTab(selectedTab, catalog),
     [selectedTab, featuredItems, movieItems, seriesItems, kidsItems, animeItems]
+  );
+  // One array for the screens that search the whole catalog: a new one on every render made them redo their indexes
+  const allCatalogItems = useMemo<VodItem[]>(
+    () => [...featuredItems, ...movieItems, ...seriesItems, ...kidsItems, ...animeItems],
+    [featuredItems, movieItems, seriesItems, kidsItems, animeItems]
   );
   const currentRows = useMemo(
     () => buildTabRows(selectedTab, catalog),
@@ -718,6 +735,7 @@ export const App: React.FC = () => {
     onToggleChannelsDrawer: () => setShowFullscreenGuide(prev => !prev),
     onOpenDrawerSearch: () => setFullscreenGuideArea('search'),
     onToggleOsd: () => setShowFullscreenOsd(prev => !prev),
+    onScreenOff: () => live.setScreenOff(true),
     onChannelsLoaded: (chs: LiveChannel[]) => {
       setLiveChannels(chs);
       if (!tunedLiveChannel && chs.length > 0) {
@@ -850,7 +868,6 @@ export const App: React.FC = () => {
           drawerCatIndex={fullscreenCatCursor}
           fullscreenFocusBtn={fullscreenFocusBtn}
           screenOff={live.screenOff}
-          onScreenOff={() => live.setScreenOff(true)}
           numericBuffer={numericBuffer}
           catchupChannel={live.catchupChannel}
           setCatchupChannel={live.setCatchupChannel}
@@ -915,7 +932,6 @@ export const App: React.FC = () => {
         <VodDetailView
           item={activeDetailItem}
           focus={detailFocus}
-          isFavorite={favoritesService.isFavorite(activeDetailItem.id)}
           relatedItems={currentRelatedItems}
           onBack={detail.handleBackDetail}
           onPlay={(it, ep, isTrailer) => playFromDetail(it, ep, isTrailer)}
@@ -1010,7 +1026,7 @@ export const App: React.FC = () => {
               isSearchOpen={isSearchOpen}
               initialSection={screen.section}
               liveCategories={liveCategories}
-              catalogItems={[...featuredItems, ...movieItems, ...seriesItems, ...kidsItems, ...animeItems]}
+              catalogItems={allCatalogItems}
               onClose={pop}
               onRequestPin={(mode, onSuccess) => requestPin(mode, onSuccess)}
               onOpenVod={it => {
@@ -1041,7 +1057,7 @@ export const App: React.FC = () => {
               initialColumn={screen.column}
               fixedItems={screen.items}
               catalogRows={catalog.catalogRows}
-              catalogItems={[...featuredItems, ...movieItems, ...seriesItems, ...kidsItems, ...animeItems]}
+              catalogItems={allCatalogItems}
               onClose={pop}
               onOpenVod={it => handleOpenDetail(it)}
               onOpenSearch={() => setIsSearchOpen(true)}
