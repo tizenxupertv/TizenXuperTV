@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { posterInWindow } from '../../lib/posterWindow';
 import { TabId } from '../layout/TopNavbar';
 import { LiveChannel } from '../../types/channel';
 import { VodItem } from '../../types/vod';
@@ -750,6 +751,9 @@ export const SearchModal: React.FC<SearchModalProps> = ({
             <div className="search-vod-grid" ref={resultsContainerRef}>
               {filteredVod.map((item, idx) => {
                 const isFocused = focusArea === 'results' && focusedResultIndex === idx;
+                // Posters only around the focus, and none while the detail or the player covers the search: every
+                // result used to keep its full-size poster decoded (lib/posterWindow.ts)
+                const showPoster = !hidden && posterInWindow(idx, focusArea === 'results' ? focusedResultIndex : 0, vodCols);
 
                 return (
                   <div
@@ -761,8 +765,9 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                   >
                     <div className="svc-poster-wrap">
                       <img
+                        key={showPoster ? 'poster' : 'placeholder'}
                         className="svc-poster"
-                        src={item.poster || 'assets/placeholder_vertical.png'}
+                        src={showPoster ? (item.poster || 'assets/placeholder_vertical.png') : 'assets/placeholder_vertical.png'}
                         alt={item.title}
                         data-alt-idx="0"
                         onError={e => {
