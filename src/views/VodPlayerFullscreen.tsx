@@ -364,7 +364,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   useEffect(() => {
     if (isTrailer || !nextEpisode || !onPlayEpisode || !(duration > 120) || nextOffer === 'end') return;
     const left = duration - currentTime;
-    const inCredits = left <= CREDITS_WINDOW_S && left > 1;
+    // Up to the very end: with a lower limit the offer closed in the last second and the end opened a second one
+    const inCredits = left <= CREDITS_WINDOW_S;
     const opening = inCredits && !nextOffer && isPlaying && !creditsDismissedRef.current && !pendingSeekRef.current;
     if (opening) setNextOffer('credits');
     if (inCredits && (opening || nextOffer === 'credits')) {
@@ -375,8 +376,6 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       setNextCountdown(null);
     }
   }, [currentTime, duration, isPlaying, isTrailer, nextEpisode, onPlayEpisode, nextOffer]);
-  // Length of the card's countdown bar: the credits window, or the 10 s after the end
-  const countdownTotal = nextOffer === 'credits' ? CREDITS_COUNTDOWN_S : NEXT_EPISODE_SECONDS;
   const playNext = useCallback(() => {
     setNextOffer(null);
     setNextCountdown(null);
@@ -1681,56 +1680,16 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         </div>
       )}
 
-      {/* Over the credits: just a button (OK plays the next episode, Back hides it) */}
-      {nextOffer === 'credits' && nextEpisode && (
+      {/* Next episode: one button, over the credits (Back hides it) and after the end (Back leaves) */}
+      {nextOffer && nextEpisode && (
         <div className="vod-next-button-wrap">
           <div className="vod-next-btn" onClick={playNext}>
             <span className="vod-next-btn-icon">▶</span>
             <span>Siguiente episodio{nextCountdown !== null ? ` en ${nextCountdown}` : ''}</span>
           </div>
-          <span className="vod-next-cancel-hint"><b>Atrás</b> para seguir viendo</span>
-        </div>
-      )}
-
-      {/* After the end: the card with the next episode */}
-      {nextOffer === 'end' && nextEpisode && (
-        <div className="vod-next-episode">
-          {nextCountdown !== null && (
-            <div className="vod-next-progress-track">
-              <div
-                className="vod-next-progress-fill"
-                style={{ width: `${Math.max(0, Math.min(100, ((countdownTotal - nextCountdown) / countdownTotal) * 100))}%` }}
-              />
-            </div>
-          )}
-          <div className="vod-next-inner">
-            <div
-              className="vod-next-thumb"
-              style={{
-                backgroundImage: `url('${nextEpisode.picture || item.backdrop || item.landscape || 'assets/placeholder_landscape.png'}')`
-              }}
-            >
-              <div className="vod-next-play-icon">▶</div>
-            </div>
-            <div className="vod-next-info">
-              <div className="vod-next-badge-row">
-                <span className="vod-next-tag">SIGUIENTE EPISODIO</span>
-                {nextCountdown !== null && <span className="vod-next-timer">en {nextCountdown}s</span>}
-              </div>
-              <div className="vod-next-title">
-                {seasonNumber ? `T${seasonNumber}:` : ''}E{nextEpisode.number || epIndex + 2} · {nextEpisode.title || nextEpisode.name || 'Capítulo'}
-              </div>
-              <div className="vod-next-btn-row">
-                <div className="vod-next-btn" onClick={playNext}>
-                  <span className="vod-next-btn-icon">▶</span>
-                  <span>Ver ahora</span>
-                </div>
-                <span className="vod-next-cancel-hint">
-                  <b>Atrás</b> para salir
-                </span>
-              </div>
-            </div>
-          </div>
+          <span className="vod-next-cancel-hint">
+            <b>Atrás</b> {nextOffer === 'credits' ? 'para seguir viendo' : 'para salir'}
+          </span>
         </div>
       )}
 
