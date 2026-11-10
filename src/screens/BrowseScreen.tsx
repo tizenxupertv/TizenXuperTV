@@ -304,6 +304,7 @@ function findInitialColumn(cols: PortalColumn[], title: string, column: string |
 
 import { setTrackOffset } from '../utils/scrollHelper';
 import { useViewProfiler } from '../lib/perfMonitor';
+import { ensurePortalSnapshot } from '../lib/portalSnapshot';
 
 interface BrowseScreenProps {
   isTop: boolean;
@@ -464,6 +465,15 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
     });
   }, [root]);
 
+  // With no catalog at hand the screen falls back to the snapshot shipped with the app, loaded on demand
+  const [snapshotTick, setSnapshotTick] = useState(0);
+  useEffect(() => {
+    if (catalogItems && catalogItems.length) return;
+    let alive = true;
+    ensurePortalSnapshot().then(() => { if (alive) setSnapshotTick(t => t + 1); });
+    return () => { alive = false; };
+  }, [catalogItems]);
+
   // ---------- Offline pool (bundled / saved catalog) for the app's own categories
   const { fullPool, allPool } = useMemo(() => {
     const list: VodItem[] = [];
@@ -516,7 +526,7 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
       });
     }
     return { fullPool: list, allPool: filtered };
-  }, [fixedItems, catalogItems, root]);
+  }, [fixedItems, catalogItems, root, snapshotTick]);
 
   const isPlatformOrCross = (id: string) =>
     ['netflix', 'hbo', 'disney', 'prime_paramount', 'apple_hulu', 'sports'].includes(id);

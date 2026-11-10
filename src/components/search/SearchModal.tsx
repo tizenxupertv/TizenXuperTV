@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { posterInWindow } from '../../lib/posterWindow';
+import { ensurePortalSnapshot } from '../../lib/portalSnapshot';
 import { TabId } from '../layout/TopNavbar';
 import { LiveChannel } from '../../types/channel';
 import { VodItem } from '../../types/vod';
@@ -286,6 +287,11 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const showSkeleton = !isTvSearch && ((!submittedQuery.trim() && !popular && popularLoading) || (!!submittedQuery.trim() && remoteState === 'loading' && totalResults === 0));
 
   // Auto-focus input only when search opens fresh (preserves query & results when returning from VOD detail view!)
+  // Search results without artwork borrow posters from the catalog snapshot shipped with the app: load it when the
+  // search opens (it is no longer read on every start)
+  useEffect(() => {
+    if (isOpen) ensurePortalSnapshot();
+  }, [isOpen]);
   const prevOpenRef = useRef(false);
   useEffect(() => {
     if (isOpen && !prevOpenRef.current) {

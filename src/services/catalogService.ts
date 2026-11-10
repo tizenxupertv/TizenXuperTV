@@ -1,5 +1,6 @@
 import { kvGet, kvSet } from '../lib/kvStore.ts';
 import { liveCatalogSave } from '../lib/liveCatalog.ts';
+import { ensurePortalSnapshot } from '../lib/portalSnapshot.ts';
 import type { VodItem, VodEpisode, VodSeason, PersonDetail, PersonResult } from '../types/vod';
 import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../lib/catalogOrganizer.ts';
 import { formatDuration } from '../lib/vodResume.ts';
@@ -306,7 +307,8 @@ class CatalogService {
     const live = fresh && fresh.length ? fresh : (saved ? saved.items : []);
     if (live.length) return this.categorize(live.map((it: any, idx: number) => normalizeItem(it, idx)));
 
-    // 1. Check window.XUPERTV_PORTAL (rich bundled portal catalog with 610 items)
+    // 1. Check window.XUPERTV_PORTAL (rich bundled portal catalog with 610 items), loaded only now that it is needed
+    await ensurePortalSnapshot();
     if (typeof window !== 'undefined' && window.XUPERTV_PORTAL && Array.isArray(window.XUPERTV_PORTAL.items) && window.XUPERTV_PORTAL.items.length > 0) {
       const all = window.XUPERTV_PORTAL.items.map((it: any, idx: number) => normalizeItem(it, idx));
       return this.categorize(all);
