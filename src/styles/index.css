@@ -6248,6 +6248,16 @@ html.xuper-vod-avplay .app-root,
   letter-spacing: 0.5px;
 }
 
+/* The Ko-fi QR is drawn by the app: white quiet zone around it, as the PayPal image has */
+.pf-donate-qr-drawn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  box-sizing: border-box;
+  line-height: 0;
+}
+
 .pf-donate-badge-kofi {
   background: #ff5e5b;
 }

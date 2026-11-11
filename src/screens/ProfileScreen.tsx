@@ -70,6 +70,8 @@ const SIZE_OPTS = ['Normal', 'Grande', 'Pequeño'];
 const STYLE_OPTS = ['Aa', 'Aa', 'Aa'];
 const GRID_COLS = 7;
 const IPTV_COLUMNS = 3;
+/** Where the Ko-fi QR of the donation screen leads */
+const KOFI_URL = 'https://ko-fi.com/tizenxupertv';
 
 /** Telegram places, as QR codes: the TV cannot open links. Channel and group are invitations with approval */
 const TELEGRAM_LINKS = [
@@ -847,11 +849,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <div className="pf-donate-badge">PayPal Oficial</div>
             </div>
             <div className="pf-donate-card">
-              <img
-                src="assets/kofi-donation-qr.svg"
-                alt="Código QR de Donación Ko-fi"
-                className="pf-donate-qr"
-              />
+              {/* Drawn from the address, not an image file: a new file in assets/ cannot reach TVs through the
+                  self-update (tools/update-release.mjs), they would all have to reinstall */}
+              <div className="pf-donate-qr pf-donate-qr-drawn" role="img" aria-label="Código QR de Donación Ko-fi">
+                <QrCode text={KOFI_URL} size={236} />
+              </div>
               <div className="pf-donate-badge pf-donate-badge-kofi">Ko-fi</div>
             </div>
             <div className="pf-donate-info">
