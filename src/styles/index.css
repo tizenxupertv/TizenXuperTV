@@ -6209,7 +6209,7 @@ html.xuper-vod-avplay .app-root,
 .pf-donate-content {
   display: flex;
   align-items: flex-start;
-  gap: 48px;
+  gap: 32px;
   margin-top: 18px;
 }
 
@@ -6246,6 +6246,10 @@ html.xuper-vod-avplay .app-root,
   padding: 4px 16px;
   border-radius: 12px;
   letter-spacing: 0.5px;
+}
+
+.pf-donate-badge-kofi {
+  background: #ff5e5b;
 }
 
 .pf-donate-info {

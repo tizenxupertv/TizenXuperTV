@@ -845,6 +845,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               />
               <div className="pf-donate-badge">PayPal Oficial</div>
             </div>
+            <div className="pf-donate-card">
+              <img
+                src="assets/kofi-donation-qr.svg"
+                alt="Código QR de Donación Ko-fi"
+                className="pf-donate-qr"
+              />
+              <div className="pf-donate-badge pf-donate-badge-kofi">Ko-fi</div>
+            </div>
             <div className="pf-donate-info">
               <h3 className="pf-donate-heading">Apoya el desarrollo de TizenXuper TV</h3>
               <p className="pf-donate-text">
@@ -862,7 +870,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </div>
                 <div className="pf-donate-step">
                   <span className="pf-step-num">3</span>
-                  <span>Ingresa de forma segura a PayPal para realizar tu contribución voluntaria.</span>
+                  <span>Elige PayPal o Ko-fi (tarjeta, sin crear cuenta) para realizar tu contribución voluntaria.</span>
                 </div>
               </div>
               <p className="pf-donate-thanks">¡Muchas gracias por apoyar a la comunidad de TizenXuper TV!</p>
