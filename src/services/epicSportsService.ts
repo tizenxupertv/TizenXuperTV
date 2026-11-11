@@ -44,6 +44,24 @@ export const STATIC_EPIC_CHANNELS: LiveChannel[] = [
   { id: 'epic-boliviatv', code: 'epic-boliviatv', name: 'Bolivia TV', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/boliviatv.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/bolivia_tv_color.png?v=18' }
 ];
 
+/**
+ * Our own channels in the same category, added by hand. They are kept apart because the list above is only the
+ * fallback: the list downloaded from the service replaces it, and these must stay whichever one is shown.
+ * A direct address plays as it is (the service's permit is only sent to the service's own hosts).
+ *
+ * One line per channel, between the brackets. `id` and `code` are the same text, unique, and start with "extra-".
+ */
+export const EXTRA_CHANNELS: LiveChannel[] = [
+  // { id: 'extra-nombre', code: 'extra-nombre', name: 'Nombre del canal', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'http://servidor/ruta/index.m3u8', logo: 'https://servidor/logo.png' },
+  { id: 'extra-espnu', code: 'extra-espnu', name: 'ESPN U HD', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'http://85.237.89.160:9590/usa-s/ESPN-U-HD/index.m3u8', logo: 'http://schedulesdirect-api20141201-logos.s3.dualstack.us-east-1.amazonaws.com/stationLogos/s45654_dark_360w_270h.png' },
+];
+
+/** The service's channels followed by our own; ours never repeat one the service already lists */
+export function withExtraChannels(list: LiveChannel[]): LiveChannel[] {
+  const seen = new Set(list.map(c => String(c.id)));
+  return list.concat(EXTRA_CHANNELS.filter(c => !seen.has(String(c.id))));
+}
+
 const DEFAULT_TOKEN = '14940f62.gente.1794265432.09cc2c3cae6f0ee370aa074bd28b68644471ce22fb58eb9866061b30ec6ae953';
 
 class EpicSportsService {
@@ -115,7 +133,7 @@ class EpicSportsService {
   }
 
   public getStaticChannels(): LiveChannel[] {
-    return this.cachedChannels || STATIC_EPIC_CHANNELS;
+    return this.cachedChannels || withExtraChannels(STATIC_EPIC_CHANNELS);
   }
 
   public async getChannels(): Promise<LiveChannel[]> {
@@ -164,17 +182,17 @@ class EpicSportsService {
           };
         });
 
-        this.cachedChannels = mapped;
+        this.cachedChannels = withExtraChannels(mapped);
         this.channelsCacheTime = now;
-        return mapped;
+        return this.cachedChannels;
       }
     } catch (err) {
       console.warn('[EpicSportsService] Falling back to static channels list:', err);
     }
 
-    this.cachedChannels = STATIC_EPIC_CHANNELS;
+    this.cachedChannels = withExtraChannels(STATIC_EPIC_CHANNELS);
     this.channelsCacheTime = now;
-    return STATIC_EPIC_CHANNELS;
+    return this.cachedChannels;
   }
 }
 
