@@ -712,8 +712,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         <div className="pf-parental">
           <h2 className="pf-title">TV abierta (listas gratuitas)</h2>
           <p className="pf-note">
-            Canales públicos y gratuitos recopilados por iptv-org. Cada lista activada aparece como una categoría al final de
-            TV en vivo y se descarga la primera vez que la abres. Algunas señales pueden caerse o estar bloqueadas en tu región.
+            Canales que sus dueños publican gratis, recopilados por el proyecto público iptv-org. TizenXuper TV solo los
+            muestra: no los mantiene ni controla su disponibilidad. Cada lista activada aparece como una categoría al final
+            de TV en vivo y se descarga la primera vez que la abres. Algunas señales pueden caerse o estar bloqueadas en tu región.
           </p>
           <div className="pf-iptv-grid" style={{ gridTemplateColumns: `repeat(${IPTV_COLUMNS}, 1fr)` }}>
             {IPTV_LISTS.map(l => {
