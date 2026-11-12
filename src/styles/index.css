@@ -5605,6 +5605,12 @@ html.xuper-vod-avplay .app-root,
   color: #ffffff;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9), 0 0 2px #000000;
   transition: transform 0.25s ease;
+  pointer-events: none;
+  user-select: none;
+}
+
+.vp-subtitle[hidden] {
+  display: none !important;
 }
 
 .vp-subtitle.is-raised {

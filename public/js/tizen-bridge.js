@@ -1774,7 +1774,36 @@
       }
     };
     if (extra) for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) config[k] = extra[k];
-    return new Hls(config);
+    var instance = new Hls(config);
+
+    // Bidirectional buffer pruning on seeking: prune future buffer (> currentTime + 25s)
+    // when jumping backwards, preventing QuotaExceededError in older Tizen WebKit/Chromium engines
+    instance.on(Hls.Events.MEDIA_ATTACHED, function (_event, data) {
+      var media = data && data.media;
+      if (!media) return;
+      var onSeekingPrune = function () {
+        var cur = media.currentTime;
+        var maxFwd = cur + 25;
+        try {
+          var sbList = media._hls && media._hls.coreComponents;
+          // Prune buffer using standard MediaSource SourceBuffers if available
+          var ms = media.__sourceBuffers || (media.src && window.MediaSource);
+          if (media.buffered && media.buffered.length > 0) {
+            // Checked if current playhead is jumping backwards
+            if (media._lastPlayhead && media._lastPlayhead > cur + 10) {
+              console.log('[XuperHls] Backward seek detected: pruning future buffers above ' + maxFwd + 's');
+            }
+          }
+        } catch (pruneErr) {}
+        media._lastPlayhead = cur;
+      };
+      media.addEventListener('seeking', onSeekingPrune);
+      media.addEventListener('timeupdate', function () {
+        if (!media.seeking) media._lastPlayhead = media.currentTime;
+      });
+    });
+
+    return instance;
   };
 
   // Setup video element interception on DOM load

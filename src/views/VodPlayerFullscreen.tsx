@@ -1648,11 +1648,14 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
       {isBuffering && !error && <div className="vod-player-spinner" />}
 
-      {subtitleText && (
-        <div className={`vp-subtitle ${osdVisible ? 'is-raised' : ''} ${subSize} ${subStyle}`}>
-          {subtitleText.split('\n').map((line, i) => <div key={i}>{line}</div>)}
-        </div>
-      )}
+      {/* Subtitles Overlay */}
+      <div
+        className={`vp-subtitle ${osdVisible ? 'is-raised' : ''} ${subSize} ${subStyle}`}
+        hidden={!subtitleText}
+        style={{ display: subtitleText ? 'block' : 'none' }}
+      >
+        {subtitleText ? subtitleText.split('\n').map((line, i) => <div key={i}>{line}</div>) : null}
+      </div>
 
       {/* Apple TV Frosted Glass Seek HUD */}
       {seekHud && (
