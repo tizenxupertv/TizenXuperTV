@@ -97,7 +97,7 @@ export const DonateMomentNotice: React.FC<{ onClose: () => void }> = ({ onClose 
 };
 
 /** "New version" notice, shown once per version after the session check: how to update, and a QR to the guide */
-export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; onClose: () => void }> = ({ info, current, onClose }) => {
+export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; cleanInstall?: boolean; onClose: () => void }> = ({ info, current, cleanInstall, onClose }) => {
   useNoticeKeys(onClose);
 
   return (
@@ -111,13 +111,24 @@ export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; onClose
           <div className="upd-notice-badge">🆕 Versión nueva</div>
           <h1 className="upd-notice-title">Ya salió TizenXuper TV {info.version}</h1>
           <p className="upd-notice-lead">
-            Tienes la {current}. Actualízala para tener las últimas mejoras y correcciones.
+            {cleanInstall
+              ? `Tienes la ${current}. Esta versión cambia archivos base de la app y no puede instalarse sola: hace falta una instalación nueva y limpia.`
+              : `Tienes la ${current}. Actualízala para tener las últimas mejoras y correcciones.`}
           </p>
-          <div className="upd-notice-steps">
-            <div className="upd-notice-step"><span className="tg-login-num">1</span><span>Descarga <b>TizenXuperTV.wgt</b> del bot de Telegram (<b>Última versión</b>)</span></div>
-            <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Instálalo con Apps2Samsung encima de la que tienes</span></div>
-            <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Tu lista, tus canales favoritos y tu sesión se conservan</span></div>
-          </div>
+          {cleanInstall ? (
+            <div className="upd-notice-steps">
+              <div className="upd-notice-step"><span className="tg-login-num">1</span><span>Descarga <b>TizenXuperTV.wgt</b> del bot de Telegram (<b>Última versión</b>)</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">2</span><span><b>Desinstala</b> la app actual de tu TV (mantén pulsado OK sobre TizenXuper TV y elige Eliminar)</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Instala el .wgt con Apps2Samsung como una app nueva</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">4</span><span>Al abrirla tendrás que iniciar sesión otra vez; los favoritos y ajustes guardados en la TV pueden perderse</span></div>
+            </div>
+          ) : (
+            <div className="upd-notice-steps">
+              <div className="upd-notice-step"><span className="tg-login-num">1</span><span>Descarga <b>TizenXuperTV.wgt</b> del bot de Telegram (<b>Última versión</b>)</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Instálalo con Apps2Samsung encima de la que tienes</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Tu lista, tus canales favoritos y tu sesión se conservan</span></div>
+            </div>
+          )}
           <div className="upd-notice-ok">
             <span className="upd-notice-key">OK</span><span>Continuar</span>
           </div>
