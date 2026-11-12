@@ -4724,11 +4724,19 @@ html, body {
   gap: 6px;
   width: 100%;
 }
-
 .osk-row {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  margin-bottom: 6px;
   gap: 6px;
+}
+@supports (display: grid) {
+  .osk-row {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: 0;
+  }
 }
 
 /* Action keys (123, delete, search) and the space bar span several columns */
@@ -6792,6 +6800,15 @@ html.xuper-vod-avplay .app-root,
 
 .search-keyboard-wrap .osk-row {
   gap: 8px;
+  margin-bottom: 8px;
+}
+.osk-row .osk-key {
+  margin: 0 3px;
+}
+@supports (display: grid) {
+  .osk-row .osk-key {
+    margin: 0;
+  }
 }
 
 .search-keyboard-wrap .osk-key {

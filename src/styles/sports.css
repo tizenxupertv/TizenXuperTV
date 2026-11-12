@@ -98,10 +98,40 @@
   color: #94a3b8;
 }
 
-.spb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; height: 118px; margin-bottom: 18px; }
+.spb-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  gap: 18px;
+}
+@supports (display: grid) {
+  .spb-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    height: 118px;
+  }
+}
 .spb-card {
-  display: flex; gap: 18px; padding: 16px 18px; border-radius: 18px; box-sizing: border-box; height: 118px; overflow: hidden;
+  display: flex;
+  flex: 0 0 calc(33.333% - 12px);
+  width: calc(33.333% - 12px);
+  gap: 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  box-sizing: border-box;
+  height: 118px;
+  overflow: hidden;
   background: rgba(255, 255, 255, 0.04);
+}
+@supports (display: grid) {
+  .spb-card {
+    flex: initial;
+    width: auto;
+  }
+}
+.spb-card-time {
+  margin-right: 14px;
 }
 .spb-card.is-done { opacity: 0.6; }
 .spb-card.is-done.spb-focus { opacity: 1; }
