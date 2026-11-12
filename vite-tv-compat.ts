@@ -1,4 +1,10 @@
 import type { Plugin } from 'vite';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { transformSync } from 'esbuild';
+
+/** Own scripts copied as they are from public/js: minified in dist (not boot.js, the root of trust, nor vendor files) */
+const MINIFY_PUBLIC = ['js/magis-client.js', 'js/tizen-bridge.js'];
 
 /**
  * Compatibility for older Samsung TVs (Tizen 4.0 = Chromium 56):
@@ -97,6 +103,19 @@ export function tvCompatPlugin(appVersion = 'dev'): Plugin {
     transform(code, id) {
       if (!id.endsWith('.css')) return null;
       return { code: addCssFallbacks(code), map: null };
+    },
+    closeBundle() {
+      // Only after a production build (dist exists with the copied public files)
+      for (const rel of MINIFY_PUBLIC) {
+        const file = join(process.cwd(), 'dist', rel);
+        try {
+          const src = readFileSync(file, 'utf8');
+          const out = transformSync(src, { minify: true, target: 'chrome56', legalComments: 'none' }).code;
+          if (out.length < src.length) writeFileSync(file, out);
+        } catch {
+          // missing in dev or a syntax esbuild rejects: leave the file as it is
+        }
+      }
     },
     transformIndexHtml: {
       order: 'post',
