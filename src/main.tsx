@@ -124,7 +124,7 @@ const Root: React.FC = () => {
       {updatedTo
         ? <UpdatedNotice version={updatedTo} onClose={closeUpdated} />
         : manualUpdate
-          ? <UpdateNotice info={manualUpdate} current={accountService.deviceInfo().version} onClose={closeUpdate} />
+          ? <UpdateNotice info={manualUpdate} current={accountService.deviceInfo().version} cleanInstall={status.needsReinstall} onClose={closeUpdate} />
           : donateMoment && <DonateMomentNotice onClose={() => setDonateMoment(false)} />}
     </>
   );
