@@ -2825,9 +2825,22 @@ html, body {
   letter-spacing: -0.2px;
 }
 .synopsis-modal-cast-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
+}
+.synopsis-modal-cast-grid > * {
+  flex: 1 1 calc(33.333% - 8px);
+  min-width: 0;
+}
+@supports (display: grid) {
+  .synopsis-modal-cast-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .synopsis-modal-cast-grid > * {
+    flex: none;
+  }
 }
 .synopsis-modal-cast-card {
   display: flex;
@@ -4119,9 +4132,22 @@ html, body {
 }
 
 .search-channels-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
+}
+.search-channels-grid > * {
+  flex: 1 1 calc(50% - 6px);
+  min-width: 0;
+}
+@supports (display: grid) {
+  .search-channels-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .search-channels-grid > * {
+    flex: none;
+  }
 }
 
 .search-channel-card {
@@ -4223,9 +4249,22 @@ html, body {
 }
 
 .search-vod-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 16px;
+}
+.search-vod-grid > * {
+  flex: 1 1 calc(20% - 13px);
+  min-width: 0;
+}
+@supports (display: grid) {
+  .search-vod-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+  }
+  .search-vod-grid > * {
+    flex: none;
+  }
 }
 
 .search-vod-card {
@@ -4458,7 +4497,12 @@ html, body {
 .pf-total { margin-left: auto; font-size: 14px; color: var(--text-muted); }
 .pf-total span { color: var(--color-accent-sub); font-weight: 800; }
 .pf-empty { font-size: 16px; color: var(--text-dim); padding: 48px 0; }
-.pf-grid { display: grid; grid-template-columns: repeat(7, 176px); gap: 22px 20px; }
+.pf-grid { display: flex; flex-wrap: wrap; gap: 22px 20px; }
+.pf-grid .pf-card-item { flex: 0 0 176px; }
+@supports (display: grid) {
+  .pf-grid { display: grid; grid-template-columns: repeat(7, 176px); }
+  .pf-grid .pf-card-item { flex: none; }
+}
 .pf-card-item { width: 176px; }
 .pf-card-item .pf-poster {
   width: 176px; height: 262px; border-radius: 12px; overflow: hidden; background: #11141d;
@@ -4499,7 +4543,12 @@ html, body {
 .pf-switch.is-focused { border-color: #fff; }
 
 /* Parental */
-.pf-lock-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 1380px; }
+.pf-lock-grid { display: flex; flex-wrap: wrap; gap: 10px; max-width: 1380px; }
+.pf-lock-grid .pf-lock-item { flex: 1 1 calc(25% - 8px); min-width: 240px; }
+@supports (display: grid) {
+  .pf-lock-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .pf-lock-grid .pf-lock-item { flex: none; min-width: 0; }
+}
 .pf-lock-item {
   display: flex; justify-content: space-between; align-items: center; padding: 0 18px; height: 46px;
   border-radius: 12px; font-size: 14px; font-weight: 700;
@@ -4518,7 +4567,14 @@ html, body {
 .pf-diag-speed { display: flex; align-items: center; gap: 24px; margin-top: 20px; }
 .pf-diag-meta { margin: 20px 0 10px; font-size: 13px; color: var(--text-dim); }
 .pf-diag-table { max-width: 980px; }
-.pf-diag-row { display: grid; grid-template-columns: 1.3fr 0.6fr 1.6fr; gap: 16px; padding: 9px 0; font-size: 13px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.pf-diag-row { display: flex; align-items: baseline; gap: 16px; padding: 9px 0; font-size: 13px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.pf-diag-row > *:nth-child(1) { flex: 1.3; min-width: 0; }
+.pf-diag-row > *:nth-child(2) { flex: 0.6; min-width: 0; }
+.pf-diag-row > *:nth-child(3) { flex: 1.6; min-width: 0; }
+@supports (display: grid) {
+  .pf-diag-row { display: grid; grid-template-columns: 1.3fr 0.6fr 1.6fr; }
+  .pf-diag-row > * { flex: none; }
+}
 .pf-diag-head { color: var(--text-dim); font-weight: 800; }
 
 /* About */
@@ -4549,7 +4605,13 @@ html, body {
 .pin-boxes.is-shake { animation: pin-shake 0.4s; }
 @keyframes pin-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
 .pin-message { min-height: 22px; margin: 10px 0 8px; font-size: 13px; color: #fb7185; text-align: center; }
-.pin-pad { display: grid; grid-template-columns: repeat(3, 84px); gap: 8px; }
+/* Tizen 4 / Chromium 56 flex fallback */
+.pin-pad { display: flex; flex-wrap: wrap; width: 268px; }
+.pin-pad .pin-key { flex: 0 0 84px; margin: 4px; box-sizing: border-box; }
+@supports (display: grid) {
+  .pin-pad { display: grid; grid-template-columns: repeat(3, 84px); gap: 8px; width: auto; }
+  .pin-pad .pin-key { flex: none; margin: 0; }
+}
 .pin-key {
   height: 46px; border-radius: 9999px; background: rgba(255, 255, 255, 0.04); border: 3px solid transparent; box-sizing: border-box;
   display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800;
@@ -4924,15 +4986,36 @@ html, body {
 }
 
 .search-body .search-vod-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 14px;
+}
+.search-body .search-vod-grid > * {
+  flex: 1 1 calc(16.666% - 12px);
+  min-width: 0;
+}
+@supports (display: grid) {
+  .search-body .search-vod-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+  }
+  .search-body .search-vod-grid > * {
+    flex: none;
+  }
 }
 
 @media (max-width: 1300px) {
-  .search-body .search-vod-grid {
-    grid-template-columns: repeat(5, 1fr);
-    gap: 12px;
+  .search-body .search-vod-grid > * {
+    flex: 1 1 calc(20% - 10px);
+  }
+  @supports (display: grid) {
+    .search-body .search-vod-grid {
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+    }
+    .search-body .search-vod-grid > * {
+      flex: none;
+    }
   }
 }
 
@@ -6132,11 +6215,24 @@ html.xuper-vod-avplay .app-root,
 }
 
 .browse-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   padding-bottom: 60px;
   box-sizing: border-box;
+}
+.browse-cards-grid > * {
+  flex: 1 1 calc(14.285% - 14px);
+  min-width: 0;
+}
+@supports (display: grid) {
+  .browse-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+  }
+  .browse-cards-grid > * {
+    flex: none;
+  }
 }
 
 .browse-cards-grid .poster-card.apple-poster-card {
@@ -6401,11 +6497,23 @@ html.xuper-vod-avplay .app-root,
 
 /* 3 Navigation Cards Grid */
 .welcome-modal-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
   gap: 20px;
   width: 100%;
   margin-bottom: 32px;
+}
+.welcome-modal-cards-grid > * {
+  flex: 1 1 calc(33.333% - 14px);
+  min-width: 0;
+}
+@supports (display: grid) {
+  .welcome-modal-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .welcome-modal-cards-grid > * {
+    flex: none;
+  }
 }
 
 .welcome-nav-card {
@@ -7376,10 +7484,16 @@ html.xuper-vod-avplay .app-root,
 
 /* Perfil › TV abierta: the lists as a grid of compact cards instead of one wide row each */
 .pf-iptv-grid {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
   max-width: 1380px;
   margin-top: 26px;
+}
+@supports (display: grid) {
+  .pf-iptv-grid {
+    display: grid;
+  }
 }
 .pf-iptv-card {
   padding: 22px 24px;
@@ -8354,11 +8468,25 @@ html.xuper-vod-avplay .app-root,
 .pf-diag-actions { display: flex; gap: 16px; margin-top: 22px; flex-wrap: wrap; }
 .pf-diag-verdict { margin-top: 22px; font-size: 17px; font-weight: 700; max-width: 1100px; }
 .pf-diag-cards {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   max-width: 1380px;
   margin-top: 18px;
+}
+.pf-diag-cards > * {
+  flex: 1 1 calc(25% - 12px);
+  min-width: 240px;
+}
+@supports (display: grid) {
+  .pf-diag-cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .pf-diag-cards > * {
+    flex: none;
+    min-width: 0;
+  }
 }
 .pf-diag-card {
   /* Same card as the rest of Perfil (TV abierta, Bloqueo): soft glass, 16 px corners, no colored edges */
@@ -8388,7 +8516,12 @@ html.xuper-vod-avplay .app-root,
 
 /* Perfil › Sobre nosotros: update actions and the Telegram QR codes */
 .pf-about-actions { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
-.pf-tg-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 1440px; margin-top: 16px; }
+.pf-tg-grid { display: flex; flex-wrap: wrap; gap: 16px; max-width: 1440px; margin-top: 16px; }
+.pf-tg-grid > * { flex: 1 1 calc(25% - 12px); min-width: 240px; }
+@supports (display: grid) {
+  .pf-tg-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .pf-tg-grid > * { flex: none; min-width: 0; }
+}
 .pf-tg-card {
   display: flex;
   align-items: center;
@@ -8425,7 +8558,12 @@ html.no-flexgap .pf-row-wide .pf-switch { margin-left: 32px; }
 html.no-flexgap .pf-update-bar-actions .pf-btn + .pf-btn { margin-left: 12px; }
 html.no-flexgap .pf-update-bar-actions { margin-left: 24px; }
 
-.pf-about-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1380px; margin-top: 22px; }
+.pf-about-cards { display: flex; flex-wrap: wrap; gap: 16px; max-width: 1380px; margin-top: 22px; }
+.pf-about-cards > * { flex: 1 1 calc(33.333% - 11px); min-width: 240px; }
+@supports (display: grid) {
+  .pf-about-cards { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .pf-about-cards > * { flex: none; min-width: 0; }
+}
 .pf-about-card { padding: 18px 22px; border-radius: 16px; background: rgba(255, 255, 255, 0.04); }
 .pf-about-card-title { font-size: 19px; font-weight: 800; color: #ffffff; }
 .pf-about-card-text { margin-top: 8px; font-size: 15px; line-height: 1.5; color: #94a3b8; }
@@ -9157,7 +9295,12 @@ html.no-flexgap .pf-update-bar-actions { margin-left: 24px; }
 .upd-ready-btn { margin-top: 34px; min-width: 300px; justify-content: center; font-size: 22px; }
 /* First launch after the update (UpdatedNotice): the same dialog, with a badge and the Novedades QR */
 .upd-ready-card.is-wide { width: 1040px; }
-.upd-done-cards { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; width: 100%; }
+.upd-done-cards { margin-top: 28px; display: flex; gap: 18px; width: 100%; }
+.upd-done-cards > * { flex: 1 1 calc(50% - 9px); min-width: 0; }
+@supports (display: grid) {
+  .upd-done-cards { display: grid; grid-template-columns: 1fr 1fr; }
+  .upd-done-cards > * { flex: none; }
+}
 .upd-done-cards .upd-done-news { margin-top: 0; }
 .upd-done-qr-img { width: 132px; height: 132px; display: block; }
 .upd-done-hint { margin-top: 16px; font-size: 16px; color: #64748b; }

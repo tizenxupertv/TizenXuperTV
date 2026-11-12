@@ -62,7 +62,8 @@ export function resolveCssFunctions(value: string): string | null {
 }
 
 export function addCssFallbacks(css: string): string {
-  return css.replace(
+  // 1. Math functions min/max/clamp fallback for Chromium < 79
+  let out = css.replace(
     /(^[ \t]*|[;{]\s*)([a-z-]+)(\s*:\s*)([^;{}]*\b(?:min|max|clamp)\([^;{}]*?)(\s*!important)?(\s*;)/gm,
     (all, lead: string, prop: string, colon: string, value: string, important = '', end: string) => {
       const resolved = resolveCssFunctions(value);
@@ -70,6 +71,36 @@ export function addCssFallbacks(css: string): string {
       return `${lead}${prop}${colon}${resolved}${important}${end} ${prop}${colon}${value}${important}${end}`;
     }
   );
+
+  // 2. Inset fallback for Chromium < 87 (Tizen 3/4/5/5.5/6)
+  // Matches "inset: <value>;" but not "inset-inline", "inset-block", etc.
+  out = out.replace(
+    /(^[ \t]*|[;{]\s*)\binset(\s*:\s*)([^;{}]+?)(\s*!important)?(\s*;)/gm,
+    (all, lead: string, colon: string, rawVal: string, important = '', end: string) => {
+      const val = rawVal.trim();
+      if (!val || val.includes('var(') || val.includes('calc(')) return all;
+      const parts = val.split(/\s+/);
+      let top: string, right: string, bottom: string, left: string;
+      if (parts.length === 1) {
+        top = right = bottom = left = parts[0];
+      } else if (parts.length === 2) {
+        top = bottom = parts[0];
+        right = left = parts[1];
+      } else if (parts.length === 3) {
+        top = parts[0];
+        right = left = parts[1];
+        bottom = parts[2];
+      } else if (parts.length === 4) {
+        [top, right, bottom, left] = parts;
+      } else {
+        return all;
+      }
+      const imp = important || '';
+      return `${lead}top: ${top}${imp}; right: ${right}${imp}; bottom: ${bottom}${imp}; left: ${left}${imp}; inset:${rawVal}${imp}${end}`;
+    }
+  );
+
+  return out;
 }
 
 /**
