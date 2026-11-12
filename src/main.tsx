@@ -13,12 +13,18 @@ import './styles/index.css';
 import './styles/textSize.css';
 import { installTvDebug } from './debug/tvDebug';
 import { logPlayback } from './lib/playbackLog';
-import { isLegacyVideoTv } from './lib/tvMemory';
+import { getTvProfile } from './lib/tvProfile';
 
 installTvDebug();
 
-// Tizen 6.0 and older: plain live preview box (html.legacy-video in index.css)
-if (isLegacyVideoTv()) document.documentElement.classList.add('legacy-video');
+// One profile for the whole app (lib/tvProfile.ts): scripts and CSS read window.XuperEnv / the html classes
+{
+  const env = getTvProfile();
+  (window as any).XuperEnv = env;
+  document.documentElement.classList.add('tv-' + env.tier);
+  // Tizen 6.0 and older: plain live preview box (html.legacy-video in index.css)
+  if (env.legacyVideo) document.documentElement.classList.add('legacy-video');
+}
 
 // Each launch opens a new stretch of the playback log: a launch right after a video means the app closed or crashed
 {
@@ -118,7 +124,7 @@ const Root: React.FC = () => {
       {updatedTo
         ? <UpdatedNotice version={updatedTo} onClose={closeUpdated} />
         : manualUpdate
-          ? <UpdateNotice info={manualUpdate} current={accountService.deviceInfo().version} onClose={closeUpdate} />
+          ? <UpdateNotice info={manualUpdate} current={accountService.deviceInfo().version} cleanInstall={status.needsReinstall} onClose={closeUpdate} />
           : donateMoment && <DonateMomentNotice onClose={() => setDonateMoment(false)} />}
     </>
   );

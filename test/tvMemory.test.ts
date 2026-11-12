@@ -46,3 +46,19 @@ test('TVs short of memory for images are Tizen 6.0 and older', () => {
   assert.equal(isOlderTv(ua('9.0')), false);
   assert.equal(isOlderTv('Mozilla/5.0 (Macintosh)'), false, 'a desktop browser keeps every image');
 });
+
+import { getTvProfile, parseTizenVersion } from '../src/lib/tvProfile.ts';
+
+test('central TV profile: tier, memory and buffers by Tizen version', () => {
+  const ua = (v: string) => `Mozilla/5.0 (SMART-TV; LINUX; Tizen ${v}) AppleWebKit/537.36 (KHTML, like Gecko) Version/${v} TV Safari/537.36`;
+  assert.equal(parseTizenVersion(ua('5.5')), 5.5);
+  assert.equal(parseTizenVersion('Chrome/130'), 0);
+  const t3 = getTvProfile(ua('3.0'));
+  assert.deepEqual([t3.tier, t3.lowMemory, t3.legacyVideo, t3.backBufferSec, t3.bufferAheadSec], ['legacy', true, true, 10, 15]);
+  const t55 = getTvProfile(ua('5.5'));
+  assert.deepEqual([t55.tier, t55.lowMemory, t55.legacyVideo, t55.bufferAheadSec], ['mid', false, true, 15]);
+  assert.equal(getTvProfile(ua('6.5')).tier, 'mid');
+  assert.equal(getTvProfile(ua('6.5')).legacyVideo, false);
+  assert.equal(getTvProfile(ua('8.0')).tier, 'modern');
+  assert.equal(getTvProfile('Mozilla/5.0 (Macintosh) Chrome/130').tier, 'modern');
+});
