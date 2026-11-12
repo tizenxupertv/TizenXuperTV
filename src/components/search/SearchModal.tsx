@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { posterInWindow } from '../../lib/posterWindow';
 import { ensurePortalSnapshot } from '../../lib/portalSnapshot';
+import { getTvProfile } from '../../lib/tvProfile';
 import { TabId } from '../layout/TopNavbar';
 import { LiveChannel } from '../../types/channel';
 import { VodItem } from '../../types/vod';
@@ -279,7 +280,11 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     const local = localHaystacks.filter(h => h.title.includes(q) || h.rest.includes(q)).map(h => h.item);
     const seen = new Set(local.map(it => it.id));
     const remote = remoteVod.filter(it => !seen.has(it.id));
-    return enrichSearchItems(local.concat(remote).slice(0, 120), allVodItems, true);
+    // Tizen <= 4 / low-memory TVs (1 GB RAM) can exhaust memory decoding 120 full-size posters.
+    // Cap to 24 for low-memory TVs, 48 for mid-tier, and 120 for modern TVs.
+    const profile = getTvProfile();
+    const maxItems = profile.lowMemory ? 24 : profile.tier === 'mid' ? 48 : 120;
+    return enrichSearchItems(local.concat(remote).slice(0, maxItems), allVodItems, true);
   }, [isTvSearch, submittedQuery, allVodItems, localHaystacks, remoteVod, popular]);
 
   const totalResults = isTvSearch ? filteredChannels.length : filteredVod.length;
