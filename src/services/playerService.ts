@@ -549,6 +549,13 @@ class PlayerService {
     this.usingAvPreview = false;
     this.watchStart(code, videoEl);
 
+    // Global fallback bridge for AVPlay -> Hls.js fallback (Eclectic 2.0.36b pattern)
+    (window as any).__xuperPlayHlsFallback = (fallbackUrl: string, targetEl: HTMLVideoElement) => {
+      console.log('[PlayerService] Executing transparent fallback to Hls.js for live stream:', fallbackUrl);
+      this.usingAvPreview = false;
+      this.streamHls(fallbackUrl, targetEl, undefined, this.activeChannelCode || undefined);
+    };
+
     // If channel has direct stream URL (M3U / IPTV / Epic Sports)
     if (channel.url && channel.url.startsWith('http')) {
       if (channel.url.includes('epictvparaiphone.top') || channel.url.includes('playlatam.site')) {

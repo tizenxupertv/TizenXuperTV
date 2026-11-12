@@ -966,6 +966,15 @@
       var giveUp = function () {
         self._recovering = false;
         self.isActive = false;
+        // Fallback transparent to Hls.js if AVPlay hardware rejects a direct live stream
+        if (self.kind === 'live' && self._lastUrl && self.videoEl && typeof window.__xuperPlayHlsFallback === 'function') {
+          console.warn('[XuperAVPlay] AVPlay live failed, invoking transparent Hls.js fallback for:', self._lastUrl);
+          try {
+            self._safeStopAndClose();
+            window.__xuperPlayHlsFallback(self._lastUrl, self.videoEl);
+            return;
+          } catch (fbErr) {}
+        }
         if (self.videoEl && self.videoEl.onerror) self.videoEl.onerror();
       };
       var reopen = function (url, headers) {
