@@ -36,12 +36,21 @@ const NEWS_URL = 'https://telegra.ph/Novedades-de-TizenXuper-TV-11-07';
 /** First launch after the app updated itself: once per version. Same look as the restart dialog (UpdateReady) */
 export const UpdatedNotice: React.FC<{ version: string; onClose: () => void }> = ({ version, onClose }) => {
   useNoticeKeys(onClose);
+  const isBeta = version.indexOf('-beta') >= 0 || version.indexOf('beta') >= 0;
+
   return (
     <div className="upd-ready" role="dialog" aria-modal="true" aria-labelledby="upd-done-title">
       <div className="upd-ready-card is-wide">
-        <div className="upd-done-badge">Actualizada</div>
+        <div className={`upd-done-badge ${isBeta ? 'is-beta' : ''}`}>
+          {isBeta ? 'Versión Beta' : 'Actualizada'}
+        </div>
         <div className="upd-ready-title" id="upd-done-title">Ya tienes la versión {version}</div>
         <div className="upd-ready-desc">Tu sesión, tu lista y tus ajustes siguen igual.</div>
+        {isBeta && (
+          <div className="upd-done-beta-note">
+            Esta es una versión preliminar de prueba con funciones experimentales. Si encuentras algún fallo, repórtalo en el bot.
+          </div>
+        )}
         <div className="upd-done-cards">
           <div className="upd-done-news">
             <div className="upd-done-qr"><QrCode text={NEWS_URL} size={132} /></div>
