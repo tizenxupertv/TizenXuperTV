@@ -1362,14 +1362,23 @@
         if (hasNext) self.seekTo(nextSec, nextCbs.success, nextCbs.error);
       };
 
-      // The TV sometimes never answers a seek (damaged segments): give up after 15 s
+      // For long seeks (> 600s / 10min), increase buffering timeout to 30s to allow remote CDN alignment
+      var isLongSeek = Math.abs((self.currentTimeSec || 0) - sec) >= 600;
+      if (isLongSeek) {
+        try {
+          if (webapis.avplay.setTimeoutForBuffering) webapis.avplay.setTimeoutForBuffering(30);
+        } catch (tErr) {}
+      }
+
+      // The TV sometimes never answers a seek (damaged segments): give up after 15s (25s on long seeks)
+      var seekTimeoutMs = isLongSeek ? 25000 : 15000;
       clearTimeout(this._seekWatchdog);
       this._seekWatchdog = setTimeout(function () {
         if (!isCurrent() || !self._isSeeking) return;
-        console.warn('[XuperAVPlay] seekTo watchdog fired after 15s');
+        console.warn('[XuperAVPlay] seekTo watchdog fired after ' + (seekTimeoutMs / 1000) + 's');
         self._seekTicket++;
         finish(false, new Error('seek_timeout'));
-      }, 15000);
+      }, seekTimeoutMs);
 
       var failed = function (targetMs, retriesLeft, err) {
         if (!isCurrent()) return;

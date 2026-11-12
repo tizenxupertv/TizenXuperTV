@@ -216,6 +216,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const lastTokenRenewalRef = useRef<number>(Date.now());
   /** How long a seek may take before the timeline shows the TV's time again */
   const SEEK_SAFETY_MS = 6000;
+  const LONG_SEEK_SAFETY_MS = 24000;
   const toastTimerRef = useRef<any>(null);
   const [, setSettingsTick] = useState(0); // re-render after a setting changes
   const settings = settingsService.get();
@@ -1011,8 +1012,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
       if (useAvPlayRef.current && window.XuperAVPlay) {
         // The timeline keeps the target until the TV confirms the seek (it can take several seconds on older
-        // TVs); with a fixed 2.5 s it jumped back to the old position while the TV was still seeking
-        if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + SEEK_SAFETY_MS;
+        // TVs); for long seeks (> 600s / 10min), extend the safety window up to 24s so the player doesn't bounce back prematurely
+        const isLongSeek = Math.abs((window.XuperAVPlay.currentTimeSec || 0) - target) >= 600;
+        const safetyMs = isLongSeek ? LONG_SEEK_SAFETY_MS : SEEK_SAFETY_MS;
+        if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + safetyMs;
         const seekAt = Date.now();
         window.XuperAVPlay.seekTo(target, () => {
           // Slow seeks go to the playback log, to compare TVs
@@ -1062,6 +1065,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const acceptTime = (t: number): boolean => {
     const pending = pendingSeekRef.current;
     if (pending) {
+      // Wider landing tolerance for seeks (up to 8s) like Eclectic 2.0.36b so hardware AVPlay
+      // decoder resumes instantly without micro-stutters or bouncing
       const reached = Math.abs(t - pending.target) <= 8;
       const expired = pending.until > 0 && Date.now() > pending.until;
       if (!reached && !expired) return false;
