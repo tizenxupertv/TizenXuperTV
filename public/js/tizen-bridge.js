@@ -1713,7 +1713,7 @@
       enableWorker: false,
       lowLatencyMode: false,
       backBufferLength: 15,
-      maxBufferLength: 15,
+      maxBufferLength: (window.XuperEnv && window.XuperEnv.bufferAheadSec) || 15,
       maxMaxBufferLength: 30,
       manifestLoadingTimeOut: 8000,
       manifestLoadingMaxRetry: 2,
