@@ -1179,27 +1179,29 @@
                 startNow();
                 self._initialSeekDone(true);
               }, function (seekErr) {
-                // Played from the start; onbufferingcomplete tries the seek once more
-                console.log('[XuperAVPlay] resume seek before play failed, retrying after buffering:', seekErr);
+                // Pre-play seek refused (normal in Tizen 5.5 and older in READY state): start play and let onbufferingcomplete execute it
+                console.log('[XuperAVPlay] resume seek in READY state refused, will execute in PLAYING state after buffering:', seekErr);
                 clearTimeout(safety);
                 startNow();
                 setTimeout(function () {
                   if ((self._gen || 0) === gen && self._initialSeekSec > 0) {
-                    console.log('[XuperAVPlay] initial seek fallback timeout');
+                    console.warn('[XuperAVPlay] initial seek fallback watchdog expired (15s)');
                     self._initialSeekSec = 0;
                     self._initialSeekDone(false);
                   }
-                }, 4500);
+                }, 15000);
               });
             } catch (seekEx) {
+              console.log('[XuperAVPlay] resume seek in READY state exception, will execute in PLAYING state after buffering:', seekEx);
               clearTimeout(safety);
               startNow();
               setTimeout(function () {
                 if ((self._gen || 0) === gen && self._initialSeekSec > 0) {
+                  console.warn('[XuperAVPlay] initial seek fallback watchdog expired (15s)');
                   self._initialSeekSec = 0;
                   self._initialSeekDone(false);
                 }
-              }, 4500);
+              }, 15000);
             }
             return;
           }
@@ -1371,20 +1373,22 @@
 
       var failed = function (targetMs, retriesLeft, err) {
         if (!isCurrent()) return;
-        console.warn('[XuperAVPlay] seekTo ' + targetMs + 'ms attempt failed:', err);
-        // A transient state change: once more after 120 ms
+        var errStr = String((err && (err.name || err.message)) || err || '');
+        console.warn('[XuperAVPlay] seekTo ' + targetMs + 'ms attempt failed (' + retriesLeft + ' retries left):', errStr);
+        // If the TV is currently buffering or state is transient (InvalidStateError): defer until buffering finishes
+        if ((self._buffering || /invalidstate/i.test(errStr)) && !self._seekAfterBuffer) {
+          console.log('[XuperAVPlay] seek refused while buffering or transitioning, retrying after buffering');
+          self._seekAfterBuffer = { sec: targetMs / 1000, success: successCb, error: errorCb };
+          return;
+        }
+        // A transient decoder busy state: retry with progressive backoff (200ms, 450ms, 800ms)
         if (retriesLeft > 0) {
+          var delay = (4 - retriesLeft) * 220;
           setTimeout(function () {
             if (!isCurrent()) return;
             if (self.isActive) executeSeek(targetMs, retriesLeft - 1);
             else finish(false, err);
-          }, 120);
-          return;
-        }
-        // Refused while the TV refills its buffer (older TVs do): onbufferingcomplete tries it again
-        if (self._buffering && !self._seekAfterBuffer) {
-          console.log('[XuperAVPlay] seek refused while buffering, retrying after buffering');
-          self._seekAfterBuffer = { sec: targetMs / 1000, success: successCb, error: errorCb };
+          }, delay);
           return;
         }
         finish(false, err);
@@ -1404,7 +1408,7 @@
         }
       };
 
-      executeSeek(ms, 1);
+      executeSeek(ms, 3);
     },
 
     stop: function () {
