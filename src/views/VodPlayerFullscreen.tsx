@@ -1,3 +1,4 @@
+import { noteFinished, playerClosed, playerOpened } from '../lib/donateMoment';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { VodItem, VodEpisode, VodSeason } from '../types/vod';
 import { historyService } from '../services/historyService';
@@ -7,7 +8,7 @@ import { getEpisodeStatus, canSaveProgress, reachedResumeGoal, retryStartAt } fr
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
-import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseAudioFits, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
+import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseHlsConfig, mseUnsupportedReason, wantedAudioIndex, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
 import { friendlyPortalError } from '../lib/portalErrors';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
@@ -130,6 +131,13 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     if (seasonNumber) setCurrentSeasonNum(seasonNumber);
   }, [seasonNumber]);
 
+  // The donation request waits for the player to be gone (lib/donateMoment)
+  useEffect(() => {
+    if (isTrailer) return;
+    playerOpened();
+    return () => playerClosed();
+  }, [isTrailer]);
+
   // Problem report: what is playing, and why it stopped
   useEffect(() => {
     if (isTrailer) return;
@@ -152,6 +160,15 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const useAvPlayRef = useRef<boolean>(false);
   const requestIdRef = useRef<number>(0);
   const timeRef = useRef({ t: 0, d: 0 });
+  // The player reports its time several times a second and every update re-renders this whole screen. With the
+  // controls hidden and no subtitles on, nothing on screen changes that often: once a second is enough there
+  const shownTimeRef = useRef(0);
+  const fineTimeRef = useRef(true);
+  const showTime = useCallback((t: number) => {
+    if (!fineTimeRef.current && Math.abs(t - shownTimeRef.current) < 1) return;
+    shownTimeRef.current = t;
+    setCurrentTime(t);
+  }, []);
   const startedAtRef = useRef<number>(startAt);
 
   const [streamInfoText, setStreamInfoText] = useState<string>('');
@@ -162,6 +179,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const mseFailedRef = useRef(false);
   /** Audio language picked in this player among the ones inside the file ('' = the profile preference) */
   const fileAudioRef = useRef('');
+  /** Which of the file's audios MSE plays (0: the first one) */
+  const mseAudioIndexRef = useRef(0);
   const [avMode, setAvMode] = useState(false);
 
   // Audio / subtitles chosen from the player menus (bottom-right buttons)
@@ -343,6 +362,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     if (!isTrailer) {
       timeRef.current.t = timeRef.current.d || timeRef.current.t;
       saveProgress();
+      noteFinished();
     }
     // The card was counting down over the credits: the end is its zero
     if (nextOffer === 'credits' && settingsService.get().autoNext !== false && nextEpisode && onPlayEpisode) {
@@ -513,7 +533,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           resumePendingRef.current = false;
         }
         timeRef.current.t = t;
-        setCurrentTime(t);
+        showTime(t);
       };
       video.onwaiting = () => isCurrent() && setIsBuffering(true);
       video.onplaying = () => {
@@ -627,7 +647,9 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       const audioWanted = fileAudioRef.current || PREF_LANG_CODES[settingsService.get().audio] || 'es';
       const mseWhyNot = mseFailedRef.current
         ? 'MSE falló en esta reproducción'
-        : mseUnsupportedReason(res) || (mseAudioFits(res.audio, l => sameLanguage(l, audioWanted)) ? '' : 'el audio elegido no es el primero del archivo');
+        : mseUnsupportedReason(res);
+      // The wanted audio may not be the file's first one: MSE is told which one to play (lib/tsAudioSelect.ts)
+      mseAudioIndexRef.current = wantedAudioIndex(res.audio, l => sameLanguage(l, audioWanted));
       if (hasAvPlay() && !isTrailer) {
         // Which player and why, for the problem report (the first thing to know when a title misbehaves)
         const resumeAt = startedAtRef.current > 5 ? ` · retomar en ${Math.round(startedAtRef.current)} s` : '';
@@ -636,7 +658,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       if (hasAvPlay() && !isTrailer && !mseWhyNot) {
         // Indexed .ts on a TV with MSE: pieces by byte range, instant seeks inside the buffer
         window.__xuperCurrentStreamMeta = { ...res, contentId, seasonId, trackIndex: portalTrackRef.current, startedAt: Date.now() };
-        // The other audios inside the file stay in the menu: choosing one reopens the title with AVPlay
+        // The audios inside the file are the menu: choosing another one reopens the title on it, at the same position
         const fileLangs: AudioOption[] = [];
         fileAudioLanguages(res.audio).forEach((lang, i) => {
           const label = languageName(lang);
@@ -644,7 +666,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         });
         if (tracks.length <= 1 && fileLangs.length > 1) {
           setAudioOptions(fileLangs);
-          setAudioIndex(0);
+          const playing = languageName(fileAudioLanguages(res.audio)[mseAudioIndexRef.current]);
+          setAudioIndex(Math.max(0, fileLangs.findIndex(o => o.label === playing)));
         }
         setMseRes(res);
       } else if (hasAvPlay()) {
@@ -683,7 +706,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     const onTimeUpdate = () => {
       if (!acceptTimeRef.current(video.currentTime)) return;
       timeRef.current.t = video.currentTime;
-      setCurrentTime(video.currentTime);
+      showTime(video.currentTime);
     };
     const onLoadedMetadata = () => {
       timeRef.current.d = video.duration || 0;
@@ -763,7 +786,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     const onTimeUpdate = () => {
       if (!acceptTimeRef.current(video.currentTime)) return;
       timeRef.current.t = video.currentTime;
-      setCurrentTime(video.currentTime);
+      showTime(video.currentTime);
     };
     const onLoadedMetadata = () => {
       timeRef.current.d = video.duration || 0;
@@ -797,7 +820,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       .then(({ playlist, pieces }) => {
         if (!alive) return;
         console.log('[VodPlayer] MSE playlist', pieces, 'pieces, start at', Math.round(startedAtRef.current));
-        hls = (window as any).__xuperCreateHls(mseHlsConfig(Hls, playlist, startedAtRef.current));
+        hls = (window as any).__xuperCreateHls(mseHlsConfig(Hls, playlist, startedAtRef.current, mseAudioIndexRef.current));
         if (!hls) return fallBack('hls.js no disponible');
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           video.play().catch(() => {
@@ -981,7 +1004,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         // Only HTML5 video needs explicit play() call after resume; AVPlay continues playing automatically
         // via onbufferingcomplete once the seeked buffer fills.
         if (shouldResume && !useAvPlayRef.current && videoRef.current) {
-          videoRef.current.play();
+          // A seek or closing the player can interrupt this play(): that is expected, not an error for the report
+          videoRef.current.play().catch(() => {});
         }
       };
 
@@ -1067,7 +1091,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     if (opt.kind === 'avplay') {
       try { window.webapis.avplay.setSelectTrack('AUDIO', opt.index); } catch (e) {}
     } else if (opt.kind === 'file') {
-      // Another audio of the same file: MSE cannot switch to it, AVPlay reopens the title at the same position
+      // Another audio of the same file: the title reopens on it at the same position
       fileAudioRef.current = opt.lang || '';
       setRetryTick(t => t + 1);
     } else {
@@ -1590,6 +1614,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const osdVisible = !!error || (!osdDismissed && showOsd);
   const osdVisibleRef = useRef(osdVisible);
   osdVisibleRef.current = osdVisible;
+  // Every update while the timeline, a seek or the subtitles are on screen; once a second otherwise (showTime)
+  fineTimeRef.current = osdVisible || subIndex >= 0 || !!seekHud || !!nextOffer;
   // Episodes only, long enough to have an intro, in their first minutes and with nothing else on screen
   const introOffer = !isTrailer && !!episode && !introDismissed && !nextOffer && !error && !menu && !osdVisible &&
     duration > 600 && currentTime >= INTRO_FROM_S && currentTime < INTRO_UNTIL_S;

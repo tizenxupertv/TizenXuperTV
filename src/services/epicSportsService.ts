@@ -1,5 +1,6 @@
 import { LiveChannel } from '../types/channel';
 import { fetchWithTimeout } from '../lib/fetchTimeout';
+import { placeExtraChannels } from '../lib/extraChannels';
 
 const DOMAINS = ['https://playlatam.site', 'https://epictvparaiphone.top', 'https://epicplustv.com'];
 const PULSERA_URL = 'https://playlatam.site/iphone/pulsera';
@@ -42,6 +43,18 @@ export const STATIC_EPIC_CHANNELS: LiveChannel[] = [
   { id: 'epic-bolivision', code: 'epic-bolivision', name: 'Bolivisión', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/bolivision.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/bolivision_color.png?v=18' },
   { id: 'epic-atb', code: 'epic-atb', name: 'ATB', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/atb.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/atb_color.png?v=18' },
   { id: 'epic-boliviatv', code: 'epic-boliviatv', name: 'Bolivia TV', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/boliviatv.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/bolivia_tv_color.png?v=18' }
+];
+
+/**
+ * Our own channels in the same category, added by hand. They are kept apart because the list above is only the
+ * fallback: the list downloaded from the service replaces it, and these must stay whichever one is shown.
+ * A direct address plays as it is (the service's permit is only sent to the service's own hosts).
+ *
+ * One line per channel, between the brackets. `id` and `code` are the same text, unique, and start with "extra-".
+ */
+export const EXTRA_CHANNELS: LiveChannel[] = [
+  // { id: 'extra-nombre', code: 'extra-nombre', name: 'Nombre del canal', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'http://servidor/ruta/index.m3u8', logo: 'https://servidor/logo.png' },
+  { id: 'extra-espnu', code: 'extra-espnu', name: 'ESPN U HD', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'http://85.237.89.160:9590/usa-s/ESPN-U-HD/index.m3u8', logo: 'http://schedulesdirect-api20141201-logos.s3.dualstack.us-east-1.amazonaws.com/stationLogos/s45654_dark_360w_270h.png' },
 ];
 
 const DEFAULT_TOKEN = '14940f62.gente.1794265432.09cc2c3cae6f0ee370aa074bd28b68644471ce22fb58eb9866061b30ec6ae953';
@@ -115,7 +128,7 @@ class EpicSportsService {
   }
 
   public getStaticChannels(): LiveChannel[] {
-    return this.cachedChannels || STATIC_EPIC_CHANNELS;
+    return this.cachedChannels || placeExtraChannels(STATIC_EPIC_CHANNELS, EXTRA_CHANNELS);
   }
 
   public async getChannels(): Promise<LiveChannel[]> {
@@ -164,17 +177,17 @@ class EpicSportsService {
           };
         });
 
-        this.cachedChannels = mapped;
+        this.cachedChannels = placeExtraChannels(mapped, EXTRA_CHANNELS);
         this.channelsCacheTime = now;
-        return mapped;
+        return this.cachedChannels;
       }
     } catch (err) {
       console.warn('[EpicSportsService] Falling back to static channels list:', err);
     }
 
-    this.cachedChannels = STATIC_EPIC_CHANNELS;
+    this.cachedChannels = placeExtraChannels(STATIC_EPIC_CHANNELS, EXTRA_CHANNELS);
     this.channelsCacheTime = now;
-    return STATIC_EPIC_CHANNELS;
+    return this.cachedChannels;
   }
 }
 

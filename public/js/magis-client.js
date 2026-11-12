@@ -1230,6 +1230,7 @@
 
   var liveChannelCache = {};
   var livePageCache = {};
+  var emptyLiveRetryDone = false;
   var liveCategoriesCache = null;
   var LIVE_PAGE_TTL = 2 * 60 * 60 * 1000; // 2 hours
   var LIVE_CATS_TTL = 12 * 60 * 60 * 1000; // 12 hours
@@ -1389,7 +1390,10 @@
               return callback(lErr);
             }
             var rawList = lRes && lRes.channelList || [];
-            if (!rawList.length && pNum === 1 && !retried) {
+            // An empty first page may mean a session the portal no longer accepts: one retry with a new session,
+            // once per start. Every empty category used to register the device again, on every start
+            if (!rawList.length && pNum === 1 && !retried && !emptyLiveRetryDone) {
+              emptyLiveRetryDone = true;
               clearSession();
               return runGetLiveData(true);
             }
@@ -1422,8 +1426,10 @@
             if (channels.length) {
               var entry = { at: Date.now(), channels: channels, hasMore: hasMore };
               livePageCache[pageKey] = entry;
+              // Only the first page is saved (the list a category opens with): a category of 1000 channels would
+              // otherwise put twenty pages in localStorage. The whole list is kept by the app in IndexedDB
               try {
-                if (window.localStorage) {
+                if (window.localStorage && pNum === 1) {
                   localStorage.setItem(LIVE_PAGE_PREFIX + pageKey, JSON.stringify(entry));
                 }
               } catch (e) {}
@@ -1505,6 +1511,41 @@
   }
 
   var liveResolveCache = {};
+  // A category can hold more channels than one page (50): the rest used to be left out without a word
+  var LIVE_MAX_PAGES = 20;
+
+  /**
+   * Every channel of a category: its pages one after another, up to LIVE_MAX_PAGES. callback(err, channels).
+   * With opts.progressive the callback is also called after the first page when more follow, so the list shows at
+   * once while the rest downloads; the last call always carries the whole list.
+   */
+  function getAllLiveChannels(columnId, callback, opts) {
+    var progressive = !!(opts && opts.progressive);
+    var all = [];
+    var seen = {};
+    var page = 1;
+    function next() {
+      getLiveChannels(columnId, page, 50, function (err, list, hasMore) {
+        if (err) return page === 1 ? callback(err) : callback(null, all);
+        list = list || [];
+        for (var i = 0; i < list.length; i++) {
+          var code = list[i] && list[i].channelCode;
+          if (code && !seen[code]) {
+            seen[code] = true;
+            all.push(list[i]);
+          }
+        }
+        if (hasMore && list.length && page < LIVE_MAX_PAGES) {
+          if (progressive && page === 1) callback(null, all.slice(0));
+          page++;
+          return next();
+        }
+        callback(null, all);
+      });
+    }
+    next();
+  }
+
   // opts.fresh: the link just handed out stopped working (401/403, stream dropped): ask the portal again. Without it
   // the "new" link came from this cache and was the same dead one for up to two minutes
   function resolveLive(channelCode, callback, opts) {
@@ -2357,6 +2398,7 @@
     search: search,
     getLiveCategories: getLiveCategories,
     getLiveChannels: getLiveChannels,
+    getAllLiveChannels: getAllLiveChannels,
     resolveLive: resolveLive,
     hosts: HOSTS,
     diag: function (callback) {

@@ -23,7 +23,7 @@ import { localProfiles } from '../lib/localProfiles';
 /** Perfil › Sobre nosotros: what the self-update is doing on this TV */
 function updateLine(s: UpdateStatus): string {
   if (!s.canSelfUpdate) return 'Esta TV no puede actualizarse sola: las versiones nuevas se instalan con Apps2Samsung.';
-  if (s.needsReinstall) return 'Hay una versión nueva que se instala con Apps2Samsung.';
+  if (s.needsReinstall) return 'Hay una versión nueva que necesita una instalación nueva y limpia: desinstala la app e instálala de nuevo.';
   if (s.downloaded) return `Versión ${s.downloaded} descargada: se usará la próxima vez que abras la app.`;
   const installed = s.running && s.running !== s.packaged ? ` · instalada ${s.packaged}` : '';
   const last = s.lastCheck && !s.lastCheck.error ? new Date(s.lastCheck.at) : null;
@@ -70,6 +70,8 @@ const SIZE_OPTS = ['Normal', 'Grande', 'Pequeño'];
 const STYLE_OPTS = ['Aa', 'Aa', 'Aa'];
 const GRID_COLS = 7;
 const IPTV_COLUMNS = 3;
+/** Where the Ko-fi QR of the donation screen leads */
+const KOFI_URL = 'https://ko-fi.com/tizenxupertv';
 
 /** Telegram places, as QR codes: the TV cannot open links. Channel and group are invitations with approval */
 const TELEGRAM_LINKS = [
@@ -166,8 +168,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     };
   }, []);
 
-  /** Below the 16 KB the server accepts (accents take two bytes) */
-  const REPORT_MAX_CHARS = 13000;
+  // The bot accepts 32 kB and keeps 110 events. 24000 characters leave room for the accents and other characters
+  // that take more than one byte, and fit the 100 playback events the app keeps
+  const REPORT_MAX_CHARS = 24000;
   // Problem report for support: TV, network, last network check and recent playback events
   const sendReport = () => {
     if (reportState === 'sending') return;
@@ -711,8 +714,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         <div className="pf-parental">
           <h2 className="pf-title">TV abierta (listas gratuitas)</h2>
           <p className="pf-note">
-            Canales públicos y gratuitos recopilados por iptv-org. Cada lista activada aparece como una categoría al final de
-            TV en vivo y se descarga la primera vez que la abres. Algunas señales pueden caerse o estar bloqueadas en tu región.
+            Canales que sus dueños publican gratis, recopilados por el proyecto público iptv-org. TizenXuper TV solo los
+            muestra: no los mantiene ni controla su disponibilidad. Cada lista activada aparece como una categoría al final
+            de TV en vivo y se descarga la primera vez que la abres. Algunas señales pueden caerse o estar bloqueadas en tu región.
           </p>
           <div className="pf-iptv-grid" style={{ gridTemplateColumns: `repeat(${IPTV_COLUMNS}, 1fr)` }}>
             {IPTV_LISTS.map(l => {
@@ -844,11 +848,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               />
               <div className="pf-donate-badge">PayPal Oficial</div>
             </div>
+            <div className="pf-donate-card">
+              {/* Drawn from the address, not an image file: a new file in assets/ cannot reach TVs through the
+                  self-update (tools/update-release.mjs), they would all have to reinstall */}
+              <div className="pf-donate-qr pf-donate-qr-drawn" role="img" aria-label="Código QR de Donación Ko-fi">
+                <QrCode text={KOFI_URL} size={236} />
+              </div>
+              <div className="pf-donate-badge pf-donate-badge-kofi">Ko-fi</div>
+            </div>
             <div className="pf-donate-info">
               <h3 className="pf-donate-heading">Apoya el desarrollo de TizenXuper TV</h3>
               <p className="pf-donate-text">
                 TizenXuper TV es un proyecto comunitario optimizado para televisores Samsung Tizen.
-                Tu aporte voluntario nos permite costear la infraestructura de servidores, mantener las listas y guías actualizadas, y seguir desarrollando mejoras y nuevas funciones.
+                Tu aporte voluntario nos permite costear la infraestructura del proyecto y seguir desarrollando mejoras y nuevas funciones.
               </p>
               <div className="pf-donate-steps">
                 <div className="pf-donate-step">
@@ -861,7 +873,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </div>
                 <div className="pf-donate-step">
                   <span className="pf-step-num">3</span>
-                  <span>Ingresa de forma segura a PayPal para realizar tu contribución voluntaria.</span>
+                  <span>Elige PayPal o Ko-fi (tarjeta, sin crear cuenta) para realizar tu contribución voluntaria.</span>
                 </div>
               </div>
               <p className="pf-donate-thanks">¡Muchas gracias por apoyar a la comunidad de TizenXuper TV!</p>
@@ -916,7 +928,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 ? 'Buscando actualizaciones…'
                 : updateResult === 'uptodate' ? 'Estás al día.'
                 : updateResult === 'downloaded' ? `Versión ${updateService.status().downloaded} descargada. Reinicia para estrenarla.`
-                : updateResult === 'reinstall' ? 'Hay una versión nueva que se instala con Apps2Samsung.'
+                : updateResult === 'reinstall' ? 'Hay una versión nueva que necesita una instalación nueva y limpia: desinstala la app e instálala de nuevo.'
                 : updateResult === 'error' ? 'No se pudo comprobar. Revisa la conexión e inténtalo de nuevo.'
                 : updateLine(updateService.status())}
             </div>

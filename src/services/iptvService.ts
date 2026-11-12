@@ -27,6 +27,18 @@ export const IPTV_LISTS: IptvList[] = [
   { id: 'pe', name: 'Perú', url: `${BASE}countries/pe.m3u` },
   { id: 've', name: 'Venezuela', url: `${BASE}countries/ve.m3u` },
   { id: 'ec', name: 'Ecuador', url: `${BASE}countries/ec.m3u` },
+  { id: 'bo', name: 'Bolivia', url: `${BASE}countries/bo.m3u` },
+  { id: 'cr', name: 'Costa Rica', url: `${BASE}countries/cr.m3u` },
+  { id: 'cu', name: 'Cuba', url: `${BASE}countries/cu.m3u` },
+  { id: 'sv', name: 'El Salvador', url: `${BASE}countries/sv.m3u` },
+  { id: 'gt', name: 'Guatemala', url: `${BASE}countries/gt.m3u` },
+  { id: 'hn', name: 'Honduras', url: `${BASE}countries/hn.m3u` },
+  { id: 'ni', name: 'Nicaragua', url: `${BASE}countries/ni.m3u` },
+  { id: 'pa', name: 'Panamá', url: `${BASE}countries/pa.m3u` },
+  { id: 'py', name: 'Paraguay', url: `${BASE}countries/py.m3u` },
+  { id: 'pr', name: 'Puerto Rico', url: `${BASE}countries/pr.m3u` },
+  { id: 'do', name: 'República Dominicana', url: `${BASE}countries/do.m3u` },
+  { id: 'uy', name: 'Uruguay', url: `${BASE}countries/uy.m3u` },
   // ~2400 channels: the biggest list, off by default
   { id: 'spa', name: 'Todo en español', url: `${BASE}languages/spa.m3u` }
 ];

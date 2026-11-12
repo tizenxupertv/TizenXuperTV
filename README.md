@@ -5,6 +5,7 @@
 [![Engine: Samsung AVPlay](https://img.shields.io/badge/Player-Hardware%20AVPlay%20%2B%20HLS-orange.svg)](https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/avplay.html)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Apps2Samsung Compatible](https://img.shields.io/badge/Apps2Samsung-Community%20Ready-purple.svg)](https://github.com/Apps2Samsung/Apps2Samsung)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Ap%C3%B3yanos-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/tizenxupertv)
 
 > **High-performance Live TV and VOD streaming application built specifically for Samsung Smart TVs (Tizen OS 4.0 to 9.0+).**  
 > Combines modern React 18 architecture, GPU-accelerated TV spatial navigation, and Samsung AVPlay native hardware decoding for seamless 4K and live stream playback.

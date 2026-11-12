@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 // First, so its key listener runs before any screen's
-import { UpdatedNotice, UpdateNotice } from './components/common/UpdateNotice';
+import { DonateMomentNotice, UpdatedNotice, UpdateNotice } from './components/common/UpdateNotice';
+import { markAsked, onDonateMoment, touch as touchDonateMoment } from './lib/donateMoment';
 import { App } from './App';
 import { LoginScreen } from './screens/LoginScreen';
 import { ProfilePickerScreen } from './screens/ProfilePickerScreen';
@@ -12,12 +13,18 @@ import './styles/index.css';
 import './styles/textSize.css';
 import { installTvDebug } from './debug/tvDebug';
 import { logPlayback } from './lib/playbackLog';
-import { isLegacyVideoTv } from './lib/tvMemory';
+import { getTvProfile } from './lib/tvProfile';
 
 installTvDebug();
 
-// Tizen 6.0 and older: plain live preview box (html.legacy-video in index.css)
-if (isLegacyVideoTv()) document.documentElement.classList.add('legacy-video');
+// One profile for the whole app (lib/tvProfile.ts): scripts and CSS read window.XuperEnv / the html classes
+{
+  const env = getTvProfile();
+  (window as any).XuperEnv = env;
+  document.documentElement.classList.add('tv-' + env.tier);
+  // Tizen 6.0 and older: plain live preview box (html.legacy-video in index.css)
+  if (env.legacyVideo) document.documentElement.classList.add('legacy-video');
+}
 
 // Each launch opens a new stretch of the playback log: a launch right after a video means the app closed or crashed
 {
@@ -43,6 +50,18 @@ const Root: React.FC = () => {
       ? '1.10.3'
       : updateService.updatedNotice());
   const [, setTick] = useState(0);
+  const [donateMoment, setDonateMoment] = useState<boolean>(() =>
+    // ?test=donate previews the request in the browser (dev only)
+    import.meta.env.DEV && new URLSearchParams(window.location.search).get('test') === 'donate');
+
+  // The donation request: asked for after a title ended and the player closed (lib/donateMoment)
+  useEffect(() => {
+    touchDonateMoment();
+    return onDonateMoment(() => {
+      markAsked();
+      setDonateMoment(true);
+    });
+  }, []);
 
   // Self-update checks run in the background, signed in or not (public/js/boot.js, services/updateService.ts)
   useEffect(() => {
@@ -85,7 +104,7 @@ const Root: React.FC = () => {
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const testParam = urlParams?.get('test');
   const isTestingWelcome = testParam === 'welcome' || testParam === 'welcome1' || testParam === 'welcome2' ||
-    (import.meta.env.DEV && testParam === 'updated');
+    (import.meta.env.DEV && (testParam === 'updated' || testParam === 'donate'));
 
   if (!signedIn && !isTestingWelcome) {
     return (
@@ -104,7 +123,9 @@ const Root: React.FC = () => {
       <App />
       {updatedTo
         ? <UpdatedNotice version={updatedTo} onClose={closeUpdated} />
-        : manualUpdate && <UpdateNotice info={manualUpdate} current={accountService.deviceInfo().version} onClose={closeUpdate} />}
+        : manualUpdate
+          ? <UpdateNotice info={manualUpdate} current={accountService.deviceInfo().version} cleanInstall={status.needsReinstall} onClose={closeUpdate} />
+          : donateMoment && <DonateMomentNotice onClose={() => setDonateMoment(false)} />}
     </>
   );
 };
