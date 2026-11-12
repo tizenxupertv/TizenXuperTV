@@ -67,8 +67,37 @@ export const UpdatedNotice: React.FC<{ version: string; onClose: () => void }> =
   );
 };
 
+/**
+ * The donation request, shown after a title ended and the player closed (lib/donateMoment decides when). OK or Back
+ * closes it: there is nothing to choose on the TV, the donation happens on the phone
+ */
+export const DonateMomentNotice: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  useNoticeKeys(onClose);
+  return (
+    <div className="upd-ready" role="dialog" aria-modal="true" aria-labelledby="donate-moment-title">
+      <div className="upd-ready-card">
+        <div className="upd-ready-title" id="donate-moment-title">¿Te gusta TizenXuper TV?</div>
+        <div className="upd-ready-desc">
+          Es un proyecto independiente y gratuito. Si te resulta útil, una donación voluntaria ayuda a mantenerlo y a seguir mejorándolo.
+        </div>
+        <div className="upd-done-news">
+          <div className="upd-done-qr">
+            <img className="upd-done-qr-img" src="assets/paypal-donation-qr.png" alt="Código QR de donación PayPal" />
+          </div>
+          <div className="upd-done-news-text">
+            <div className="upd-done-news-title">Apoya el proyecto</div>
+            <div>Escanea el código con la cámara del móvil para donar por PayPal.</div>
+          </div>
+        </div>
+        <div className="upd-done-hint">Puedes hacerlo cuando quieras en Ajustes › Apoyo y Donaciones.</div>
+        <div className="pf-btn is-focused upd-ready-btn" onClick={onClose}>Ahora no</div>
+      </div>
+    </div>
+  );
+};
+
 /** "New version" notice, shown once per version after the session check: how to update, and a QR to the guide */
-export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; onClose: () => void }> = ({ info, current, onClose }) => {
+export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; cleanInstall?: boolean; onClose: () => void }> = ({ info, current, cleanInstall, onClose }) => {
   useNoticeKeys(onClose);
 
   return (
@@ -82,13 +111,23 @@ export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; onClose
           <div className="upd-notice-badge">🆕 Versión nueva</div>
           <h1 className="upd-notice-title">Ya salió TizenXuper TV {info.version}</h1>
           <p className="upd-notice-lead">
-            Tienes la {current}. Actualízala para tener las últimas mejoras y correcciones.
+            {cleanInstall
+              ? `Tienes la ${current}. Esta versión cambia archivos base de la app y no puede instalarse sola: hace falta una instalación nueva y limpia.`
+              : `Tienes la ${current}. Actualízala para tener las últimas mejoras y correcciones.`}
           </p>
-          <div className="upd-notice-steps">
-            <div className="upd-notice-step"><span className="tg-login-num">1</span><span>Descarga <b>TizenXuperTV.wgt</b> del bot de Telegram (<b>Última versión</b>)</span></div>
-            <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Instálalo con Apps2Samsung encima de la que tienes</span></div>
-            <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Tu lista, tus canales favoritos y tu sesión se conservan</span></div>
-          </div>
+          {cleanInstall ? (
+            <div className="upd-notice-steps">
+              <div className="upd-notice-step"><span className="tg-login-num">1</span><span><b>Desinstala</b> TizenXuper TV de tu televisor</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Haz una <b>instalación nueva y limpia</b> con la app TizenXuper TV para Android o con el paquete .wgt (la guía con capturas, en el QR, lo explica)</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Se borran la sesión, los perfiles y los favoritos de esta TV: inicia sesión de nuevo con Telegram</span></div>
+            </div>
+          ) : (
+            <div className="upd-notice-steps">
+              <div className="upd-notice-step"><span className="tg-login-num">1</span><span>Descarga <b>TizenXuperTV.wgt</b> del bot de Telegram (<b>Última versión</b>)</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Instálalo con Apps2Samsung encima de la que tienes</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Tu lista, tus canales favoritos y tu sesión se conservan</span></div>
+            </div>
+          )}
           <div className="upd-notice-ok">
             <span className="upd-notice-key">OK</span><span>Continuar</span>
           </div>

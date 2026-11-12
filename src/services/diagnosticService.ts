@@ -2,6 +2,7 @@ import { getImageCacheStats } from '../lib/imageCache.ts';
 import { isUsableArtworkUrl } from '../lib/searchArtwork.ts';
 
 import { isRegionBlocked } from '../lib/portalErrors.ts';
+import { ensurePortalSnapshot } from '../lib/portalSnapshot.ts';
 
 export type DiagVerdict = 'ok' | 'no-internet' | 'doh-blocked' | 'dns-blocked' | 'region-blocked' | 'portal-down' | 'no-cdn';
 
@@ -102,6 +103,7 @@ async function runImageProbes(sample?: { poster?: string; landscape?: string; ba
     : '';
 
   if ((!vUrl || !hUrl) && typeof window !== 'undefined') {
+    await ensurePortalSnapshot();
     const pool = (window as any).XUPERTV_PORTAL?.items || (window as any).XUPERTV_CATALOG?.items || [];
     for (let i = 0; i < pool.length && (!vUrl || !hUrl); i++) {
       const it = pool[i];

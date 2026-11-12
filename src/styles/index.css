@@ -6209,7 +6209,7 @@ html.xuper-vod-avplay .app-root,
 .pf-donate-content {
   display: flex;
   align-items: flex-start;
-  gap: 48px;
+  gap: 32px;
   margin-top: 18px;
 }
 
@@ -6246,6 +6246,20 @@ html.xuper-vod-avplay .app-root,
   padding: 4px 16px;
   border-radius: 12px;
   letter-spacing: 0.5px;
+}
+
+/* The Ko-fi QR is drawn by the app: white quiet zone around it, as the PayPal image has */
+.pf-donate-qr-drawn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  box-sizing: border-box;
+  line-height: 0;
+}
+
+.pf-donate-badge-kofi {
+  background: #ff5e5b;
 }
 
 .pf-donate-info {
@@ -9189,3 +9203,80 @@ html.legacy-video .live-grand-preview-box { border-radius: 0; overflow: visible;
 html.legacy-video .live-grand-preview-box.is-focused::after { border-radius: 0; }
 html.legacy-video .live-preview-video { object-fit: contain; }
 html.legacy-video .live-preview-overlay { display: none; }
+
+/* Changing channel: covers the last frame of the previous channel until the new one plays */
+.live-tuning {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: #000000;
+  pointer-events: none;
+}
+
+.live-tuning-logo {
+  max-width: 28%;
+  max-height: 22%;
+  object-fit: contain;
+}
+
+.live-tuning-name {
+  max-width: 80%;
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffffff;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.live-tuning-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #ffffff;
+  animation: liveTuningSpin 0.9s linear infinite;
+}
+
+@keyframes liveTuningSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Tizen 6.0 and older (the same html.legacy-video class): effects that cost a lot on those TVs and add little.
+   No blur behind overlays, no transition of every property at once, and flat shadows on the biggest overlays */
+html.legacy-video .network-status-toast,
+html.legacy-video .tg-login-diag-overlay,
+html.legacy-video .tg-login-help-overlay,
+html.legacy-video .welcome-modal-overlay,
+html.legacy-video .lp-picker-edit {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html.legacy-video .browse-search-pill,
+html.legacy-video .match-nav-play-btn,
+html.legacy-video .match-nav-tab,
+html.legacy-video .synopsis-modal-cast-card,
+html.legacy-video .synopsis-modal-close-btn,
+html.legacy-video .synopsis-modal-text-wrap,
+html.legacy-video .tg-login-btn,
+html.legacy-video .tg-login-notice-box {
+  transition: none;
+}
+
+html.legacy-video .vp-menu,
+html.legacy-video .vp-episodes,
+html.legacy-video .vod-next-episode,
+html.legacy-video .synopsis-modal-card {
+  box-shadow: none;
+}
+
+html.legacy-video .live-tuning-spinner {
+  animation-duration: 1.4s;
+}

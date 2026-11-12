@@ -10,6 +10,7 @@
 import { buildVodTsPlaylist, groupIdxgSegments, parseIdxg } from './vodIdxg.ts';
 import type { IdxgSegment } from './vodIdxg.ts';
 import { backBufferFor } from './tvMemory.ts';
+import { createAudioSelector } from './tsAudioSelect.ts';
 
 /** Fake address of the generated playlist: the playlist loader answers it from memory */
 export const MSE_PLAYLIST_URL = 'https://xuper-vod.invalid/playlist.m3u8';
@@ -59,13 +60,12 @@ export function fileAudioLanguages(audio: string | undefined): string[] {
 }
 
 /**
- * hls.js plays the first audio of an MPEG-TS file and cannot switch to another one; AVPlay can. MSE fits when the
- * wanted language is that first audio, or when the file does not have it at all
+ * Position, among the file's audios, of the first one in the wanted language; 0 (the first audio) when the file does
+ * not have that language. lib/tsAudioSelect.ts makes hls.js play that one.
  */
-export function mseAudioFits(audio: string | undefined, isWanted: (lang: string) => boolean): boolean {
-  const langs = fileAudioLanguages(audio);
-  if (langs.length < 2 || isWanted(langs[0])) return true;
-  return !langs.some(isWanted);
+export function wantedAudioIndex(audio: string | undefined, isWanted: (lang: string) => boolean): number {
+  const at = fileAudioLanguages(audio).findIndex(isWanted);
+  return at > 0 ? at : 0;
 }
 
 /** The portal headers the CDN checks (User-Agent cannot be set from a page) */
@@ -151,9 +151,35 @@ export function playlistLoader(Hls: any, playlist: string): any {
   };
 }
 
-/** hls.js settings for VOD on TVs: ~20 s ahead, ~20 s kept behind (10 s on 1 GB TVs; the rest is freed), resume at `startAt` */
-export function mseHlsConfig(Hls: any, playlist: string, startAt: number): Record<string, unknown> {
+/** Fragment loader that leaves audio number `audioIndex` as the only audio of each piece before hls.js reads it */
+export function audioLoader(Hls: any, audioIndex: number): any {
+  const Base = Hls.DefaultConfig.loader;
+  const select = createAudioSelector(audioIndex);
+  return class extends Base {
+    load(context: any, config: any, callbacks: any) {
+      const onSuccess = callbacks.onSuccess;
+      super.load(context, config, {
+        ...callbacks,
+        onSuccess: (response: any, stats: any, ctx: any, networkDetails: any) => {
+          try {
+            if (response && response.data instanceof ArrayBuffer) select(new Uint8Array(response.data));
+          } catch {
+            // left as downloaded: the file's first audio plays
+          }
+          onSuccess(response, stats, ctx, networkDetails);
+        }
+      });
+    }
+  };
+}
+
+/**
+ * hls.js settings for VOD on TVs: ~20 s ahead, ~20 s kept behind (10 s on 1 GB TVs; the rest is freed), resume at
+ * `startAt`, and the audio number `audioIndex` of the file (0: its first one, which needs no help)
+ */
+export function mseHlsConfig(Hls: any, playlist: string, startAt: number, audioIndex = 0): Record<string, unknown> {
   return {
+    ...(audioIndex > 0 ? { fLoader: audioLoader(Hls, audioIndex) } : {}),
     pLoader: playlistLoader(Hls, playlist),
     startPosition: startAt > 5 ? startAt : -1,
     maxBufferLength: 20,
