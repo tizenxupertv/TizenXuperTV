@@ -44,7 +44,7 @@ export function profileForUa(ua: string): TvProfile {
     lowMemory,
     legacyVideo,
     backBufferSec: lowMemory ? LOW_MEMORY_BACK_BUFFER : 15,
-    bufferAheadSec: tier === 'legacy' ? 14 : tier === 'mid' ? 20 : 30
+    bufferAheadSec: 15
   };
 }
 

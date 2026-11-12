@@ -54,9 +54,9 @@ test('central TV profile: tier, memory and buffers by Tizen version', () => {
   assert.equal(parseTizenVersion(ua('5.5')), 5.5);
   assert.equal(parseTizenVersion('Chrome/130'), 0);
   const t3 = getTvProfile(ua('3.0'));
-  assert.deepEqual([t3.tier, t3.lowMemory, t3.legacyVideo, t3.backBufferSec, t3.bufferAheadSec], ['legacy', true, true, 10, 14]);
+  assert.deepEqual([t3.tier, t3.lowMemory, t3.legacyVideo, t3.backBufferSec, t3.bufferAheadSec], ['legacy', true, true, 10, 15]);
   const t55 = getTvProfile(ua('5.5'));
-  assert.deepEqual([t55.tier, t55.lowMemory, t55.legacyVideo, t55.bufferAheadSec], ['mid', false, true, 20]);
+  assert.deepEqual([t55.tier, t55.lowMemory, t55.legacyVideo, t55.bufferAheadSec], ['mid', false, true, 15]);
   assert.equal(getTvProfile(ua('6.5')).tier, 'mid');
   assert.equal(getTvProfile(ua('6.5')).legacyVideo, false);
   assert.equal(getTvProfile(ua('8.0')).tier, 'modern');
