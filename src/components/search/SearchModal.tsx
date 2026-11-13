@@ -103,18 +103,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     setRecentIndex(0);
   };
 
-  // Responsive columns: 6 columns on 1080p/desktop (>=1300px), 5 on smaller screens (<1300px), 2 for live TV
-  const [vodCols, setVodCols] = useState<number>(() => {
-    return typeof window !== 'undefined' && window.innerWidth < 1300 ? 5 : 6;
-  });
-
-  useEffect(() => {
-    const onResize = () => {
-      setVodCols(window.innerWidth < 1300 ? 5 : 6);
-    };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
+  // The stage is always 1920 wide: 6 columns for VOD, 2 for live TV
+  const vodCols = 6;
 
   // All VOD items from catalog (cached across mounts for instant opening)
   const [allVodItems, setAllVodItems] = useState<VodItem[]>(cachedAllVodItems || []);
