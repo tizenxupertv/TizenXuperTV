@@ -8,7 +8,7 @@ import { parentalService } from '../services/parentalService';
 import { useRenderCount } from '../debug/renderCount';
 import { useViewProfiler } from '../lib/perfMonitor';
 import { channelKey, isSameChannel, normalizeChannels, realText } from '../lib/channelKey';
-import { ChannelRow, CategoryRow } from '../components/live/LiveRows';
+import { ChannelRow, CategoryRow, categoryBadge } from '../components/live/LiveRows';
 import { OnScreenKeyboard, KbState, KB_INITIAL } from '../components/live/OnScreenKeyboard';
 import { CatchupModal } from '../components/live/CatchupModal';
 import { normalizeText } from '../utils/normalizeText';
@@ -1023,7 +1023,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             <span className="live-header-title">{activeCategory.name}</span>
             <span className="live-header-sub">{channels.length} canales</span>
           </div>
-          {(activeCategory.isEspn || activeCategory.badge || /deportes/i.test(activeCategory.name)) && <span className="beta-pill">Beta</span>}
+          {categoryBadge(activeCategory) && <span className="beta-pill">{categoryBadge(activeCategory)}</span>}
         </div>
 
         <div className="live-channel-vlist" ref={channelListRef}>
@@ -1323,7 +1323,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                     }`}
                   >
                     <span className="pc-cat-name">{cat.name}</span>
-                    {cat.badge && <span className="beta-pill pc-cat-badge">{cat.badge}</span>}
+                    {categoryBadge(cat) && <span className="beta-pill pc-cat-badge">{categoryBadge(cat)}</span>}
                     {!cat.isFav && parentalService.isAdultCategory(cat.name) && <span className="pc-cat-lock">🔒</span>}
                   </div>
                 ))}
