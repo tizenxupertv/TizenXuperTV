@@ -197,6 +197,24 @@ export class SportsService {
     return stream;
   }
 
+  /** True when the signal's address must be worked out before playing it */
+  public needsResolving(stream: SportsStream | null | undefined): boolean {
+    return !!stream && !!stream.tokenApi;
+  }
+
+  /**
+   * The signal ready to play: its signed or extracted address when it has one to work out, the same signal
+   * otherwise or when that fails (the player then reports it as a signal that did not load)
+   */
+  public async resolveStream(stream: SportsStream): Promise<SportsStream> {
+    if (!this.needsResolving(stream)) return stream;
+    try {
+      return await this.resolveDynamicStream(stream);
+    } catch {
+      return stream;
+    }
+  }
+
   public async getStreams(linksPath: string, forceRefresh = false): Promise<SportsStream[]> {
     if (!linksPath) return [];
 
@@ -218,8 +236,10 @@ export class SportsService {
 
     const encrypted = await resp.text();
     const decrypted = decryptSportsPayload(encrypted);
-    const parsed = this.parseStreams(decrypted);
-    const streams = await Promise.all(parsed.map(s => this.resolveDynamicStream(s)));
+    // The list as the service gives it. A signal whose address has to be worked out (a signed link, a page to read)
+    // is resolved when the viewer picks it (resolveStream): doing all of them here made every match wait for
+    // requests to signals nobody opened, and a signed link could be minutes old by the time it was played
+    const streams = this.parseStreams(decrypted);
 
     this.streamsCache.set(linksPath, { streams, time: now });
     return streams;
