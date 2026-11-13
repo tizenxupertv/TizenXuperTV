@@ -567,7 +567,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             {listTab === 'history' && historyCount > 0 && (
               <div className={`pf-btn pf-btn-danger pf-list-action ${isF('clear-history') ? 'is-focused' : ''}`} onClick={tap('clear-history')}>Borrar historial</div>
             )}
-            <div className="pf-total">Total <span>{listItems.length}</span></div>
+            <div className="pf-total">{listItems.length} {listItems.length === 1 ? 'título' : 'títulos'}</div>
           </div>
           {editMode && listItems.length > 0 && (
             <div className="pf-edit-hint">Elige un título y pulsa OK para quitarlo. Pulsa Atrás o «Listo» para terminar.</div>
@@ -580,9 +580,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 <div key={it.key} className={`pf-card-item ${editMode ? 'is-removing' : ''} ${isF('card-' + it.key) ? 'is-focused' : ''}`} onClick={tap('card-' + it.key)}>
                   <div className="pf-poster">
                     <img src={it.poster || 'assets/placeholder_vertical.png'} alt="" loading="lazy" />
+                    <div className="poster-bottom-vignette">
+                      <div className="poster-vignette-title">{it.title}</div>
+                      <div className="poster-vignette-genre">{it.subtitle}</div>
+                    </div>
                   </div>
-                  <div className="pf-card-progress">{it.subtitle}</div>
-                  <div className="pf-card-name">{it.title}</div>
                 </div>
               ))}
             </div>
@@ -974,7 +976,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       />
       <div className="profile-body">
       <aside className="pf-menu">
-        <div className="pf-menu-title">Ajustes</div>
         {SECTIONS.map((s, i) => (
           <div
             key={s.id}
