@@ -136,7 +136,7 @@ class EpicSportsService {
   public async getChannels(): Promise<LiveChannel[]> {
     // Browser-only catalog fixture: never contact the live-channel source while the local
     // catalog contract is being exercised.
-    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('localCatalogMock') === '1') {
+    if (import.meta.env.DEV && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('localCatalogMock') === '1') {
       return this.getStaticChannels();
     }
     const now = Date.now();

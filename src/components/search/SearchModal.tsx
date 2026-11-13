@@ -130,7 +130,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       });
       cachedAllVodItems = unique;
       setAllVodItems(unique);
-    });
+    }).catch(() => {});
   }, []);
 
   // Comprehensive list of ALL channels across all categories

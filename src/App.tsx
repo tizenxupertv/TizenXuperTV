@@ -26,7 +26,6 @@ import { useScreenStack } from './hooks/useScreenStack';
 import { useStableHandlers } from './hooks/useStableHandlers';
 import { completeSplashTask, preloadImages } from './lib/splash';
 import { optimizedImage } from './lib/imageCache';
-import { catalogService } from './services/catalogService';
 import { VodItem, VodEpisode } from './types/vod';
 import { LiveChannel, LiveCategory } from './types/channel';
 import { historyService } from './services/historyService';
@@ -348,18 +347,13 @@ export const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [selectedTab, activeVodPlayer, isFullscreenLive, isSearchOpen, activeDetailItem, stack.length, focusDomain, destacadosFocus.area, currentHeroItems.length]);
 
-  // Refresh the saved live catalog for the next start: once the first screen is idle, and when a
-  // TV left on brings the app back to the front
-  useEffect(() => {
-    const t = setTimeout(() => catalogService.refreshLiveInBackground(), 15000);
-    const onVisible = () => { if (!document.hidden) catalogService.refreshLiveInBackground(); };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      clearTimeout(t);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, []);
   const splashImagesRef = useRef(false);
+  useEffect(() => {
+    if (catalog.catalogError) {
+      completeSplashTask('catalog');
+      completeSplashTask('images');
+    }
+  }, [catalog.catalogError]);
   useEffect(() => {
     if (splashImagesRef.current || !(featuredItems.length || movieItems.length || seriesItems.length)) return;
     splashImagesRef.current = true;
@@ -817,6 +811,11 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-root theme-apple-dark">
+      {catalog.catalogError && selectedTab !== 'tv' && selectedTab !== 'deportes' && (
+        <div role="alert" className="network-status-toast is-offline">
+          No se pudo cargar el catálogo. Vuelve a abrir la aplicación para reintentar.
+        </div>
+      )}
       {/* Network Connectivity Toast (Tizen Resilience) */}
       {networkToast && networkToast.visible && (
         <div className={`network-status-toast ${networkToast.online ? 'is-online' : 'is-offline'}`}>
