@@ -761,8 +761,10 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
         {/* Left Column: Categories List */}
         <div className="browse-col-cats">
           <div className="browse-col-header">
-            <span className="browse-col-title">CATEGORÍAS</span>
-            <span className="browse-col-count">{portalCols === null ? '…' : entries.length}</span>
+            <div className="live-header-lead">
+              <span className="live-header-title">Categorías</span>
+              <span className="live-header-sub">{portalCols === null ? 'Cargando…' : `${entries.length} categorías`}</span>
+            </div>
           </div>
 
           <div className="browse-cat-vlist" ref={catListRef}>
@@ -792,13 +794,6 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
         {/* Right Column: Cards Grid */}
         <div className="browse-col-grid" ref={gridContainerRef}>
-          <div className="browse-grid-subhead">
-            <h2 className="browse-category-name">{entryName}</h2>
-            <span className="browse-category-total">
-              {gridTotal === null ? 'Cargando…' : `${gridTotal} títulos disponibles`}
-            </span>
-          </div>
-
           {portalCols === null || gridState === 'loading' ? (
             <div className="browse-empty-category">
               <div className="browse-empty-icon">⏳</div>
