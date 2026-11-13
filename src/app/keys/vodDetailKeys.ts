@@ -77,11 +77,18 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
 
     const pool = detailCast.length > 0 ? detailCast : parseCastFromVodItem(activeDetailItem);
     const totalCast = pool.length;
-    const modalArea: 'close' | 'text' | 'cast' = detailFocus.synopsisModalArea || (totalCast > 0 ? 'cast' : 'text');
+    const modalArea: 'close' | 'cast' = detailFocus.synopsisModalArea || (totalCast > 0 ? 'cast' : 'close');
 
+    // The description is not a stop: the remote moves between the close button and the cast cards
     if (modalArea === 'close') {
-      if (key === 'down') {
-        setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'text' }));
+      if (key === 'down' || key === 'up') {
+        if (key === 'down' && totalCast > 0) {
+          setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'cast', castIndex: 0 }));
+        } else if (totalCast === 0) {
+          // No cast to move to: the arrows scroll a description longer than the dialog
+          const body = document.querySelector('.synopsis-modal-body');
+          if (body) body.scrollTop += key === 'down' ? 160 : -160;
+        }
         return true;
       }
       if (key === 'enter') {
@@ -92,34 +99,6 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
           area: 'quick',
           quickIndex: 1
         }));
-        return true;
-      }
-      return true;
-    }
-
-    if (modalArea === 'text') {
-      if (key === 'up') {
-        setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'close' }));
-        return true;
-      }
-      if (key === 'down') {
-        if (totalCast > 0) {
-          setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'cast', castIndex: 0 }));
-        }
-        return true;
-      }
-      if (key === 'enter') {
-        if (totalCast > 0) {
-          setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'cast', castIndex: 0 }));
-        } else {
-          setDetailFocus(prev => ({
-            ...prev,
-            showSynopsisModal: false,
-            synopsisModalArea: undefined,
-            area: 'quick',
-            quickIndex: 1
-          }));
-        }
         return true;
       }
       return true;
@@ -142,8 +121,8 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
         if (ci >= COLS) {
           setDetailFocus(prev => ({ ...prev, castIndex: Math.max(0, ci - COLS) }));
         } else {
-          // Top row: go back up to synopsis text
-          setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'text' }));
+          // Top row: up goes to the close button
+          setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'close' }));
         }
         return true;
       }
@@ -160,21 +139,6 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
         if (p && setSelectedPerson) {
           setSelectedPerson(p);
         }
-        return true;
-      }
-    } else {
-      if (key === 'up') {
-        setDetailFocus(prev => ({ ...prev, synopsisModalArea: 'close' }));
-        return true;
-      }
-      if (key === 'enter') {
-        setDetailFocus(prev => ({
-          ...prev,
-          showSynopsisModal: false,
-          synopsisModalArea: undefined,
-          area: 'quick',
-          quickIndex: 1
-        }));
         return true;
       }
     }
@@ -264,7 +228,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
       setDetailFocus(prev => ({
         ...prev,
         showSynopsisModal: true,
-        synopsisModalArea: 'text',
+        synopsisModalArea: undefined,
         castIndex: 0
       }));
       return true;
@@ -335,7 +299,7 @@ export function handleVodDetailKeys(key: TvKey, ctx: VodDetailKeysCtx): boolean 
         setDetailFocus(prev => ({
           ...prev,
           showSynopsisModal: true,
-          synopsisModalArea: pool.length > 0 ? 'cast' : 'text',
+          synopsisModalArea: pool.length > 0 ? 'cast' : 'close',
           castIndex: 0
         }));
       }
