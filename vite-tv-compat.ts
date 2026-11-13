@@ -61,6 +61,16 @@ export function resolveCssFunctions(value: string): string | null {
   return out;
 }
 
+/**
+ * Viewport units become stage pixels. public/js/tizen-bridge.js scales the fixed 1920x1080 stage to any
+ * other window, where vw/vh would still measure the window and leave layers smaller than the stage.
+ */
+export function toStageUnits(css: string): string {
+  return css.replace(/(?<![\w#.-])(-?\d*\.?\d+)(vw|vh)\b/g, (_all, n: string, unit: string) =>
+    round((parseFloat(n) * (unit === 'vw' ? CANVAS_W : CANVAS_H)) / 100)
+  );
+}
+
 export function addCssFallbacks(css: string): string {
   // 1. Math functions min/max/clamp fallback for Chromium < 79
   let out = css.replace(
@@ -133,7 +143,7 @@ export function tvCompatPlugin(appVersion = 'dev'): Plugin {
     enforce: 'pre',
     transform(code, id) {
       if (!id.endsWith('.css')) return null;
-      return { code: addCssFallbacks(code), map: null };
+      return { code: addCssFallbacks(toStageUnits(code)), map: null };
     },
     closeBundle() {
       // Only after a production build (dist exists with the copied public files)
