@@ -8,7 +8,7 @@ import { getEpisodeStatus, canSaveProgress, reachedResumeGoal, retryStartAt } fr
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { hostOf, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
-import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseHlsConfig, mseSourceAt, mseSourceCount, mseUnsupportedReason, wantedAudioIndex, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
+import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseHlsConfig, mseNetworkAction, mseSourceAt, mseSourceCount, mseUnsupportedReason, wantedAudioIndex, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
 import { friendlyPortalError } from '../lib/portalErrors';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
@@ -196,6 +196,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const mseFailedRef = useRef(false);
   /** CDN of the title MSE plays from (0: the main one); a CDN that fails moves MSE to the next before AVPlay */
   const mseCdnRef = useRef(0);
+  /** Last time MSE retried the same CDN after a network failure (0: never) */
+  const mseRetryAtRef = useRef(0);
   /** Audio language picked in this player among the ones inside the file ('' = the profile preference) */
   const fileAudioRef = useRef('');
   /** Which of the file's audios MSE plays (0: the first one) */
@@ -855,6 +857,17 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       setRetryTick(t => t + 1);
     };
 
+    // A passing network failure (504, timeout): the same CDN once more, with fresh links, at the same position
+    const retrySameCdn = (why: string) => {
+      if (!alive) return;
+      alive = false;
+      mseRetryAtRef.current = Date.now();
+      logPlayback({ kind: 'stall', player: 'MSE', detail: `reintenta el mismo CDN: ${why}` });
+      if (video.currentTime > 5) timeRef.current.t = video.currentTime;
+      setMseRes(null);
+      setRetryTick(t => t + 1);
+    };
+
     buildVodPlaylist(mseRes)
       .then(({ playlist, pieces, skipped }) => {
         if (!alive) return;
@@ -886,7 +899,11 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
             return;
           }
           const code = data.response && data.response.code ? ` ${data.response.code}` : '';
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && cdnsLeft > 0) return switchCdn(`${data.details}${code}`);
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            const action = mseNetworkAction({ cdnsLeft, lastRetryAt: mseRetryAtRef.current, now: Date.now() });
+            if (action === 'next-cdn') return switchCdn(`${data.details}${code}`);
+            if (action === 'retry') return retrySameCdn(`${data.details}${code}`);
+          }
           fallBack(`${data.type}/${data.details}${code}`);
         });
         hls.loadSource(MSE_PLAYLIST_URL);

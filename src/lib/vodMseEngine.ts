@@ -47,6 +47,20 @@ export function mseSourceAt<T extends MseVodSource>(res: T, n: number): T | null
   return { ...res, url: b.url, idxUrl: b.idxUrl, headers: b.headers || res.headers, backupUrls: backups.slice(n) };
 }
 
+/** A same-CDN retry within this long of the previous one means the CDN is down: AVPlay is the last resort */
+export const MSE_RETRY_WINDOW_MS = 120000;
+
+/**
+ * What MSE does after a network failure while playing a title: the next CDN while there is one, then one retry of
+ * the same CDN (a 504 or a timeout usually passes), then AVPlay. AVPlay on Tizen 5.x cannot resume these files at
+ * the position (no duration), so falling to it costs the viewer the place in the title.
+ */
+export function mseNetworkAction(o: { cdnsLeft: number; lastRetryAt: number; now: number }): 'next-cdn' | 'retry' | 'avplay' {
+  if (o.cdnsLeft > 0) return 'next-cdn';
+  if (!o.lastRetryAt || o.now - o.lastRetryAt > MSE_RETRY_WINDOW_MS) return 'retry';
+  return 'avplay';
+}
+
 /** Why this title cannot play through MSE on this TV ('' when it can), for the playback log */
 export function mseUnsupportedReason(res: MseVodSource | null | undefined, w: any = window): string {
   if (!res) return 'sin datos del video';
