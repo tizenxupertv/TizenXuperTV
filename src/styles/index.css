@@ -2442,8 +2442,8 @@ html, body {
   position: fixed;
   left: 0;
   top: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   background: #07090e;
   overflow-y: auto;
   overflow-x: hidden;
@@ -3822,8 +3822,8 @@ html, body {
 .search-modal-backdrop {
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   background: #07090e;
   z-index: 100010;
   display: flex;
@@ -3834,8 +3834,8 @@ html, body {
 }
 
 .search-modal-container {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   background: #07090e;
   border: none;
   border-radius: 0;
