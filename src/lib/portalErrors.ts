@@ -22,15 +22,33 @@ export function isRegionBlocked(err: unknown): boolean {
   return /100024$/.test(code) || /\b(portal)?100024\b/.test(message) || /黑名单/.test(message);
 }
 
-/** Text for the viewer: region blocks explained in Spanish; other portal errors without the Chinese text */
+export const SERVICE_DOWN_TITLE = 'El servicio de contenido no responde';
+export const SERVICE_DOWN_TEXT =
+  'El servicio externo que entrega el contenido rechazó la solicitud. No depende de TizenXuper TV ni de tu televisor: ' +
+  'la app solo lo muestra. Inténtalo más tarde.';
+
+/**
+ * The content service refuses every request of this kind, whoever asks: "portal200001 版本已停止使用" ("this version is
+ * no longer in use"). Nothing the viewer does on the TV changes it
+ */
+export function isServiceUnavailable(err: unknown): boolean {
+  const { code, message } = errorText(err);
+  return /200001$/.test(code) || /\b(portal)?200001\b/.test(message) || /版本已停止使用/.test(message);
+}
+
+/**
+ * Text for the viewer: region blocks and a refusing service explained in Spanish; other portal errors keep only
+ * their code, without the Chinese text, and say that the refusal is the service's
+ */
 export function friendlyPortalError(err: unknown, fallback = 'No se pudo obtener el video del portal.'): string {
   if (isRegionBlocked(err)) return REGION_BLOCKED_TEXT;
+  if (isServiceUnavailable(err)) return SERVICE_DOWN_TEXT;
   const { code, message } = errorText(err);
   if (!message) return fallback;
   // "path -> portal100031 <Chinese text>": keep only the code
   if (/[㐀-鿿]/.test(message)) {
     const found = code || (message.match(/\b[a-z]+\d{6}\b/i) || [''])[0];
-    return found ? `El portal rechazó la solicitud (código ${found}).` : fallback;
+    return found ? `El servicio de contenido rechazó la solicitud (código ${found}). No depende de TizenXuper TV.` : fallback;
   }
   return message;
 }
