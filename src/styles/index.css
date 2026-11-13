@@ -1085,11 +1085,33 @@ html, body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.live-header-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .live-header-title {
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 800;
-  letter-spacing: 0.8px;
-  color: var(--color-accent);
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.beta-pill {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  padding: 4px 9px;
+  border-radius: 999px;
+  flex-shrink: 0;
 }
 
 .live-header-count {
@@ -1099,50 +1121,6 @@ html, body {
   background: rgba(255, 255, 255, 0.06);
   padding: 2px 8px;
   border-radius: 10px;
-}
-
-.live-col-header.has-subtitle {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-  padding: 13px 18px 11px 18px;
-}
-
-.live-col-header-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.live-col-header-sub {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: #fbbf24;
-  letter-spacing: 0.2px;
-  opacity: 0.9;
-}
-
-.live-col-header.has-subtitle {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-  padding: 13px 18px 11px 18px;
-}
-
-.live-col-header-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.live-col-header-sub {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: #fbbf24;
-  letter-spacing: 0.2px;
-  opacity: 0.9;
 }
 
 .live-cat-vlist {
@@ -1213,9 +1191,9 @@ html, body {
   letter-spacing: 0.5px;
   padding: 2px 6px;
   border-radius: 4px;
-  background: rgba(0, 229, 255, 0.2);
-  color: #00e5ff;
-  border: 1px solid rgba(0, 229, 255, 0.4);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
   line-height: 1.2;
   margin-left: 8px;
   flex-shrink: 0;
@@ -1223,7 +1201,7 @@ html, body {
 
 .live-cat-vrow.is-focused .live-cat-badge {
   background: rgba(0, 0, 0, 0.85);
-  color: #00e5ff;
+  color: #fbbf24;
   border-color: transparent;
 }
 
@@ -4628,9 +4606,9 @@ html, body {
   letter-spacing: 0.5px;
   padding: 2px 7px;
   border-radius: 4px;
-  background: rgba(0, 229, 255, 0.2);
-  color: #00e5ff;
-  border: 1px solid rgba(0, 229, 255, 0.4);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
   line-height: 1.2;
   margin-left: 6px;
   flex-shrink: 0;
@@ -4638,7 +4616,7 @@ html, body {
 
 .pc-cat.is-focused .pc-cat-badge {
   background: rgba(0, 0, 0, 0.85);
-  color: #00e5ff;
+  color: #fbbf24;
   border-color: transparent;
 }
 

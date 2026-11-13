@@ -991,7 +991,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           ========================================================= */}
       <aside className="live-col-categories">
         <div className="live-col-header">
-          <span className="live-header-title">CATEGORÍAS</span>
+          <span className="live-header-title">Categorías</span>
           <span className="live-header-count">{categories.length}</span>
         </div>
 
@@ -1013,16 +1013,12 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           COLUMNA 2: Lista de Canales (460px)
           ========================================================= */}
       <section className="live-col-channels">
-        <div className={`live-col-header ${(activeCategory.isEspn || activeCategory.badge || /deportes/i.test(activeCategory.name)) ? 'has-subtitle' : ''}`}>
-          <div className="live-col-header-main">
-            <span className="live-header-title">{activeCategory.name.toUpperCase()}</span>
-            <span className="live-header-count">{channels.length} canales</span>
-          </div>
-          {(activeCategory.isEspn || activeCategory.badge) ? (
-            <div className="live-col-header-sub">Señales experimentales sujetas a disponibilidad (Beta)</div>
-          ) : /deportes/i.test(activeCategory.name) ? (
-            <div className="live-col-header-sub">Transmisiones deportivas en fase beta · Sujetas a disponibilidad</div>
-          ) : null}
+        <div className="live-col-header">
+          <span className="live-header-lead">
+            <span className="live-header-title">{activeCategory.name}</span>
+            {(activeCategory.isEspn || activeCategory.badge || /deportes/i.test(activeCategory.name)) && <span className="beta-pill">Beta</span>}
+          </span>
+          <span className="live-header-count">{channels.length} canales</span>
         </div>
 
         <div className="live-channel-vlist" ref={channelListRef}>
