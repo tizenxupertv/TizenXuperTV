@@ -1,5 +1,6 @@
 import { friendlyPortalError } from '../lib/portalErrors';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { VodItem, VodEpisode, VodSeason, PersonDetail, PersonResult } from '../types/vod';
 import { catalogService, getPersons } from '../services/catalogService';
 import { PersonDetailModal } from '../components/vod/PersonDetailModal';
@@ -549,7 +550,10 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     }
   }, [focus.area]);
 
-  const backdropUrl = currentItem.backdrop || currentItem.landscape || currentItem.poster || 'assets/placeholder_landscape.png';
+  const rawBackdrop = currentItem.backdrop || currentItem.landscape || currentItem.poster || 'assets/placeholder_landscape.png';
+  const backdropUrl = import.meta.env.DEV && /^https?:/.test(rawBackdrop)
+    ? `${location.origin}/stream-proxy?url=${encodeURIComponent(rawBackdrop)}`
+    : rawBackdrop;
 
   // Visible range of episodes: the focused one in the ranges row, else the focused/current episode's
   const visibleRange = focus.area === 'epRanges' && focus.rangeIndex !== undefined
@@ -566,7 +570,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   const score = currentItem.score && currentItem.score !== '0' ? currentItem.score : '';
   const year = currentItem.year && currentItem.year !== '—' ? currentItem.year : '';
 
-  return (
+  return ReactDOM.createPortal(
     <div className="vod-detail-screen" ref={rootScrollRef}>
       {/* Immersive Cinema Backdrop */}
       <div className="vod-detail-backdrop">
@@ -1069,5 +1073,5 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
       )}
 
     </div>
-  );
+  , document.body);
 };

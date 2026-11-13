@@ -24,7 +24,7 @@ import { favoritesService } from './services/favoritesService';
 import { useTvRemote, TvKey } from './hooks/useTvRemote';
 import { useScreenStack } from './hooks/useScreenStack';
 import { useStableHandlers } from './hooks/useStableHandlers';
-import { startSplash, completeSplashTask, preloadImages } from './lib/splash';
+import { completeSplashTask, preloadImages } from './lib/splash';
 import { optimizedImage } from './lib/imageCache';
 import { catalogService } from './services/catalogService';
 import { VodItem, VodEpisode } from './types/vod';
@@ -348,8 +348,6 @@ export const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [selectedTab, activeVodPlayer, isFullscreenLive, isSearchOpen, activeDetailItem, stack.length, focusDomain, destacadosFocus.area, currentHeroItems.length]);
 
-  // Splash (index.html): a real loading screen, see lib/splash.ts
-  useEffect(() => { startSplash(); }, []);
   // Refresh the saved live catalog for the next start: once the first screen is idle, and when a
   // TV left on brings the app back to the front
   useEffect(() => {
