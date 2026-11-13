@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 // First, so its key listener runs before any screen's
-import { DonateMomentNotice, UpdatedNotice, UpdateNotice } from './components/common/UpdateNotice';
+import { AppNotice, DonateMomentNotice, MaintenanceScreen, UpdatedNotice, UpdateNotice } from './components/common/UpdateNotice';
+import { APP_STATUS_POLL_MS, noticeKey, noticeToShow, parseAppStatus, type AppStatus } from './lib/appStatus';
 import { markAsked, onDonateMoment, touch as touchDonateMoment } from './lib/donateMoment';
 import { App } from './App';
 import { LoginScreen } from './screens/LoginScreen';
@@ -54,6 +55,32 @@ const Root: React.FC = () => {
     // ?test=donate previews the request in the browser (dev only)
     import.meta.env.DEV && new URLSearchParams(window.location.search).get('test') === 'donate');
 
+  // The status the team sets for every TV (lib/appStatus): a notice to close, or a screen in place of the app.
+  // Asked at start and then rarely; a failed request means "no status" and the app stays usable.
+  // ?test=notice and ?test=maintenance preview them in the browser (dev only)
+  const [appStatus, setAppStatus] = useState<AppStatus | null>(() => {
+    const preview = import.meta.env.DEV ? new URLSearchParams(window.location.search).get('test') : null;
+    if (preview === 'notice') {
+      return parseAppStatus({ active: true, level: 'notice', updatedAt: 'preview', message: 'Temporalmente se están presentando fallas con el servicio externo de contenido. No depende de TizenXuper TV.' });
+    }
+    if (preview === 'maintenance') return parseAppStatus({ active: true, level: 'block', updatedAt: 'preview', message: 'Estamos trabajando para restablecer el servicio.' });
+    return null;
+  });
+  const [closedNotice, setClosedNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (appStatus && appStatus.updatedAt === 'preview') return;
+    let alive = true;
+    const refresh = () => {
+      accountService.appStatus().then(status => { if (alive) setAppStatus(status); });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, APP_STATUS_POLL_MS);
+    return () => { alive = false; window.clearInterval(timer); };
+    // Once: the preview check reads the initial state only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const notice = noticeToShow(appStatus, closedNotice);
+
   // The donation request: asked for after a title ended and the player closed (lib/donateMoment)
   useEffect(() => {
     touchDonateMoment();
@@ -104,7 +131,9 @@ const Root: React.FC = () => {
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const testParam = urlParams?.get('test');
   const isTestingWelcome = testParam === 'welcome' || testParam === 'welcome1' || testParam === 'welcome2' ||
-    (import.meta.env.DEV && (testParam === 'updated' || testParam === 'donate'));
+    (import.meta.env.DEV && (testParam === 'updated' || testParam === 'donate' || testParam === 'notice'));
+
+  if (appStatus && appStatus.level === 'block') return <MaintenanceScreen message={appStatus.message} />;
 
   if (!signedIn && !isTestingWelcome) {
     return (
@@ -121,7 +150,9 @@ const Root: React.FC = () => {
   return (
     <>
       <App />
-      {updatedTo
+      {notice
+        ? <AppNotice message={notice.message} onClose={() => setClosedNotice(noticeKey(notice))} />
+        : updatedTo
         ? <UpdatedNotice version={updatedTo} onClose={closeUpdated} />
         : manualUpdate
           ? <UpdateNotice info={manualUpdate} current={accountService.deviceInfo().version} cleanInstall={status.needsReinstall} onClose={closeUpdate} />
