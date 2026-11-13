@@ -8,7 +8,7 @@ import { getEpisodeStatus, canSaveProgress, reachedResumeGoal, retryStartAt } fr
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { hostOf, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
-import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseHlsConfig, mseUnsupportedReason, wantedAudioIndex, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
+import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseHlsConfig, mseSourceAt, mseSourceCount, mseUnsupportedReason, wantedAudioIndex, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
 import { friendlyPortalError } from '../lib/portalErrors';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
 import {
@@ -194,6 +194,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const [mseRes, setMseRes] = useState<any>(null);
   /** MSE failed in this player: the rest of the session (retries, audio changes) uses AVPlay */
   const mseFailedRef = useRef(false);
+  /** CDN of the title MSE plays from (0: the main one); a CDN that fails moves MSE to the next before AVPlay */
+  const mseCdnRef = useRef(0);
   /** Audio language picked in this player among the ones inside the file ('' = the profile preference) */
   const fileAudioRef = useRef('');
   /** Which of the file's audios MSE plays (0: the first one) */
@@ -679,6 +681,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       const mseInBrowser = !hasAvPlay() && import.meta.env.DEV;
       if ((hasAvPlay() || mseInBrowser) && !isTrailer && !mseWhyNot) {
         // Indexed .ts on a TV with MSE: pieces by byte range, instant seeks inside the buffer
+        // After a CDN failed in this player: the same title from the next one (fresh links from the portal)
+        if (mseCdnRef.current > 0) res = mseSourceAt(res, mseCdnRef.current) || res;
         if (mseInBrowser) res = viaDevProxy(res);
         window.__xuperCurrentStreamMeta = { ...res, contentId, seasonId, trackIndex: portalTrackRef.current, startedAt: Date.now() };
         // The audios inside the file are the menu: choosing another one reopens the title on it, at the same position
@@ -839,9 +843,31 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('ended', onEnded);
 
+    // CDNs after the one this playlist plays from: a network failure moves to the next one instead of AVPlay
+    let cdnsLeft = mseSourceCount(mseRes) - 1;
+    const switchCdn = (why: string) => {
+      if (!alive) return;
+      alive = false;
+      mseCdnRef.current += 1;
+      logPlayback({ kind: 'stall', player: 'MSE', detail: `cambia de CDN (${mseCdnRef.current + 1}): ${why}` });
+      if (video.currentTime > 5) timeRef.current.t = video.currentTime;
+      setMseRes(null);
+      setRetryTick(t => t + 1);
+    };
+
     buildVodPlaylist(mseRes)
-      .then(({ playlist, pieces }) => {
+      .then(({ playlist, pieces, skipped }) => {
         if (!alive) return;
+        if (skipped > 0) {
+          // The index came from a backup CDN: the media and its headers come from there too
+          const src: any = mseSourceAt(mseRes, skipped);
+          mseCdnRef.current += skipped;
+          cdnsLeft -= skipped;
+          if (src && window.__xuperCurrentStreamMeta) {
+            window.__xuperCurrentStreamMeta = { ...window.__xuperCurrentStreamMeta, url: src.url, idxUrl: src.idxUrl, headers: src.headers };
+          }
+          logPlayback({ kind: 'info', player: 'MSE', detail: `índice desde el CDN ${mseCdnRef.current + 1}` });
+        }
         console.log('[VodPlayer] MSE playlist', pieces, 'pieces, start at', Math.round(startedAtRef.current));
         hls = (window as any).__xuperCreateHls(mseHlsConfig(Hls, playlist, startedAtRef.current, mseAudioIndexRef.current));
         if (!hls) return fallBack('hls.js no disponible');
@@ -860,6 +886,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
             return;
           }
           const code = data.response && data.response.code ? ` ${data.response.code}` : '';
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && cdnsLeft > 0) return switchCdn(`${data.details}${code}`);
           fallBack(`${data.type}/${data.details}${code}`);
         });
         hls.loadSource(MSE_PLAYLIST_URL);
