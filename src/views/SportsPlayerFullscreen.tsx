@@ -192,7 +192,8 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       try { shaka.polyfill.installAll(); } catch {}
     }
 
-    console.log('[SportsPlayer] Starting stream:', currentStream.name, streamUrl, 'isDash:', isDash, 'drmApi:', currentStream.drmApi);
+    // Host only: the link carries tokens, and the DRM key is never written anywhere
+    console.log('[SportsPlayer] Starting stream:', currentStream.name, hostOf(streamUrl), 'isDash:', isDash, 'drm:', Boolean(currentStream.drmApi));
 
     if (isAvPlayAvailable && !isDash) {
       // TV, HLS without DRM: hardware AVPlay (the same path as live TV). It draws below the page, so the
@@ -257,7 +258,8 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         }
 
         player.addEventListener('error', (event: any) => {
-          console.error('[SportsPlayer] Shaka error event:', event.detail);
+          // Code and category only: a network error's data holds the full link
+          console.error('[SportsPlayer] Shaka error event:', event.detail && event.detail.code, event.detail && event.detail.category);
           showBuffering(false);
           showError(`Error de señal: ${currentStream.name}`);
         });
