@@ -102,6 +102,8 @@ class ScoreboardService {
   private games: NormalizedEspnGame[] = [];
   private lastFetchTime: number = 0;
   private isFetching: boolean = false;
+  /** When each feed last answered (ms) */
+  private feedFetchedAt: Record<string, number> = {};
 
   /** Normalized names, cached: findScore compares every match with every ESPN game */
   private normalized = new Map<string, string>();
@@ -187,11 +189,16 @@ class ScoreboardService {
   /**
    * Fetches scores across ESPN sports feeds concurrently and updates cache.
    */
-  public async fetchScores(force = false): Promise<void> {
+  public async fetchScores(force = false, plan?: Partial<Record<string, number>>): Promise<void> {
     const now = Date.now();
-    if (!force && this.games.length > 0 && now - this.lastFetchTime < CACHE_TTL_MS) {
-      return;
-    }
+    // Which feeds are due. With a plan (lib/scoreFeeds) only the sports on the schedule are asked for, each as often
+    // as it needs; without one, every feed at the usual pace
+    const due = Object.keys(ESPN_ENDPOINTS).filter(key => {
+      const maxAge = plan ? plan[key] : CACHE_TTL_MS;
+      if (maxAge === undefined) return false;
+      return force || now - (this.feedFetchedAt[key] || 0) >= maxAge;
+    });
+    if (!due.length) return;
     if (this.isFetching) return;
 
     this.isFetching = true;
@@ -199,6 +206,8 @@ class ScoreboardService {
       // A sport whose feed fails or does not answer keeps the games it had: an empty answer used to wipe them
       const kept = (sportKey: string) => this.games.filter(g => g.sport === sportKey);
       const fetchPromises = Object.entries(ESPN_ENDPOINTS).map(async ([sportKey, url]) => {
+        // Not due: its games stay as they are
+        if (due.indexOf(sportKey) < 0) return kept(sportKey);
         try {
           const resp = await fetchWithTimeout(url);
           if (!resp.ok) return kept(sportKey);
@@ -257,6 +266,7 @@ class ScoreboardService {
             });
           }
 
+          this.feedFetchedAt[sportKey] = Date.now();
           return parsed;
         } catch {
           return kept(sportKey);
