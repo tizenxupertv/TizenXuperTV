@@ -1,3 +1,4 @@
+import { friendlyPortalError } from '../lib/portalErrors';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { VodItem, VodEpisode, VodSeason, PersonDetail, PersonResult } from '../types/vod';
 import { catalogService, getPersons } from '../services/catalogService';
@@ -104,7 +105,8 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     seasons: VodSeason[];
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  // Why the detail did not load, in words for the viewer; null when it loaded
+  const [loadError, setLoadError] = useState<string | null>(null);
   // Season details & episodes of a season other than the opened one
   const [currentSeasonData, setCurrentSeasonData] = useState<{ item: VodItem; seasonId: string; episodes: VodEpisode[] } | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
@@ -155,7 +157,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     const currentToken = ++viewTokenRef.current;
     let isMounted = true;
     setIsLoading(true);
-    setLoadError(false);
+    setLoadError(null);
     setCurrentSeasonData(null);
     setLocalSynopsisModal(false);
 
@@ -179,7 +181,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     }).catch(err => {
       if (!isMounted || currentToken !== viewTokenRef.current) return;
       console.warn('[VodDetailView] Detail load failed:', err);
-      setLoadError(true);
+      setLoadError(friendlyPortalError(err, 'No se pudieron cargar los episodios.'));
       setDetailData({
         item,
         episodes: [],
@@ -845,7 +847,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                 ) : loadError ? (
                   <div className="vod-episodes-empty-card">
                     <div className="vod-episodes-empty-icon">⚠️</div>
-                    <div className="vod-episodes-empty-text">No se pudieron cargar los episodios. Vuelve a abrir la ficha para reintentar.</div>
+                    <div className="vod-episodes-empty-text">{loadError} Vuelve a abrir la ficha para reintentar.</div>
                   </div>
                 ) : episodes.length === 0 ? (
                   <div className="vod-episodes-empty-card">
