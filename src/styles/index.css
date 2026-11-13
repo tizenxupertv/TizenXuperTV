@@ -9453,3 +9453,25 @@ html.legacy-video .synopsis-modal-card {
 html.legacy-video .live-tuning-spinner {
   animation-duration: 1.4s;
 }
+
+/* A notice from the team (AppNotice): amber badge, text large enough to read from the sofa */
+.app-notice-badge { background: rgba(245, 158, 11, 0.16); color: #fbbf24; }
+.app-notice-text { font-size: 26px; line-height: 1.45; color: #e2e8f0; }
+
+/* The app replaced by a message while the team keeps it closed (MaintenanceScreen) */
+.maintenance-screen {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 100010;
+  display: flex; align-items: center; justify-content: center;
+  padding: 48px; background: #080d16; background: radial-gradient(ellipse at 50% 35%, #142536 0%, #080d16 65%);
+}
+.maintenance-card {
+  width: 900px; max-width: 90vw; padding: 58px 64px; text-align: center; border-radius: 28px;
+  background: rgba(17, 22, 34, 0.94); border: 1px solid rgba(0, 229, 255, 0.28);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+.maintenance-icon { color: #00e5ff; font-size: 58px; line-height: 1; margin-bottom: 24px; }
+.maintenance-label { color: #00e5ff; font-size: 16px; font-weight: 900; letter-spacing: 3px; }
+.maintenance-card h1 { color: #fff; font-size: 42px; margin: 18px 0; }
+.maintenance-card p { color: #e2e8f0; font-size: 25px; line-height: 1.45; margin: 0 auto 22px; max-width: 760px; }
+.maintenance-card span { color: #94a3b8; font-size: 18px; }
+html.legacy-video .maintenance-card { box-shadow: none; }
