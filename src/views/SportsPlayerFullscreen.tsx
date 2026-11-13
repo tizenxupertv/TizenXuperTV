@@ -49,7 +49,20 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   const playerKindRef = useRef('');
   const startLoggedRef = useRef(false);
 
-  const currentStream = streams[currentStreamIdx] || streams[0];
+  // The signal as listed, and the same one with its address worked out when it needs it (a signed link, a page to
+  // read). That work happens here, when the signal is chosen, not for every signal of the match when it is opened
+  const listedStream = streams[currentStreamIdx] || streams[0];
+  const [resolved, setResolved] = useState<{ from: SportsStream; stream: SportsStream } | null>(null);
+  const resolving = sportsService.needsResolving(listedStream) && !(resolved && resolved.from === listedStream);
+  useEffect(() => {
+    if (!sportsService.needsResolving(listedStream)) return;
+    let alive = true;
+    sportsService.resolveStream(listedStream).then(stream => {
+      if (alive) setResolved({ from: listedStream, stream });
+    });
+    return () => { alive = false; };
+  }, [listedStream]);
+  const currentStream = resolved && resolved.from === listedStream ? resolved.stream : listedStream;
   const versus = !!event.away && event.away.trim().toLowerCase() !== event.home.trim().toLowerCase();
   const score = versus ? scoreboardService.findScore(event.home, event.away) : null;
 
@@ -120,6 +133,12 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     const run = createRunGuard();
     const showError = run.wrap((msg: string | null) => setError(msg));
     const showBuffering = run.wrap((on: boolean) => setIsBuffering(on));
+    // The address of this signal is still being worked out: the effect runs again when it arrives
+    if (resolving) {
+      showError(null);
+      showBuffering(true);
+      return;
+    }
     if (!currentStream || !currentStream.url) {
       showError('Servidor sin URL disponible');
       showBuffering(false);
@@ -314,7 +333,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       run.end();
       cleanupPlayer();
     };
-  }, [currentStreamIdx, currentStream, cleanupPlayer, shakaTick]);
+  }, [currentStreamIdx, currentStream, cleanupPlayer, shakaTick, resolving]);
 
   // The first moment a signal plays, once per signal
   useEffect(() => {
