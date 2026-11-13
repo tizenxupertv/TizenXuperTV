@@ -219,7 +219,8 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     } else if (isDash && shaka && shaka.Player && shaka.Player.isBrowserSupported()) {
       // Shaka Player for MPEG-DASH & ClearKey DRM (Works in Chrome, Edge, Firefox, Tizen EME)
       try {
-        const player = new shaka.Player(video);
+        // The element is attached below: passing it to the constructor is deprecated since Shaka 4.x
+        const player = new shaka.Player();
         shakaRef.current = player;
 
         // Configure resilient buffer goals (5s rebuffering / 12s goal)
@@ -265,7 +266,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
           showBuffering(Boolean(event.buffering));
         });
 
-        player.load(streamUrl).then(() => {
+        player.attach(video).then(() => player.load(streamUrl)).then(() => {
           console.log('[SportsPlayer] Shaka stream loaded successfully!');
           showBuffering(false);
           video.play().catch(err => {
