@@ -551,7 +551,7 @@ class PlayerService {
 
     // Global fallback bridge for AVPlay -> Hls.js fallback (Eclectic 2.0.36b pattern)
     (window as any).__xuperPlayHlsFallback = (fallbackUrl: string, targetEl: HTMLVideoElement) => {
-      console.log('[PlayerService] Executing transparent fallback to Hls.js for live stream:', fallbackUrl);
+      console.log('[PlayerService] Executing transparent fallback to Hls.js for live stream:', hostOf(fallbackUrl));
       this.usingAvPreview = false;
       this.streamHls(fallbackUrl, targetEl, undefined, this.activeChannelCode || undefined);
     };
@@ -629,7 +629,7 @@ class PlayerService {
           return; // user already switched away
         }
 
-        console.log('[PlayerService] Stream resolved:', streamMeta.name, streamMeta.url);
+        console.log('[PlayerService] Stream resolved:', streamMeta.name, hostOf(streamMeta.url));
         window.__xuperCurrentStreamMeta = streamMeta;
 
         // Use HLS.js for .m3u8 streams on Tizen (handles custom chunk auth headers)
@@ -794,7 +794,7 @@ class PlayerService {
               const next = backups[backupIdx++];
               const nextUrl = typeof next === 'string' ? next : next?.url;
               if (nextUrl) {
-                console.log('[PlayerService] Retrying backup CDN:', nextUrl);
+                console.log('[PlayerService] Retrying backup CDN:', hostOf(nextUrl));
                 let nextEffective = nextUrl;
                 if (isBrowserEnv && nextUrl.startsWith('http') && !nextUrl.includes('/stream-proxy')) {
                   const auth = streamMeta?.headers?.['Content-Auth'] || '';

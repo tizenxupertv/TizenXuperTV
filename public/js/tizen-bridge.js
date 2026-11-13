@@ -7,6 +7,12 @@
 (function (window) {
   'use strict';
 
+  // Stream links carry tokens: the console only gets their host
+  function logHost(url) {
+    var m = /^[a-z]+:\/\/([^/?#]+)/i.exec(String(url || ''));
+    return m ? m[1] : '';
+  }
+
   var isTizen = (typeof tizen !== 'undefined');
   var isWebOS = (typeof webOS !== 'undefined' && webOS.platform && webOS.platform.tv);
 
@@ -669,7 +675,7 @@
         return reply({ returnValue: false, errorText: 'channelCode requerido' });
       }
       MagisClient.resolveLive(code, function (err, stream) {
-        console.log('[resolveLive]', code, err ? ('ERR ' + (err.message || err)) : (stream && stream.url), 'hls=' + !!(window.Hls && Hls.isSupported()));
+        console.log('[resolveLive]', code, err ? ('ERR ' + (err.message || err)) : logHost(stream && stream.url), 'hls=' + !!(window.Hls && Hls.isSupported()));
         if (err || !stream) {
           return reply({ returnValue: false, errorText: err ? String(err.message || err) : 'No se pudo resolver canal' });
         }
@@ -935,7 +941,7 @@
         var nextUrl = typeof nextItem === 'string' ? nextItem : (nextItem && nextItem.url);
         var nextHeaders = (nextItem && nextItem.headers) ? nextItem.headers : (meta && meta.headers);
         if (nextUrl) {
-          console.log('[XuperAVPlay] Retrying with backup CDN:', nextUrl);
+          console.log('[XuperAVPlay] Retrying with backup CDN:', logHost(nextUrl));
           return self._openAndPrepareStream(nextUrl, nextHeaders, self.videoEl);
         }
       }
@@ -968,7 +974,7 @@
         self.isActive = false;
         // Fallback transparent to Hls.js if AVPlay hardware rejects a direct live stream
         if (self.kind === 'live' && self._lastUrl && self.videoEl && typeof window.__xuperPlayHlsFallback === 'function') {
-          console.warn('[XuperAVPlay] AVPlay live failed, invoking transparent Hls.js fallback for:', self._lastUrl);
+          console.warn('[XuperAVPlay] AVPlay live failed, invoking transparent Hls.js fallback for:', logHost(self._lastUrl));
           try {
             self._safeStopAndClose();
             window.__xuperPlayHlsFallback(self._lastUrl, self.videoEl);
@@ -1577,7 +1583,7 @@
             var nextUrl = backups[self._previewBackupIdx++];
             if (typeof nextUrl === 'object' && nextUrl) nextUrl = nextUrl.url;
             if (nextUrl) {
-              console.log('[XuperAVPlay] Preview retrying backup CDN:', nextUrl);
+              console.log('[XuperAVPlay] Preview retrying backup CDN:', logHost(nextUrl));
               self._openPreviewStream(nextUrl, videoEl);
               return true;
             }

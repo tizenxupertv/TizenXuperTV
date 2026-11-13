@@ -6,7 +6,7 @@ import { playerService } from '../services/playerService';
 import { catalogService } from '../services/catalogService';
 import { getEpisodeStatus, canSaveProgress, reachedResumeGoal, retryStartAt } from '../lib/vodResume';
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
-import { logPlayback, setPlaybackContext } from '../lib/playbackLog';
+import { hostOf, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
 import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseHlsConfig, mseUnsupportedReason, wantedAudioIndex, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
 import { friendlyPortalError } from '../lib/portalErrors';
@@ -471,7 +471,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       setAvMode(true);
       // AVPlay draws below the page: everything above it must be transparent
       document.documentElement.classList.add('xuper-vod-avplay');
-      console.log('[VodPlayer] AVPlay open', res.mime, String(res.url).slice(0, 60), 'startAt=' + startedAtRef.current);
+      console.log('[VodPlayer] AVPlay open', res.mime, hostOf(res.url), 'startAt=' + startedAtRef.current);
       // Resuming at an offset: ignore the TV's time until it confirms the seek (video.onresumeseek below)
       resumePendingRef.current = startedAtRef.current > 5;
       if (resumePendingRef.current) {
