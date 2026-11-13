@@ -72,7 +72,7 @@ export type SettingsCol = 'menu' | 'audio' | 'subs' | 'quality';
 
 export type DetailFocusArea = 'back' | 'synopsis' | 'actions' | 'quick' | 'seasons' | 'seasonMenu' | 'epRanges' | 'episodes' | 'cast' | 'related' | 'audioModal';
 
-export type SynopsisModalArea = 'close' | 'text' | 'cast';
+export type SynopsisModalArea = 'close' | 'cast';
 
 export interface VodDetailFocus {
   area: DetailFocusArea;

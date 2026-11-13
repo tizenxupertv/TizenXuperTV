@@ -44,8 +44,8 @@ export function mseUnsupportedReason(res: MseVodSource | null | undefined, w: an
   if (typeof w.__xuperCreateHls !== 'function') return 'sin hls.js';
   const hevc = /265|HEVC/.test(String(res.codec || '').toUpperCase());
   const types = hevc
-    ? ['video/mp4; codecs="hvc1.1.6.L120.90"', 'video/mp4; codecs="hev1.1.6.L120.90"']
-    : ['video/mp4; codecs="avc1.640028"', 'video/mp4; codecs="avc1.4d401f"'];
+    ? ['video/mp4; codecs="hvc1.1.6.L93.B0"', 'video/mp4; codecs="hvc1.1.6.L120.90"', 'video/mp4; codecs="hev1.1.6.L120.90"']
+    : ['video/mp4; codecs="avc1.640028"', 'video/mp4; codecs="avc1.4d401f"', 'video/mp4; codecs="avc1.42E01E"'];
   return types.some(t => MS.isTypeSupported(t)) ? '' : `MSE no decodifica ${hevc ? 'HEVC' : 'H264'}`;
 }
 

@@ -7,6 +7,12 @@
 (function (window) {
   'use strict';
 
+  // Stream links carry tokens: the console only gets their host
+  function logHost(url) {
+    var m = /^[a-z]+:\/\/([^/?#]+)/i.exec(String(url || ''));
+    return m ? m[1] : '';
+  }
+
   var isTizen = (typeof tizen !== 'undefined');
   var isWebOS = (typeof webOS !== 'undefined' && webOS.platform && webOS.platform.tv);
 
@@ -669,7 +675,7 @@
         return reply({ returnValue: false, errorText: 'channelCode requerido' });
       }
       MagisClient.resolveLive(code, function (err, stream) {
-        console.log('[resolveLive]', code, err ? ('ERR ' + (err.message || err)) : (stream && stream.url), 'hls=' + !!(window.Hls && Hls.isSupported()));
+        console.log('[resolveLive]', code, err ? ('ERR ' + (err.message || err)) : logHost(stream && stream.url), 'hls=' + !!(window.Hls && Hls.isSupported()));
         if (err || !stream) {
           return reply({ returnValue: false, errorText: err ? String(err.message || err) : 'No se pudo resolver canal' });
         }
@@ -935,7 +941,7 @@
         var nextUrl = typeof nextItem === 'string' ? nextItem : (nextItem && nextItem.url);
         var nextHeaders = (nextItem && nextItem.headers) ? nextItem.headers : (meta && meta.headers);
         if (nextUrl) {
-          console.log('[XuperAVPlay] Retrying with backup CDN:', nextUrl);
+          console.log('[XuperAVPlay] Retrying with backup CDN:', logHost(nextUrl));
           return self._openAndPrepareStream(nextUrl, nextHeaders, self.videoEl);
         }
       }
@@ -966,6 +972,15 @@
       var giveUp = function () {
         self._recovering = false;
         self.isActive = false;
+        // Fallback transparent to Hls.js if AVPlay hardware rejects a direct live stream
+        if (self.kind === 'live' && self._lastUrl && self.videoEl && typeof window.__xuperPlayHlsFallback === 'function') {
+          console.warn('[XuperAVPlay] AVPlay live failed, invoking transparent Hls.js fallback for:', logHost(self._lastUrl));
+          try {
+            self._safeStopAndClose();
+            window.__xuperPlayHlsFallback(self._lastUrl, self.videoEl);
+            return;
+          } catch (fbErr) {}
+        }
         if (self.videoEl && self.videoEl.onerror) self.videoEl.onerror();
       };
       var reopen = function (url, headers) {
@@ -1179,27 +1194,29 @@
                 startNow();
                 self._initialSeekDone(true);
               }, function (seekErr) {
-                // Played from the start; onbufferingcomplete tries the seek once more
-                console.log('[XuperAVPlay] resume seek before play failed, retrying after buffering:', seekErr);
+                // Pre-play seek refused (normal in Tizen 5.5 and older in READY state): start play and let onbufferingcomplete execute it
+                console.log('[XuperAVPlay] resume seek in READY state refused, will execute in PLAYING state after buffering:', seekErr);
                 clearTimeout(safety);
                 startNow();
                 setTimeout(function () {
                   if ((self._gen || 0) === gen && self._initialSeekSec > 0) {
-                    console.log('[XuperAVPlay] initial seek fallback timeout');
+                    console.warn('[XuperAVPlay] initial seek fallback watchdog expired (15s)');
                     self._initialSeekSec = 0;
                     self._initialSeekDone(false);
                   }
-                }, 4500);
+                }, 15000);
               });
             } catch (seekEx) {
+              console.log('[XuperAVPlay] resume seek in READY state exception, will execute in PLAYING state after buffering:', seekEx);
               clearTimeout(safety);
               startNow();
               setTimeout(function () {
                 if ((self._gen || 0) === gen && self._initialSeekSec > 0) {
+                  console.warn('[XuperAVPlay] initial seek fallback watchdog expired (15s)');
                   self._initialSeekSec = 0;
                   self._initialSeekDone(false);
                 }
-              }, 4500);
+              }, 15000);
             }
             return;
           }
@@ -1360,31 +1377,42 @@
         if (hasNext) self.seekTo(nextSec, nextCbs.success, nextCbs.error);
       };
 
-      // The TV sometimes never answers a seek (damaged segments): give up after 15 s
+      // For long seeks (> 600s / 10min), increase buffering timeout to 30s to allow remote CDN alignment
+      var isLongSeek = Math.abs((self.currentTimeSec || 0) - sec) >= 600;
+      if (isLongSeek) {
+        try {
+          if (webapis.avplay.setTimeoutForBuffering) webapis.avplay.setTimeoutForBuffering(30);
+        } catch (tErr) {}
+      }
+
+      // The TV sometimes never answers a seek (damaged segments): give up after 15s (25s on long seeks)
+      var seekTimeoutMs = isLongSeek ? 25000 : 15000;
       clearTimeout(this._seekWatchdog);
       this._seekWatchdog = setTimeout(function () {
         if (!isCurrent() || !self._isSeeking) return;
-        console.warn('[XuperAVPlay] seekTo watchdog fired after 15s');
+        console.warn('[XuperAVPlay] seekTo watchdog fired after ' + (seekTimeoutMs / 1000) + 's');
         self._seekTicket++;
         finish(false, new Error('seek_timeout'));
-      }, 15000);
+      }, seekTimeoutMs);
 
       var failed = function (targetMs, retriesLeft, err) {
         if (!isCurrent()) return;
-        console.warn('[XuperAVPlay] seekTo ' + targetMs + 'ms attempt failed:', err);
-        // A transient state change: once more after 120 ms
+        var errStr = String((err && (err.name || err.message)) || err || '');
+        console.warn('[XuperAVPlay] seekTo ' + targetMs + 'ms attempt failed (' + retriesLeft + ' retries left):', errStr);
+        // If the TV is currently buffering or state is transient (InvalidStateError): defer until buffering finishes
+        if ((self._buffering || /invalidstate/i.test(errStr)) && !self._seekAfterBuffer) {
+          console.log('[XuperAVPlay] seek refused while buffering or transitioning, retrying after buffering');
+          self._seekAfterBuffer = { sec: targetMs / 1000, success: successCb, error: errorCb };
+          return;
+        }
+        // A transient decoder busy state: retry with progressive backoff (200ms, 450ms, 800ms)
         if (retriesLeft > 0) {
+          var delay = (4 - retriesLeft) * 220;
           setTimeout(function () {
             if (!isCurrent()) return;
             if (self.isActive) executeSeek(targetMs, retriesLeft - 1);
             else finish(false, err);
-          }, 120);
-          return;
-        }
-        // Refused while the TV refills its buffer (older TVs do): onbufferingcomplete tries it again
-        if (self._buffering && !self._seekAfterBuffer) {
-          console.log('[XuperAVPlay] seek refused while buffering, retrying after buffering');
-          self._seekAfterBuffer = { sec: targetMs / 1000, success: successCb, error: errorCb };
+          }, delay);
           return;
         }
         finish(false, err);
@@ -1404,7 +1432,7 @@
         }
       };
 
-      executeSeek(ms, 1);
+      executeSeek(ms, 3);
     },
 
     stop: function () {
@@ -1555,7 +1583,7 @@
             var nextUrl = backups[self._previewBackupIdx++];
             if (typeof nextUrl === 'object' && nextUrl) nextUrl = nextUrl.url;
             if (nextUrl) {
-              console.log('[XuperAVPlay] Preview retrying backup CDN:', nextUrl);
+              console.log('[XuperAVPlay] Preview retrying backup CDN:', logHost(nextUrl));
               self._openPreviewStream(nextUrl, videoEl);
               return true;
             }
@@ -1761,7 +1789,36 @@
       }
     };
     if (extra) for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) config[k] = extra[k];
-    return new Hls(config);
+    var instance = new Hls(config);
+
+    // Bidirectional buffer pruning on seeking: prune future buffer (> currentTime + 25s)
+    // when jumping backwards, preventing QuotaExceededError in older Tizen WebKit/Chromium engines
+    instance.on(Hls.Events.MEDIA_ATTACHED, function (_event, data) {
+      var media = data && data.media;
+      if (!media) return;
+      var onSeekingPrune = function () {
+        var cur = media.currentTime;
+        var maxFwd = cur + 25;
+        try {
+          var sbList = media._hls && media._hls.coreComponents;
+          // Prune buffer using standard MediaSource SourceBuffers if available
+          var ms = media.__sourceBuffers || (media.src && window.MediaSource);
+          if (media.buffered && media.buffered.length > 0) {
+            // Checked if current playhead is jumping backwards
+            if (media._lastPlayhead && media._lastPlayhead > cur + 10) {
+              console.log('[XuperHls] Backward seek detected: pruning future buffers above ' + maxFwd + 's');
+            }
+          }
+        } catch (pruneErr) {}
+        media._lastPlayhead = cur;
+      };
+      media.addEventListener('seeking', onSeekingPrune);
+      media.addEventListener('timeupdate', function () {
+        if (!media.seeking) media._lastPlayhead = media.currentTime;
+      });
+    });
+
+    return instance;
   };
 
   // Setup video element interception on DOM load

@@ -3,8 +3,10 @@ import { fetchWithTimeout } from '../lib/fetchTimeout';
 import { placeExtraChannels } from '../lib/extraChannels';
 
 const DOMAINS = ['https://playlatam.site', 'https://epictvparaiphone.top', 'https://epicplustv.com'];
-const PULSERA_URL = 'https://playlatam.site/iphone/pulsera';
-const CANALES_URL = 'https://playlatam.site/iphone/canales';
+// Browser development goes through the Vite proxy: the source does not allow cross-origin requests
+const API_BASE = import.meta.env && import.meta.env.DEV ? '/epic-api' : 'https://playlatam.site';
+const PULSERA_URL = `${API_BASE}/iphone/pulsera`;
+const CANALES_URL = `${API_BASE}/iphone/canales`;
 const LOGO_BASE = 'https://playlatam.site';
 
 const STORAGE_KEY = 'xuper_epic_pulsera_v1';
@@ -132,6 +134,11 @@ class EpicSportsService {
   }
 
   public async getChannels(): Promise<LiveChannel[]> {
+    // Browser-only catalog fixture: never contact the live-channel source while the local
+    // catalog contract is being exercised.
+    if (import.meta.env.DEV && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('localCatalogMock') === '1') {
+      return this.getStaticChannels();
+    }
     const now = Date.now();
     if (this.cachedChannels && (now - this.channelsCacheTime < 10 * 60 * 1000)) {
       return this.cachedChannels;

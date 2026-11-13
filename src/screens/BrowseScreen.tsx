@@ -304,7 +304,6 @@ function findInitialColumn(cols: PortalColumn[], title: string, column: string |
 
 import { setTrackOffset } from '../utils/scrollHelper';
 import { useViewProfiler } from '../lib/perfMonitor';
-import { ensurePortalSnapshot } from '../lib/portalSnapshot';
 
 interface BrowseScreenProps {
   isTop: boolean;
@@ -465,16 +464,6 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
     });
   }, [root]);
 
-  // With no catalog at hand the screen falls back to the snapshot shipped with the app, loaded on demand
-  const [snapshotTick, setSnapshotTick] = useState(0);
-  useEffect(() => {
-    if (catalogItems && catalogItems.length) return;
-    let alive = true;
-    ensurePortalSnapshot().then(() => { if (alive) setSnapshotTick(t => t + 1); });
-    return () => { alive = false; };
-  }, [catalogItems]);
-
-  // ---------- Offline pool (bundled / saved catalog) for the app's own categories
   const { fullPool, allPool } = useMemo(() => {
     const list: VodItem[] = [];
     const seen = new Set<string>();
@@ -492,14 +481,6 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
       for (const it of catalogItems) {
         if (!seen.has(it.id)) {
           seen.add(it.id);
-          list.push(it);
-        }
-      }
-    } else if (typeof window !== 'undefined' && window.XUPERTV_PORTAL?.items) {
-      for (const it of window.XUPERTV_PORTAL.items) {
-        const id = String(it.id || it.vodId);
-        if (!seen.has(id)) {
-          seen.add(id);
           list.push(it);
         }
       }
@@ -526,7 +507,7 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
       });
     }
     return { fullPool: list, allPool: filtered };
-  }, [fixedItems, catalogItems, root, snapshotTick]);
+  }, [fixedItems, catalogItems, root]);
 
   const isPlatformOrCross = (id: string) =>
     ['netflix', 'hbo', 'disney', 'prime_paramount', 'apple_hulu', 'sports'].includes(id);
@@ -761,8 +742,10 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
         {/* Left Column: Categories List */}
         <div className="browse-col-cats">
           <div className="browse-col-header">
-            <span className="browse-col-title">CATEGORÍAS</span>
-            <span className="browse-col-count">{portalCols === null ? '…' : entries.length}</span>
+            <div className="live-header-lead">
+              <span className="live-header-title">Categorías</span>
+              <span className="live-header-sub">{portalCols === null ? 'Cargando…' : `${entries.length} categorías`}</span>
+            </div>
           </div>
 
           <div className="browse-cat-vlist" ref={catListRef}>
@@ -792,13 +775,6 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
         {/* Right Column: Cards Grid */}
         <div className="browse-col-grid" ref={gridContainerRef}>
-          <div className="browse-grid-subhead">
-            <h2 className="browse-category-name">{entryName}</h2>
-            <span className="browse-category-total">
-              {gridTotal === null ? 'Cargando…' : `${gridTotal} títulos disponibles`}
-            </span>
-          </div>
-
           {portalCols === null || gridState === 'loading' ? (
             <div className="browse-empty-category">
               <div className="browse-empty-icon">⏳</div>

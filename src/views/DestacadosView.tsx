@@ -44,6 +44,7 @@ interface DestacadosViewProps {
   recommendedMovies: VodItem[];
   mustWatchSeries: VodItem[];
   rows?: ContentRowDef[];
+  catalogLoading?: boolean;
   focus: DestacadosFocus;
   isFocusActive?: boolean;
   isFavorite: boolean;
@@ -63,6 +64,7 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
   recommendedMovies,
   mustWatchSeries,
   rows,
+  catalogLoading = false,
   focus,
   isFocusActive = true,
   isFavorite,
@@ -198,6 +200,18 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
           />
         );
       })}
+      {catalogLoading && (
+        <div className="content-section catalog-skeleton" role="status">
+          <div className="section-header">
+            <div className="section-title">Cargando catálogo…</div>
+          </div>
+          <div className="content-slider" aria-hidden="true">
+            {Array.from({ length: 10 }, (_, index) => (
+              <div key={index} className="poster-card apple-poster-card" />
+            ))}
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

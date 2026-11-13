@@ -25,6 +25,19 @@ export function handleLiveTvKeys(key: TvKey, ctx: LiveTvKeysCtx): boolean {
     guardLiveCat,
     returnToHeader
   } = ctx;
+  if (key === 'channelUp' || key === 'channelDown') {
+    const channels = liveChannelsRef.current;
+    if (!channels.length) return true;
+    const tunedIndex = channels.findIndex(channel => isSameChannel(tunedLiveChannel, channel));
+    const step = key === 'channelUp' ? -1 : 1;
+    const nextIndex = tunedIndex < 0
+      ? Math.min(liveTvFocus.channelIndex, channels.length - 1)
+      : (tunedIndex + step + channels.length) % channels.length;
+    setLiveTvFocus(prev => ({ ...prev, channelIndex: nextIndex }));
+    setTunedLiveChannel(channels[nextIndex]);
+    triggerOsd();
+    return true;
+  }
   if (liveTvFocus.area === 'cats') {
     const totalCats = liveCategoriesRef.current.length || DEFAULT_LIVE_CATEGORIES.length;
     if (key === 'up') {

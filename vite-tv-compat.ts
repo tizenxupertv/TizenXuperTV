@@ -61,8 +61,19 @@ export function resolveCssFunctions(value: string): string | null {
   return out;
 }
 
+/**
+ * Viewport units become stage pixels. public/js/tizen-bridge.js scales the fixed 1920x1080 stage to any
+ * other window, where vw/vh would still measure the window and leave layers smaller than the stage.
+ */
+export function toStageUnits(css: string): string {
+  return css.replace(/(?<![\w#.-])(-?\d*\.?\d+)(vw|vh)\b/g, (_all, n: string, unit: string) =>
+    round((parseFloat(n) * (unit === 'vw' ? CANVAS_W : CANVAS_H)) / 100)
+  );
+}
+
 export function addCssFallbacks(css: string): string {
-  return css.replace(
+  // 1. Math functions min/max/clamp fallback for Chromium < 79
+  let out = css.replace(
     /(^[ \t]*|[;{]\s*)([a-z-]+)(\s*:\s*)([^;{}]*\b(?:min|max|clamp)\([^;{}]*?)(\s*!important)?(\s*;)/gm,
     (all, lead: string, prop: string, colon: string, value: string, important = '', end: string) => {
       const resolved = resolveCssFunctions(value);
@@ -70,6 +81,36 @@ export function addCssFallbacks(css: string): string {
       return `${lead}${prop}${colon}${resolved}${important}${end} ${prop}${colon}${value}${important}${end}`;
     }
   );
+
+  // 2. Inset fallback for Chromium < 87 (Tizen 3/4/5/5.5/6)
+  // Matches "inset: <value>;" but not "inset-inline", "inset-block", etc.
+  out = out.replace(
+    /(^[ \t]*|[;{]\s*)\binset(\s*:\s*)([^;{}]+?)(\s*!important)?(\s*;)/gm,
+    (all, lead: string, colon: string, rawVal: string, important = '', end: string) => {
+      const val = rawVal.trim();
+      if (!val || val.includes('var(') || val.includes('calc(')) return all;
+      const parts = val.split(/\s+/);
+      let top: string, right: string, bottom: string, left: string;
+      if (parts.length === 1) {
+        top = right = bottom = left = parts[0];
+      } else if (parts.length === 2) {
+        top = bottom = parts[0];
+        right = left = parts[1];
+      } else if (parts.length === 3) {
+        top = parts[0];
+        right = left = parts[1];
+        bottom = parts[2];
+      } else if (parts.length === 4) {
+        [top, right, bottom, left] = parts;
+      } else {
+        return all;
+      }
+      const imp = important || '';
+      return `${lead}top: ${top}${imp}; right: ${right}${imp}; bottom: ${bottom}${imp}; left: ${left}${imp}; inset:${rawVal}${imp}${end}`;
+    }
+  );
+
+  return out;
 }
 
 /**
@@ -102,7 +143,7 @@ export function tvCompatPlugin(appVersion = 'dev'): Plugin {
     enforce: 'pre',
     transform(code, id) {
       if (!id.endsWith('.css')) return null;
-      return { code: addCssFallbacks(code), map: null };
+      return { code: addCssFallbacks(toStageUnits(code)), map: null };
     },
     closeBundle() {
       // Only after a production build (dist exists with the copied public files)
