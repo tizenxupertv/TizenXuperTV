@@ -264,6 +264,8 @@ export class SportsService {
 
     const now = Date.now();
     const events: SportsEvent[] = [];
+    // The feed can list the same match more than once: links seen per event id
+    const seenLinks = new Map<string, string[]>();
 
     for (const item of rawList) {
       if (!item) continue;
@@ -298,7 +300,13 @@ export class SportsService {
         now < startMillis ? 'scheduled' : now <= endMillis ? 'live' : 'finished';
 
       const isoStartTime = new Date(startMillis).toISOString();
-      const id = `ws:${sport}:${home}:${away}:${isoStartTime}`;
+      const baseId = `ws:${sport}:${home}:${away}:${isoStartTime}`;
+      const links = seenLinks.get(baseId) || [];
+      if (links.indexOf(linksPath) >= 0) continue;
+      links.push(linksPath);
+      seenLinks.set(baseId, links);
+      // Same match with other signals stays as its own card, with its own id
+      const id = links.length > 1 ? `${baseId}#${links.length}` : baseId;
 
       events.push({
         id,

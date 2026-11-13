@@ -121,3 +121,15 @@ test('a signal whose address cannot be worked out is returned unchanged instead 
   const unknown = { name: 'Y', url: 'http://example.com/b.m3u8', scheme: 0, headers: {}, tokenApi: '{"type":"other"}' };
   assert.deepEqual(await service.resolveStream(unknown), unknown);
 });
+
+test('parseEventsJson drops repeated matches and keeps ids unique', () => {
+  const service = new SportsService();
+  const match = (links: string) => ({
+    event: { category: 'Futbol', eventName: 'Liga', teamAName: 'A', teamBName: 'B', date: '07/11/2026', time: '20:00:00', links }
+  });
+  const parsed = service.parseEventsJson(JSON.stringify([match('pro/a.txt'), match('pro/a.txt'), match('pro/b.txt'), match('pro/a.txt')]));
+
+  assert.equal(parsed.length, 2, 'The same match with the same links is listed once');
+  assert.deepEqual(parsed.map(e => e.linksPath), ['pro/a.txt', 'pro/b.txt']);
+  assert.equal(new Set(parsed.map(e => e.id)).size, 2, 'Ids are unique');
+});
