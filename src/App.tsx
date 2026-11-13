@@ -610,6 +610,10 @@ export const App: React.FC = () => {
       return true;
     }
 
+    if (selectedTab === 'tv' && (key === 'channelUp' || key === 'channelDown')) {
+      return handleLiveTvKeys(key, { ...live, guardLiveCat, returnToHeader });
+    }
+
     if (focusDomain === 'header') {
       return handleHeaderKeys(key, {
         setFocusDomain,
@@ -914,6 +918,7 @@ export const App: React.FC = () => {
           recommendedMovies={movieItems}
           mustWatchSeries={seriesItems}
           rows={currentRows}
+          catalogLoading={catalog.catalogLoading}
           focus={destacadosFocus}
           isFocusActive={focusDomain === 'content'}
           isFavorite={isHeroFav}

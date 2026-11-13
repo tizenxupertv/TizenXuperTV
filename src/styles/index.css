@@ -767,6 +767,15 @@ html, body {
   contain: layout style paint;
 }
 
+.catalog-skeleton {
+  pointer-events: none;
+}
+
+.catalog-skeleton .poster-card.apple-poster-card {
+  background: #252932;
+  cursor: default;
+}
+
 .poster-card.apple-poster-card.is-wide-card {
   flex: 0 0 clamp(320px, 24vw, 420px);
   width: clamp(320px, 24vw, 420px);
