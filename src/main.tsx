@@ -178,6 +178,23 @@ const Root: React.FC = () => {
 };
 
 const rootEl = document.getElementById('root');
-if (rootEl) {
-  ReactDOM.createRoot(rootEl).render(<Root />);
+async function mountApp() {
+  if (localCatalogMock) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = '/js/local-catalog-mock.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Could not load the local catalog simulator'));
+        document.head.appendChild(script);
+      });
+    } catch (error) {
+      console.error(error);
+      if (rootEl) rootEl.textContent = 'No se pudo cargar el simulador. Recarga la página.';
+      document.getElementById('xuper-splash')?.remove();
+      return;
+    }
+  }
+  if (rootEl) ReactDOM.createRoot(rootEl).render(<Root />);
 }
+void mountApp();
