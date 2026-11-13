@@ -492,10 +492,11 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
       <div className="spb-layout">
         <aside className="live-col-categories">
           <div className="live-col-header">
-            <span className="live-header-lead">
+            <div className="live-header-lead">
               <span className="live-header-title">Categorías</span>
-              <span className="beta-pill">Beta</span>
-            </span>
+              <span className="live-header-sub">{chips.length} categorías</span>
+            </div>
+            <span className="beta-pill">Beta</span>
           </div>
           <div className="live-cat-vlist" ref={sidebarRef}>
             {chips.map((c, i) => {

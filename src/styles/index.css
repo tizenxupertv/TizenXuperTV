@@ -1087,9 +1087,15 @@ html, body {
 
 .live-header-lead {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
+}
+
+.live-header-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
 }
 
 .live-header-title {
@@ -1112,15 +1118,6 @@ html, body {
   padding: 4px 9px;
   border-radius: 999px;
   flex-shrink: 0;
-}
-
-.live-header-count {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  background: rgba(255, 255, 255, 0.06);
-  padding: 2px 8px;
-  border-radius: 10px;
 }
 
 .live-cat-vlist {
@@ -1186,17 +1183,7 @@ html, body {
 }
 
 .live-cat-badge {
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(251, 191, 36, 0.12);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.4);
-  line-height: 1.2;
   margin-left: 8px;
-  flex-shrink: 0;
 }
 
 .live-cat-vrow.is-focused .live-cat-badge {
@@ -4601,17 +4588,7 @@ html, body {
 }
 
 .pc-cat-badge {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: rgba(251, 191, 36, 0.12);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.4);
-  line-height: 1.2;
   margin-left: 6px;
-  flex-shrink: 0;
 }
 
 .pc-cat.is-focused .pc-cat-badge {

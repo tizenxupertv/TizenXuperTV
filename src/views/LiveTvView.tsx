@@ -28,8 +28,8 @@ export const DEFAULT_LIVE_CATEGORIES: LiveCategory[] = [
   { id: 'favs', name: 'Favoritos', isFav: true },
   { id: 76182, name: 'Todos los canales' },
   { id: 76206, name: 'Deportes en Vivo' },
-  { id: 'espn', name: 'ESPN', isEspn: true, badge: 'BETA' },
-  { id: 'epic-sports', name: 'Deportes+', isEpicSports: true, badge: 'BETA' },
+  { id: 'espn', name: 'ESPN', isEspn: true, badge: 'Beta' },
+  { id: 'epic-sports', name: 'Deportes+', isEpicSports: true, badge: 'Beta' },
   { id: 76205, name: 'Cine & Series 24/7' },
   { id: 76188, name: 'Colombia' },
   { id: 76191, name: 'España' },
@@ -475,8 +475,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             .filter(c => adultOn || !parentalService.isAdultCategory(c.name));
           // Find position of "Deportes" or insert after Favorites/Todos
           const sportsIdx = formatted.findIndex(c => /deportes/i.test(c.name));
-          const espnCat: LiveCategory = { id: 'espn', name: 'ESPN', isEspn: true, badge: 'BETA' };
-          const epicCat: LiveCategory = { id: 'epic-sports', name: 'Deportes+', isEpicSports: true, badge: 'BETA' };
+          const espnCat: LiveCategory = { id: 'espn', name: 'ESPN', isEspn: true, badge: 'Beta' };
+          const epicCat: LiveCategory = { id: 'epic-sports', name: 'Deportes+', isEpicSports: true, badge: 'Beta' };
 
           let ordered: LiveCategory[] = [];
           if (sportsIdx !== -1) {
@@ -991,8 +991,10 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           ========================================================= */}
       <aside className="live-col-categories">
         <div className="live-col-header">
-          <span className="live-header-title">Categorías</span>
-          <span className="live-header-count">{categories.length}</span>
+          <div className="live-header-lead">
+            <span className="live-header-title">Categorías</span>
+            <span className="live-header-sub">{categories.length} categorías</span>
+          </div>
         </div>
 
         <div className="live-cat-vlist" ref={catListRef}>
@@ -1014,11 +1016,11 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           ========================================================= */}
       <section className="live-col-channels">
         <div className="live-col-header">
-          <span className="live-header-lead">
+          <div className="live-header-lead">
             <span className="live-header-title">{activeCategory.name}</span>
-            {(activeCategory.isEspn || activeCategory.badge || /deportes/i.test(activeCategory.name)) && <span className="beta-pill">Beta</span>}
-          </span>
-          <span className="live-header-count">{channels.length} canales</span>
+            <span className="live-header-sub">{channels.length} canales</span>
+          </div>
+          {(activeCategory.isEspn || activeCategory.badge || /deportes/i.test(activeCategory.name)) && <span className="beta-pill">Beta</span>}
         </div>
 
         <div className="live-channel-vlist" ref={channelListRef}>
@@ -1318,7 +1320,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                     }`}
                   >
                     <span className="pc-cat-name">{cat.name}</span>
-                    {cat.badge && <span className="pc-cat-badge">{cat.badge}</span>}
+                    {cat.badge && <span className="beta-pill pc-cat-badge">{cat.badge}</span>}
                     {!cat.isFav && parentalService.isAdultCategory(cat.name) && <span className="pc-cat-lock">🔒</span>}
                   </div>
                 ))}
