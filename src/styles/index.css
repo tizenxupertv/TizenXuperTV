@@ -4276,7 +4276,6 @@ html, body {
   flex-direction: column;
   gap: 8px;
 }
-.pf-menu-title { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 14px; }
 .pf-menu-item {
   display: flex;
   align-items: center;
@@ -4293,8 +4292,8 @@ html, body {
 }
 .pf-menu-item.is-selected {
   color: #fff;
-  background: linear-gradient(135deg, rgba(0, 229, 255, 0.16) 0%, rgba(168, 85, 247, 0.25) 100%);
-  border-color: rgba(168, 85, 247, 0.55);
+  background: #2c3340;
+  border-color: transparent;
 }
 .pf-menu-item.is-focused { background: #fff !important; color: #000 !important; border-color: #fff !important; }
 .pf-panel {
@@ -4332,8 +4331,8 @@ html, body {
 .pf-avatar {
   width: 68px; height: 68px; border-radius: 34px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, rgba(0, 229, 255, 0.16) 0%, rgba(168, 85, 247, 0.25) 100%);
-  border: 3px solid rgba(168, 85, 247, 0.55);
+  background: #2c3340;
+  border: 3px solid rgba(255, 255, 255, 0.08);
   box-sizing: border-box;
 }
 .pf-account-id { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
@@ -4347,13 +4346,12 @@ html, body {
 }
 .pf-tab.is-selected {
   color: #fff;
-  background: linear-gradient(135deg, rgba(0, 229, 255, 0.16) 0%, rgba(168, 85, 247, 0.25) 100%);
-  border-color: rgba(168, 85, 247, 0.55);
+  background: #2c3340;
+  border-color: transparent;
 }
 .pf-tab.is-focused { background: #fff !important; color: #000 !important; border-color: #fff !important; }
 .pf-tabs { align-items: center; margin-bottom: 18px; }
-.pf-total { margin-left: auto; font-size: 14px; color: var(--text-muted); }
-.pf-total span { color: var(--color-accent-sub); font-weight: 800; }
+.pf-total { margin-left: auto; font-size: 14px; font-weight: 600; color: var(--text-dim); }
 .pf-empty { font-size: 16px; color: var(--text-dim); padding: 48px 0; }
 .pf-grid { display: flex; flex-wrap: wrap; gap: 22px 20px; }
 .pf-grid .pf-card-item { flex: 0 0 176px; }
@@ -4362,15 +4360,17 @@ html, body {
   .pf-grid .pf-card-item { flex: none; }
 }
 .pf-card-item { width: 176px; }
+/* Same look as the home cards (.poster-card): title and a line of detail over the poster */
 .pf-card-item .pf-poster {
+  position: relative;
   width: 176px; height: 262px; border-radius: 12px; overflow: hidden; background: #11141d;
   border: 3px solid rgba(255, 255, 255, 0.08); box-sizing: border-box;
 }
 .pf-card-item .pf-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pf-card-item.is-focused .pf-poster { border-color: #fff; }
-.pf-card-item.is-focused .pf-card-name { color: var(--color-accent); }
-.pf-card-progress { margin-top: 8px; font-size: 12px; color: var(--color-accent-sub); }
-.pf-card-name { margin-top: 2px; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pf-card-item.is-focused .poster-vignette-title { color: #00e5ff; }
+/* "Ya miró hasta epis. 3" is a sentence, not a genre to capitalize */
+.pf-card-item .poster-vignette-genre { text-transform: none; }
 
 /* Playback */
 .pf-row { display: flex; align-items: center; min-height: 58px; }
@@ -4383,8 +4383,8 @@ html, body {
 }
 .pf-opt.is-checked {
   color: #fff;
-  background: linear-gradient(135deg, rgba(0, 229, 255, 0.16) 0%, rgba(168, 85, 247, 0.25) 100%);
-  border-color: rgba(168, 85, 247, 0.55);
+  background: #2c3340;
+  border-color: transparent;
 }
 .pf-opt.is-focused { background: #fff !important; color: #000 !important; border-color: #fff !important; }
 .pf-radio { width: 16px; height: 16px; border-radius: 8px; border: 2px solid currentColor; box-sizing: border-box; position: relative; }
