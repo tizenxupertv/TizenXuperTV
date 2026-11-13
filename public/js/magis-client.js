@@ -472,6 +472,16 @@
 
   // opts.onNet: called once the answer has arrived (before it is decrypted), so the request queue
   // moves on while the worker decrypts; opts.low: decrypt in the background worker
+  // Routes the portal answered 404 for: a newer version is tried first and, once it turns out not to exist,
+  // it is skipped for the rest of the session instead of failing before every working request
+  var missingRoutes = {};
+  function routeMissing(path) {
+    return missingRoutes[path] === true;
+  }
+  function noteRouteFailure(path, err) {
+    if (err && err.httpStatus === 404) missingRoutes[path] = true;
+  }
+
   function postHttp(path, payload, done, opts) {
     opts = opts || {};
     var bodyHex;
@@ -485,12 +495,19 @@
     var idx = 0;
     var finished = false;
     var tStart = Date.now();
+    // Last HTTP status a host answered with, handed to the caller with the failure (see routeMissing)
+    var lastStatus = 0;
+    function httpError(message) {
+      var e = new Error(message);
+      e.httpStatus = lastStatus;
+      return e;
+    }
 
     function tryHost() {
       if (finished) return;
       if (idx >= hosts.length || Date.now() - tStart >= REQUEST_MAX_MS) {
         finished = true;
-        return done(new Error(path + ': el portal no respondió'));
+        return done(httpError(path + ': el portal no respondió'));
       }
       var host = hosts[idx++];
       var url = isBrowserEnv ? ('/api/portalCore/' + path) : ('https://' + host + '/api/portalCore/' + path);
@@ -580,9 +597,10 @@
           finished = true;
           return done(null, resp.data !== undefined && resp.data !== null ? resp.data : resp);
         } else {
+          lastStatus = xhr.status;
           if (isBrowserEnv) {
             finished = true;
-            return done(new Error(path + ': respuesta HTTP ' + xhr.status + ' en navegador local'));
+            return done(httpError(path + ': respuesta HTTP ' + xhr.status + ' en navegador local'));
           }
           tryHost();
         }
@@ -1455,10 +1473,14 @@
           }
 
           // Try modern v7/getLiveData first (Hydra 6.8.1), fallback to v6/getLiveData
+          if (routeMissing('v7/getLiveData')) {
+            return postHttp('v6/getLiveData', livePayload, handleLiveResponse);
+          }
           postHttp('v7/getLiveData', livePayload, function (err7, res7) {
             if (!err7 && res7 && res7.channelList) {
               return handleLiveResponse(null, res7);
             }
+            noteRouteFailure('v7/getLiveData', err7);
             postHttp('v6/getLiveData', livePayload, handleLiveResponse);
           });
         });
@@ -1590,9 +1612,11 @@
       var aIdx = 0;
 
       function tryStartLive(lastErr) {
+        while (aIdx < attempts.length - 1 && routeMissing(attempts[aIdx].path)) aIdx++;
         if (aIdx >= attempts.length) return callback(lastErr || new Error('startPlayLive failed'));
         var att = attempts[aIdx++];
         call(att.path, att.bean, function (sErr, sRes) {
+          noteRouteFailure(att.path, sErr);
           if (sErr) return tryStartLive(sErr);
           var addrList = sRes && sRes.liveAddressList || [];
           var validAddrs = addrList.filter(function (a) { return a && a.playCode && a.license; });

@@ -630,6 +630,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     if (!activeCategory) return;
     let alive = true;
     const catId = String(activeCategory.id);
+    setChannelsError('');
 
     if (activeCategory.isFav) {
       const allKnown = Object.values(channelMasterCache.current);
@@ -869,6 +870,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         } else {
           // No channels from the portal: an empty list (never made-up channels)
           setChannels([]);
+          // A failed request is not an empty category: it gets its own message
+          if (err) setChannelsError('No se pudo cargar esta categoría. Revisa la conexión e inténtalo de nuevo más tarde.');
           if (onChannelsLoaded) onChannelsLoaded([]);
         }
         setIsLoadingChannels(false);
@@ -1030,7 +1033,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             <div className="live-empty-msg">
               {activeCategory.isFav
                 ? 'Aún no tienes canales en Favoritos.\nSintoniza un canal y presiona Añadir a Favoritos.'
-                : activeCategory.iptvListId && channelsError
+                : channelsError
                   ? channelsError
                   : 'No hay canales disponibles en esta categoría.\nSi no carga ningún canal, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en Configuración › General › Red › Estado de la red › Configuración de IP.'}
             </div>
