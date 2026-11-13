@@ -55,7 +55,9 @@ html.text-lg .poster-vignette-genre { font-size: 14px; }
 html.text-lg .nav-tab-btn { font-size: 17px; }
 html.text-lg .screen-header-title { font-size: 26px; }
 html.text-lg .screen-header-sub { font-size: 21px; }
-html.text-lg .live-header-title, html.text-lg .browse-col-title { font-size: 16px; }
+html.text-lg .browse-col-title { font-size: 16px; }
+html.text-lg .live-header-title { font-size: 20px; }
+html.text-lg .beta-pill { font-size: 14px; }
 html.text-lg .pf-menu-item { font-size: 19px; }
 html.text-lg .pf-menu-title, html.text-lg .pf-title { font-size: 26px; }
 html.text-lg .pf-subtitle { font-size: 20px; }
@@ -126,7 +128,9 @@ html.text-md .poster-vignette-genre { font-size: 12px; }
 html.text-md .nav-tab-btn { font-size: 15px; }
 html.text-md .screen-header-title { font-size: 23px; }
 html.text-md .screen-header-sub { font-size: 18px; }
-html.text-md .live-header-title, html.text-md .browse-col-title { font-size: 14px; }
+html.text-md .browse-col-title { font-size: 14px; }
+html.text-md .live-header-title { font-size: 18px; }
+html.text-md .beta-pill { font-size: 12.5px; }
 html.text-md .pf-menu-item { font-size: 17px; }
 html.text-md .pf-menu-title, html.text-md .pf-title { font-size: 23px; }
 html.text-md .pf-subtitle { font-size: 17px; }
