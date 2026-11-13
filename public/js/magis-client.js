@@ -787,7 +787,7 @@
         session.userToken = uTok;
         session.ready = true;
         saveSession();
-        console.log('[MagisClient] Session established! UserId:', uId);
+        console.log('[MagisClient] Session established');
         notifyWaiters(null, session);
       });
     });
