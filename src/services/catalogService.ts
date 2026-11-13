@@ -5,6 +5,7 @@ import type { VodItem, VodEpisode, VodSeason, PersonDetail, PersonResult } from 
 import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../lib/catalogOrganizer.ts';
 import { formatDuration } from '../lib/vodResume.ts';
 import { collectPosterAlternates } from '../lib/searchArtwork.ts';
+import { catalogProvider } from './catalogProvider.ts';
 
 declare global {
   interface Window {
@@ -157,6 +158,9 @@ const LIVE_FRESH_MS = 2 * 60 * 60 * 1000;
 const LIVE_REFRESH_AFTER_MS = 30 * 60 * 1000;
 /** A partial download saved for lack of anything better is due for a new download this soon */
 const LIVE_RETRY_SOON_MS = 5 * 60 * 1000;
+const FORCE_LIVE_CATALOG = typeof window !== 'undefined'
+  && import.meta.env.DEV
+  && new URLSearchParams(window.location.search).get('forceLiveCatalog') === '1';
 let liveInFlight: Promise<any[]> | null = null;
 let lastKeyAt = 0;
 if (typeof window !== 'undefined') window.addEventListener('keydown', () => { lastKeyAt = Date.now(); }, true);
@@ -179,19 +183,12 @@ async function readLiveCatalog(): Promise<{ at: number; v?: number; items: any[]
 }
 
 function homeRoot(root: string, low: boolean): Promise<any[]> {
-  return new Promise((resolve, reject) => {
-    const client = window.MagisClient;
-    if (!client || typeof client.home !== 'function') return reject(new Error('no portal client'));
-    client.home(root, 1, (err: any, res: any) => (err ? reject(err) : resolve((res && res.items) || [])), { low });
-  });
+  return catalogProvider.home(root, 1, { low }).then(res => res.items || []);
 }
 
 function fetchCompositeHome(): Promise<any[]> {
-  return new Promise((resolve) => {
-    const client = window.MagisClient;
-    if (!client || typeof client.getHome !== 'function') return resolve([]);
-    client.getHome((err: any, res: any) => {
-      if (err || !res) return resolve([]);
+  return catalogProvider.compositeHome().then((res: any) => {
+      if (!res) return [];
       const items: any[] = [];
       const blocks = res.homeBlockList || res.blockBeanList || res.shelveList || [];
       for (const b of blocks) {
@@ -200,9 +197,8 @@ function fetchCompositeHome(): Promise<any[]> {
           if (a && (a.contentId || a.id)) items.push(a);
         }
       }
-      resolve(items);
-    });
-  });
+      return items;
+    }).catch(() => []);
 }
 
 /** Downloads every root's rows; saves them when complete enough */
@@ -254,7 +250,10 @@ function fetchLiveCatalog(low = false): Promise<any[]> {
 class CatalogService {
   /** Refreshes the saved live catalog for the next start (no change on screen) */
   public async refreshLiveInBackground(): Promise<void> {
-    const saved = await readLiveCatalog();
+    // Development-only: verify a new session against the authorized service without the
+    // local mock or a previous saved catalog masking the result.
+    const saved = FORCE_LIVE_CATALOG ? null : await readLiveCatalog();
+    if (FORCE_LIVE_CATALOG) console.log('[catalog] forcing an authorized live catalog request');
     if (saved && saved.v === LIVE_FORMAT && Date.now() - saved.at < LIVE_REFRESH_AFTER_MS) return;
     // The answers are decrypted on the main thread: start only while the remote rests
     if (Date.now() - lastKeyAt < 4000) {
@@ -301,7 +300,10 @@ class CatalogService {
     }
 
     const fresh = await Promise.race([
-      fetchLiveCatalog().catch(() => null),
+      fetchLiveCatalog().catch(error => {
+        console.warn('[catalog] authorized live request failed:', error instanceof Error ? error.message : error);
+        return null;
+      }),
       new Promise<null>(resolve => setTimeout(() => resolve(null), 3000))
     ]);
     const live = fresh && fresh.length ? fresh : (saved ? saved.items : []);
@@ -1102,8 +1104,7 @@ export interface PortalColumn {
 
 /** Portal column id of a root ('movies', 'series', 'kids', 'anime', 'featured', 'explorar') */
 export function portalRootId(root: string): number | undefined {
-  const ids = window.MagisClient?.rootIds as Record<string, number> | undefined;
-  return ids ? ids[root] : undefined;
+  return catalogProvider.rootId(root);
 }
 
 /** opts.special: restricted children too (adult section, opened after the PIN) */
@@ -1114,11 +1115,7 @@ export async function getPortalColumns(columnId: number, opts?: { special?: bool
   // SWR: return cached immediately if available
   const saved = await kvGet<PortalColumn[]>(key);
 
-  const fetchPromise = new Promise<PortalColumn[]>((resolve, reject) => {
-    const client = window.MagisClient;
-    if (!client || typeof client.columns !== 'function') return reject(new Error('no portal client'));
-    client.columns(columnId, (err: any, list: PortalColumn[]) => (err ? reject(err) : resolve(list || [])), { special });
-  }).then(list => {
+  const fetchPromise = catalogProvider.columns(columnId, { special }).then(list => {
     if (list && list.length) kvSet(key, list);
     return list;
   });
@@ -1220,15 +1217,10 @@ export async function getPortalColumnPage(
 
     // Background revalidation if older than 10 minutes
     if (Date.now() - (saved.at || 0) > 10 * 60 * 1000) {
-      new Promise<{ items: VodItem[]; total: number }>((resolve, reject) => {
-        const client = window.MagisClient;
-        if (!client || typeof client.columnPage !== 'function') return reject(new Error('no portal client'));
-        client.columnPage(columnId, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
-          if (err) return reject(err);
+      catalogProvider.columnPage(columnId, pageNum, pageSize, opts).then(res => {
           const rawItems = res.items || [];
           kvSet(cacheKey, { items: rawItems, total: res.total || 0, at: Date.now() });
-          resolve({ items: rawItems, total: res.total || 0 });
-        }, opts);
+          return { items: rawItems, total: res.total || 0 };
       }).catch(() => {});
     }
 
@@ -1236,11 +1228,7 @@ export async function getPortalColumnPage(
   }
 
   // 3. Network fetch
-  return new Promise((resolve, reject) => {
-    const client = window.MagisClient;
-    if (!client || typeof client.columnPage !== 'function') return reject(new Error('no portal client'));
-    client.columnPage(columnId, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
-      if (err) return reject(err);
+  return catalogProvider.columnPage(columnId, pageNum, pageSize, opts).then(res => {
       const offset = (pageNum - 1) * pageSize;
       const rawList = res.items || [];
       const items = rawList.map((raw, i) => {
@@ -1260,8 +1248,7 @@ export async function getPortalColumnPage(
         kvSet(cacheKey, { items: rawList, total, at: Date.now() });
       }
 
-      resolve({ items, total });
-    }, opts);
+      return { items, total };
   });
 }
 
