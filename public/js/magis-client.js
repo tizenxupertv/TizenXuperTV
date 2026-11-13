@@ -324,7 +324,9 @@
     userToken: '',
     snToken: '',
     ready: false,
-    busy: false
+    busy: false,
+    // true when the session came from the catalog server instead of this TV's own start (see ensureSession)
+    viaServer: false
   };
 
   // Restore cached session if available
@@ -400,6 +402,9 @@
   }
 
   function clearSession() {
+    // A server session the portal stopped accepting: the server is told, so it does not hand the same one again
+    if (session.viaServer && session.userToken) rejectedServerToken = session.userToken;
+    session.viaServer = false;
     session.ready = false;
     session.userId = '';
     session.userToken = '';
@@ -683,24 +688,44 @@
   var sessionStarting = false;
   var sessionWaiters = [];
   var sessionAttempt = 0;
+  var rejectedServerToken = '';
 
+  /** MAC sent with a request: this TV's own for its own session, the neutral one for a session of the catalog server */
+  function sessionMac() {
+    return session.viaServer ? '02:00:00:00:00:00' : deviceIdentity(false).etheMac;
+  }
+
+  /**
+   * The TV starts its own session with the portal, as it always did. Only when that fails does it ask the catalog
+   * server (xuper-catalog-session.js) for one, so the app does not depend on that server while the portal accepts it.
+   */
   function ensureSession(callback) {
     callback = callback || function () {};
-    if (window.XuperCatalogSession && typeof window.XuperCatalogSession.acquire === 'function') {
-      window.XuperCatalogSession.acquire().then(function (grant) {
-        session.sn = String(grant.sn || '').toLowerCase();
-        session.userId = String(grant.userId || '');
-        session.userToken = String(grant.userToken || '');
-        session.ready = !!(session.sn && session.userId && session.userToken);
-        if (!session.ready) return callback(new Error('La sesión de catálogo no contiene los datos requeridos.'));
-        callback(null, session);
-      }, callback);
-      return;
-    }
     if (session.ready && session.userId && session.userToken) {
       return callback(null, session);
     }
-    startSession(false, callback);
+    startSession(false, function (err, res) {
+      if (!err) return callback(null, res);
+      var server = window.XuperCatalogSession;
+      if (!server || typeof server.acquire !== 'function') return callback(err);
+      console.warn('[MagisClient] own session failed, asking the catalog server: ' + (err.portalCode || err.message || err));
+      server.acquire(rejectedServerToken || undefined).then(function (grant) {
+        session.sn = String(grant.sn || '').toLowerCase();
+        session.userId = String(grant.userId || '');
+        session.userToken = String(grant.userToken || '');
+        session.viaServer = true;
+        session.ready = !!(session.sn && session.userId && session.userToken);
+        if (!session.ready) {
+          session.viaServer = false;
+          return callback(new Error('La sesión de catálogo no contiene los datos requeridos.'));
+        }
+        rejectedServerToken = '';
+        callback(null, session);
+      }, function () {
+        // The portal's own reason is the one worth showing
+        callback(err);
+      });
+    });
   }
 
   function startSession(freshIdentity, callback) {
@@ -709,6 +734,7 @@
 
     sessionStarting = true;
     session.ready = false;
+    session.viaServer = false;
     // An attempt that gives no answer at all (a decrypt worker that died) is given up, so the next call can start
     // another one; its late answers are ignored
     var attempt = ++sessionAttempt;
@@ -755,7 +781,7 @@
         authVersion: '',
         authCode: '',
         preCode: '',
-        macAddr: '02:00:00:00:00:00',
+        macAddr: identity.etheMac,
         reserve1: '',
         openNum: 4,
         channel: 'default',
@@ -1863,7 +1889,7 @@
           type: reqType,
           sortType: '0',
           language: 'en',
-          macAddr: '02:00:00:00:00:00'
+          macAddr: sessionMac()
         }, function (dErr, dRes) {
           if (dErr && dErr.portalCode === 'portal100006' && reqType !== '1') {
             return requestItem('1', onDone);
@@ -2341,7 +2367,7 @@
         contentId: String(contentId || ''),
         imdb: '',
         type: '0',
-        macAddr: '02:00:00:00:00:00'
+        macAddr: sessionMac()
       }, function (pErr, pRes) {
         if (pErr) return callback(pErr);
         var data = pRes && pRes.data ? pRes.data : pRes;
