@@ -590,16 +590,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                   </>
                 )}
               </div>
-              {query && (
-                <button
-                  type="button"
-                  className="search-input-submit-btn"
-                  onClick={() => submitSearch(query)}
-                  title="Buscar"
-                >
-                  Buscar
-                </button>
-              )}
             </div>
 
             <div className="search-keyboard-wrap">

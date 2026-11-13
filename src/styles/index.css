@@ -4932,9 +4932,9 @@ html, body {
 }
 
 .search-left-panel .search-input-wrapper.is-focused {
-  border-color: #00e5ff;
+  border-color: #ffffff;
   border-width: 2px;
-  background: rgba(0, 229, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   box-shadow: none !important;
 }
 
@@ -4948,24 +4948,6 @@ html, body {
   color: #64748b;
   font-weight: 500;
   font-size: 16px;
-}
-
-.search-input-submit-btn {
-  padding: 4px 12px;
-  border-radius: 8px;
-  background: #00e5ff;
-  color: #000000;
-  border: none;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.15s ease, background 0.15s ease;
-}
-
-.search-input-submit-btn:hover {
-  background: #38bdf8;
-  transform: scale(1.05);
 }
 
 .search-typed-text {
