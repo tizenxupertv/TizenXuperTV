@@ -4196,6 +4196,22 @@ html, body {
   object-fit: cover;
 }
 
+.svc-kind-badge {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 3;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1;
+}
+
 .svc-skeleton { pointer-events: none; }
 .svc-skeleton .svc-poster-wrap { background: rgba(255, 255, 255, 0.06); }
 

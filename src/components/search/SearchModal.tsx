@@ -791,6 +791,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                           }
                         }}
                       />
+                      <div className="svc-kind-badge">{item.kind === 'serie' ? 'Serie' : 'Película'}</div>
                       <div className="poster-bottom-vignette">
                         <div className="poster-vignette-title">{item.title || 'Sin título'}</div>
                         <div className="poster-vignette-genre">{cardMeta(item)}</div>
