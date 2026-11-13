@@ -186,7 +186,7 @@ export class SportsService {
               break;
             }
           } catch (embedErr) {
-            console.warn('[sports] Failed to resolve embed page:', pageUrl, embedErr);
+            console.warn('[sports] Failed to resolve embed page:', String(pageUrl).split('/')[2] || '', embedErr);
           }
         }
       }
