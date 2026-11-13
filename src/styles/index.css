@@ -4162,37 +4162,31 @@ html, body {
   }
 }
 
+/* Same look as the home cards (.poster-card): title and score over the poster, white frame on focus */
 .search-vod-card {
   display: flex;
   flex-direction: column;
-  border-radius: 14px;
+  border-radius: 12px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1.5px solid rgba(255, 255, 255, 0.07);
+  background: #11141d;
+  border: 3px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
   cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
 }
 
 .search-vod-card.is-focused {
-  background: #ffffff !important;
-  border-color: #ffffff !important;
-  transform: translateY(-4px);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.8);
+  border-color: #ffffff;
 }
 
-.search-vod-card.is-focused .svc-title {
-  color: #000000 !important;
-}
-
-.search-vod-card.is-focused .svc-meta {
-  color: #475569 !important;
+.search-vod-card.is-focused .poster-vignette-title {
+  color: #00e5ff;
 }
 
 .svc-poster-wrap {
   width: 100%;
   aspect-ratio: 2 / 3;
   position: relative;
-  background: #000;
+  background: #11141d;
   overflow: hidden;
 }
 
@@ -4202,55 +4196,8 @@ html, body {
   object-fit: cover;
 }
 
-.svc-score-badge {
-  position: absolute;
-  left: 8px;
-  bottom: 8px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.75);
-  border: 1px solid rgba(255, 214, 10, 0.4);
-  color: #fbbf24;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.svc-kind-badge {
-  position: absolute;
-  right: 8px;
-  top: 8px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(0, 229, 255, 0.25);
-  border: 1px solid rgba(0, 229, 255, 0.5);
-  color: #00e5ff;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.svc-info {
-  padding: 10px 12px;
-}
-
-.svc-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #ffffff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.svc-meta {
-  font-size: 11px;
-  color: #94a3b8;
-  margin-top: 3px;
-}
-
 .svc-skeleton { pointer-events: none; }
 .svc-skeleton .svc-poster-wrap { background: rgba(255, 255, 255, 0.06); }
-.svc-skeleton-line { height: 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); }
-.svc-skeleton-line.is-short { width: 55%; margin-top: 8px; height: 10px; }
 
 .search-empty-state {
   margin: auto;
@@ -6972,7 +6919,6 @@ html.xuper-vod-avplay .app-root,
 /* Buscar's card inside the filter grid: fixed height, the poster takes what the info leaves */
 .filter-grid .search-vod-card { height: 384px; box-sizing: border-box; }
 .filter-grid .svc-poster-wrap { aspect-ratio: auto; flex: 1; min-height: 0; }
-.filter-grid .svc-info { flex-shrink: 0; }
 
 .filter-grid.browse-cards-grid {
   grid-template-columns: repeat(6, 1fr);
