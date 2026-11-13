@@ -164,15 +164,23 @@ export default defineConfig({
     strictPort: true,
     host: true,
     proxy: {
+      // Sports channel list: same-origin in the browser, see epicSportsService.ts
+      '/epic-api': {
+        target: 'https://playlatam.site',
+        changeOrigin: true,
+        rewrite: (p: string) => p.replace(/^\/epic-api/, '')
+      },
       '/api/portalCore': {
-        target: 'https://ftmrmy.jdfey0cd.com',
+        // Browser development needs one CORS-safe upstream. Keep it aligned with the
+        // primary authorized transport used by the working backup.
+        target: 'https://osuhk.m3x8o50te.com',
         changeOrigin: true,
         secure: false,
         headers: {
           'User-Agent': 'okhttp/3.12.12',
           'apk': 'com.android.msandroid',
           'apkVer': '43404',
-          'spkgVer': '2024-09-10 06:25:30_33_13_'
+          'spkgVer': '2025-08-07 05:40:11_36_16_'
         }
       }
     }

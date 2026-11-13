@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SportCategory, SportsEvent, SportsStream } from '../types/sports.ts';
 import { isPlayableStream, sportsService } from '../services/sportsService.ts';
 import { scoreboardService } from '../services/scoreboardService.ts';
+import { feedPlan } from '../lib/scoreFeeds.ts';
 import '../styles/sports.css';
 import { MatchHeader } from '../components/sports/MatchHeader';
 import { MatchDetailModal } from '../components/sports/MatchDetailModal';
@@ -195,6 +196,9 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  const eventsRef = useRef(events);
+  eventsRef.current = events;
+  const refreshScoresRef = useRef<() => void>(() => {});
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   useEffect(() => {
@@ -210,7 +214,10 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
 
   useEffect(() => {
     let alive = true;
-    const refresh = () => scoreboardService.fetchScores().then(() => { if (alive) setScoreTick(t => t + 1); }, () => {});
+    // Only the feeds of the sports on the schedule, and often only where a match is in play (lib/scoreFeeds)
+    const refresh = () => scoreboardService.fetchScores(false, feedPlan(eventsRef.current, Date.now()))
+      .then(() => { if (alive) setScoreTick(t => t + 1); }, () => {});
+    refreshScoresRef.current = refresh;
     refresh();
     const t = setInterval(() => {
       if (pausedRef.current || document.hidden) return;
@@ -219,6 +226,10 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     }, SCORE_REFRESH_MS);
     return () => { alive = false; clearInterval(t); };
   }, []);
+  // The schedule arrived or changed: its feeds may be due now, without waiting for the next tick
+  useEffect(() => {
+    if (events.length && !pausedRef.current) refreshScoresRef.current();
+  }, [events]);
 
   const [scores, setScores] = useState<Map<string, Score>>(() => new Map());
   useEffect(() => {
@@ -480,12 +491,12 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     <div className="spb-root">
       <div className="spb-layout">
         <aside className="live-col-categories">
-          <div className="live-col-header has-subtitle">
-            <div className="live-col-header-main">
-              <span className="live-header-title">CATEGORÍAS</span>
-              <span className="live-header-count">{chips.length}</span>
+          <div className="live-col-header">
+            <div className="live-header-lead">
+              <span className="live-header-title">Categorías</span>
+              <span className="live-header-sub">{chips.length} categorías</span>
             </div>
-            <div className="live-col-header-sub">Módulo en fase beta · Señales en vivo</div>
+            <span className="beta-pill">Beta</span>
           </div>
           <div className="live-cat-vlist" ref={sidebarRef}>
             {chips.map((c, i) => {

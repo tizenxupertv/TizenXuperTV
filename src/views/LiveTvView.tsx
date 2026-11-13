@@ -8,7 +8,7 @@ import { parentalService } from '../services/parentalService';
 import { useRenderCount } from '../debug/renderCount';
 import { useViewProfiler } from '../lib/perfMonitor';
 import { channelKey, isSameChannel, normalizeChannels, realText } from '../lib/channelKey';
-import { ChannelRow, CategoryRow } from '../components/live/LiveRows';
+import { ChannelRow, CategoryRow, categoryBadge } from '../components/live/LiveRows';
 import { OnScreenKeyboard, KbState, KB_INITIAL } from '../components/live/OnScreenKeyboard';
 import { CatchupModal } from '../components/live/CatchupModal';
 import { normalizeText } from '../utils/normalizeText';
@@ -28,8 +28,8 @@ export const DEFAULT_LIVE_CATEGORIES: LiveCategory[] = [
   { id: 'favs', name: 'Favoritos', isFav: true },
   { id: 76182, name: 'Todos los canales' },
   { id: 76206, name: 'Deportes en Vivo' },
-  { id: 'espn', name: 'ESPN', isEspn: true, badge: 'BETA' },
-  { id: 'epic-sports', name: 'Deportes+', isEpicSports: true, badge: 'BETA' },
+  { id: 'espn', name: 'ESPN', isEspn: true, badge: 'Beta' },
+  { id: 'epic-sports', name: 'Deportes+', isEpicSports: true, badge: 'Beta' },
   { id: 76205, name: 'Cine & Series 24/7' },
   { id: 76188, name: 'Colombia' },
   { id: 76191, name: 'España' },
@@ -475,8 +475,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             .filter(c => adultOn || !parentalService.isAdultCategory(c.name));
           // Find position of "Deportes" or insert after Favorites/Todos
           const sportsIdx = formatted.findIndex(c => /deportes/i.test(c.name));
-          const espnCat: LiveCategory = { id: 'espn', name: 'ESPN', isEspn: true, badge: 'BETA' };
-          const epicCat: LiveCategory = { id: 'epic-sports', name: 'Deportes+', isEpicSports: true, badge: 'BETA' };
+          const espnCat: LiveCategory = { id: 'espn', name: 'ESPN', isEspn: true, badge: 'Beta' };
+          const epicCat: LiveCategory = { id: 'epic-sports', name: 'Deportes+', isEpicSports: true, badge: 'Beta' };
 
           let ordered: LiveCategory[] = [];
           if (sportsIdx !== -1) {
@@ -630,6 +630,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     if (!activeCategory) return;
     let alive = true;
     const catId = String(activeCategory.id);
+    setChannelsError('');
 
     if (activeCategory.isFav) {
       const allKnown = Object.values(channelMasterCache.current);
@@ -869,6 +870,8 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         } else {
           // No channels from the portal: an empty list (never made-up channels)
           setChannels([]);
+          // A failed request is not an empty category: it gets its own message
+          if (err) setChannelsError('No se pudo cargar esta categoría. Revisa la conexión e inténtalo de nuevo más tarde.');
           if (onChannelsLoaded) onChannelsLoaded([]);
         }
         setIsLoadingChannels(false);
@@ -991,8 +994,10 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           ========================================================= */}
       <aside className="live-col-categories">
         <div className="live-col-header">
-          <span className="live-header-title">CATEGORÍAS</span>
-          <span className="live-header-count">{categories.length}</span>
+          <div className="live-header-lead">
+            <span className="live-header-title">Categorías</span>
+            <span className="live-header-sub">{categories.length} categorías</span>
+          </div>
         </div>
 
         <div className="live-cat-vlist" ref={catListRef}>
@@ -1013,16 +1018,12 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           COLUMNA 2: Lista de Canales (460px)
           ========================================================= */}
       <section className="live-col-channels">
-        <div className={`live-col-header ${(activeCategory.isEspn || activeCategory.badge || /deportes/i.test(activeCategory.name)) ? 'has-subtitle' : ''}`}>
-          <div className="live-col-header-main">
-            <span className="live-header-title">{activeCategory.name.toUpperCase()}</span>
-            <span className="live-header-count">{channels.length} canales</span>
+        <div className="live-col-header">
+          <div className="live-header-lead">
+            <span className="live-header-title">{activeCategory.name}</span>
+            <span className="live-header-sub">{channels.length} canales</span>
           </div>
-          {(activeCategory.isEspn || activeCategory.badge) ? (
-            <div className="live-col-header-sub">Señales experimentales sujetas a disponibilidad (Beta)</div>
-          ) : /deportes/i.test(activeCategory.name) ? (
-            <div className="live-col-header-sub">Transmisiones deportivas en fase beta · Sujetas a disponibilidad</div>
-          ) : null}
+          {categoryBadge(activeCategory) && <span className="beta-pill">{categoryBadge(activeCategory)}</span>}
         </div>
 
         <div className="live-channel-vlist" ref={channelListRef}>
@@ -1032,7 +1033,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             <div className="live-empty-msg">
               {activeCategory.isFav
                 ? 'Aún no tienes canales en Favoritos.\nSintoniza un canal y presiona Añadir a Favoritos.'
-                : activeCategory.iptvListId && channelsError
+                : channelsError
                   ? channelsError
                   : 'No hay canales disponibles en esta categoría.\nSi no carga ningún canal, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en Configuración › General › Red › Estado de la red › Configuración de IP.'}
             </div>
@@ -1322,7 +1323,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                     }`}
                   >
                     <span className="pc-cat-name">{cat.name}</span>
-                    {cat.badge && <span className="pc-cat-badge">{cat.badge}</span>}
+                    {categoryBadge(cat) && <span className="beta-pill pc-cat-badge">{categoryBadge(cat)}</span>}
                     {!cat.isFav && parentalService.isAdultCategory(cat.name) && <span className="pc-cat-lock">🔒</span>}
                   </div>
                 ))}

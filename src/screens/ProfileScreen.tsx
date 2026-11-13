@@ -8,6 +8,7 @@ import { favoritesService } from '../services/favoritesService';
 import { settingsService } from '../services/settingsService';
 import { parentalService } from '../services/parentalService';
 import { diagnosticService, DiagReport } from '../services/diagnosticService';
+import { getTvCapabilities } from '../lib/tvCapabilities';
 import { iptvService, IPTV_LISTS } from '../services/iptvService';
 import { HIDEABLE_TABS, tabPrefs } from '../services/tabPrefs';
 import { accountService, tvBuildInfo } from '../services/accountService';
@@ -182,21 +183,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const type = w.webapis && w.webapis.network ? w.webapis.network.getActiveConnectionType() : -1;
       network = ['Sin conexión', 'Wi-Fi', 'Datos móviles', 'Cable'][type] || '';
     } catch (e) {}
-    // Formats the in-app player (HLS.js over MediaSource) can decode on this TV
-    const formats: Array<[string, string]> = [
-      ['H264', 'video/mp4; codecs="avc1.64001f"'],
-      ['HEVC', 'video/mp4; codecs="hvc1.1.6.L120.90"'],
-      ['AAC', 'audio/mp4; codecs="mp4a.40.2"'],
-      ['MP3', 'audio/mpeg'],
-      ['MP3/mp4', 'audio/mp4; codecs="mp3"'],
-      ['AC3', 'audio/mp4; codecs="ac-3"'],
-      ['EAC3', 'audio/mp4; codecs="ec-3"']
-    ];
-    let caps = '';
-    try {
-      const MS = (window as any).MediaSource;
-      caps = formats.map(([name, type]) => `${name} ${MS && MS.isTypeSupported(type) ? '✓' : '✗'}`).join(' · ');
-    } catch (e) {}
+    const caps = getTvCapabilities().summary;
     const now = new Date();
     const local = `${now.getHours() < 10 ? '0' : ''}${now.getHours()}:${now.getMinutes() < 10 ? '0' : ''}${now.getMinutes()}`;
     const build = tvBuildInfo();
@@ -580,7 +567,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             {listTab === 'history' && historyCount > 0 && (
               <div className={`pf-btn pf-btn-danger pf-list-action ${isF('clear-history') ? 'is-focused' : ''}`} onClick={tap('clear-history')}>Borrar historial</div>
             )}
-            <div className="pf-total">Total <span>{listItems.length}</span></div>
+            <div className="pf-total">{listItems.length} {listItems.length === 1 ? 'título' : 'títulos'}</div>
           </div>
           {editMode && listItems.length > 0 && (
             <div className="pf-edit-hint">Elige un título y pulsa OK para quitarlo. Pulsa Atrás o «Listo» para terminar.</div>
@@ -593,9 +580,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 <div key={it.key} className={`pf-card-item ${editMode ? 'is-removing' : ''} ${isF('card-' + it.key) ? 'is-focused' : ''}`} onClick={tap('card-' + it.key)}>
                   <div className="pf-poster">
                     <img src={it.poster || 'assets/placeholder_vertical.png'} alt="" loading="lazy" />
+                    <div className="poster-bottom-vignette">
+                      <div className="poster-vignette-title">{it.title}</div>
+                      <div className="poster-vignette-genre">{it.subtitle}</div>
+                    </div>
                   </div>
-                  <div className="pf-card-progress">{it.subtitle}</div>
-                  <div className="pf-card-name">{it.title}</div>
                 </div>
               ))}
             </div>
@@ -786,6 +775,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 ? `${speed.latencyMs !== null ? `Latencia ${speed.latencyMs} ms · ` : ''}${streamingVerdict(speed.mbps).text}`
                 : 'Sin medir',
           cls: speedClass
+        },
+        {
+          label: 'Capacidades de video',
+          value: (() => {
+            const c = getTvCapabilities();
+            if (c.mseH264 && c.mseHevc) return 'H264 + HEVC';
+            if (c.mseH264) return 'H264 (AVC)';
+            return c.hasMSE ? 'MSE Básico' : 'AVPlay único';
+          })(),
+          sub: (() => {
+            const c = getTvCapabilities();
+            return `AVPlay ${c.hasAVPlay ? '✓' : '✗'} · H264 ${c.mseH264 ? '✓' : '✗'} · HEVC ${c.mseHevc ? '✓' : '✗'} · AAC ${c.mseAac ? '✓' : '✗'}`;
+          })(),
+          cls: getTvCapabilities().mseHevc ? 'ok' : getTvCapabilities().mseH264 ? 'warn' : 'bad'
         }
       ];
       return (
@@ -973,7 +976,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       />
       <div className="profile-body">
       <aside className="pf-menu">
-        <div className="pf-menu-title">Ajustes</div>
         {SECTIONS.map((s, i) => (
           <div
             key={s.id}

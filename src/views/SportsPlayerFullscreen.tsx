@@ -1,3 +1,6 @@
+import { AUTO_NEXT_MS, nextSignal } from '../lib/nextSignal';
+import { createRunGuard } from '../lib/runGuard';
+import { loadShaka } from '../lib/lazyScript';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../styles/sportsPlayer.css';
 import { MatchCrest, MatchHeader } from '../components/sports/MatchHeader';
@@ -34,17 +37,43 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   const openedAtRef = useRef(Date.now());
   // Signals that failed in this session, marked in the list
   const [failed, setFailed] = useState<Set<number>>(() => new Set());
+  // The signal about to be tried by itself after a failure (index), or null
+  const [autoNext, setAutoNext] = useState<number | null>(null);
+  const autoNextTimerRef = useRef<any>(null);
+  const cancelAutoNext = useCallback(() => {
+    if (autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
+      autoNextTimerRef.current = null;
+    }
+    setAutoNext(null);
+  }, []);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
   const shakaRef = useRef<any>(null);
+  // Shaka is asked for once per signal; the tick runs the playback effect again when the load settles
+  const shakaTriedRef = useRef<number | null>(null);
+  const [shakaTick, setShakaTick] = useState(0);
   const osdTimerRef = useRef<any>(null);
   const errorRef = useRef<string | null>(null);
   // Which player and link the current signal uses, for the Perfil › Diagnóstico report
   const playerKindRef = useRef('');
   const startLoggedRef = useRef(false);
 
-  const currentStream = streams[currentStreamIdx] || streams[0];
+  // The signal as listed, and the same one with its address worked out when it needs it (a signed link, a page to
+  // read). That work happens here, when the signal is chosen, not for every signal of the match when it is opened
+  const listedStream = streams[currentStreamIdx] || streams[0];
+  const [resolved, setResolved] = useState<{ from: SportsStream; stream: SportsStream } | null>(null);
+  const resolving = sportsService.needsResolving(listedStream) && !(resolved && resolved.from === listedStream);
+  useEffect(() => {
+    if (!sportsService.needsResolving(listedStream)) return;
+    let alive = true;
+    sportsService.resolveStream(listedStream).then(stream => {
+      if (alive) setResolved({ from: listedStream, stream });
+    });
+    return () => { alive = false; };
+  }, [listedStream]);
+  const currentStream = resolved && resolved.from === listedStream ? resolved.stream : listedStream;
   const versus = !!event.away && event.away.trim().toLowerCase() !== event.home.trim().toLowerCase();
   const score = versus ? scoreboardService.findScore(event.home, event.away) : null;
 
@@ -94,6 +123,10 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     setUsingAvplay(false);
     const video = videoRef.current;
     if (video) {
+      // Handlers of the signal that is going away: they closed over its name
+      video.onerror = null;
+      video.onplaying = null;
+      video.onwaiting = null;
       try {
         video.pause();
         video.removeAttribute('src');
@@ -106,25 +139,43 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
 
   // Initialize playback for the selected stream
   useEffect(() => {
+    // A signal that failed keeps reporting errors for a few seconds. Everything this run sets on screen goes through
+    // the guard, so once the viewer picks another signal the old one can no longer show its error over the new one
+    const run = createRunGuard();
+    const showError = run.wrap((msg: string | null) => setError(msg));
+    const showBuffering = run.wrap((on: boolean) => setIsBuffering(on));
+    // The address of this signal is still being worked out: the effect runs again when it arrives
+    if (resolving) {
+      showError(null);
+      showBuffering(true);
+      return;
+    }
     if (!currentStream || !currentStream.url) {
-      setError('Servidor sin URL disponible');
-      setIsBuffering(false);
+      showError('Servidor sin URL disponible');
+      showBuffering(false);
       return;
     }
 
     const video = videoRef.current;
     if (!video) return;
 
-    setError(null);
-    setIsBuffering(true);
+    showError(null);
+    showBuffering(true);
     (window as any).XuperPlatform?.setScreenSaver?.(false);
 
     const streamUrl = currentStream.url;
     const isAvPlayAvailable = !!(window as any).webapis?.avplay && !!(window as any).XuperAVPlay;
-    const shaka = (window as any).shaka;
     const Hls = (window as any).Hls;
 
     const isDash = streamUrl.includes('.mpd') || streamUrl.includes('dash') || Boolean(currentStream.drmApi);
+    // Shaka Player is loaded by the first DASH signal, not at every start of the app (lib/lazyScript). This effect
+    // runs again when it arrives; when it cannot be loaded the signal goes on to the next way of playing it
+    if (isDash && !(window as any).shaka && shakaTriedRef.current !== currentStreamIdx) {
+      shakaTriedRef.current = currentStreamIdx;
+      loadShaka().then(() => setShakaTick(t => t + 1));
+      return;
+    }
+    const shaka = (window as any).shaka;
     const isHls = streamUrl.includes('.m3u8') || streamUrl.includes('hls');
 
     playerKindRef.current = isAvPlayAvailable && !isDash ? 'AVPlay'
@@ -141,7 +192,8 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       try { shaka.polyfill.installAll(); } catch {}
     }
 
-    console.log('[SportsPlayer] Starting stream:', currentStream.name, streamUrl, 'isDash:', isDash, 'drmApi:', currentStream.drmApi);
+    // Host only: the link carries tokens, and the DRM key is never written anywhere
+    console.log('[SportsPlayer] Starting stream:', currentStream.name, hostOf(streamUrl), 'isDash:', isDash, 'drm:', Boolean(currentStream.drmApi));
 
     if (isAvPlayAvailable && !isDash) {
       // TV, HLS without DRM: hardware AVPlay (the same path as live TV). It draws below the page, so the
@@ -151,24 +203,25 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         document.documentElement.classList.add('xuper-vod-avplay');
         const av = (window as any).XuperAVPlay;
         av._nextKind = 'live';
-        video.onplaying = () => setIsBuffering(false);
-        video.onwaiting = () => setIsBuffering(true);
+        video.onplaying = () => showBuffering(false);
+        video.onwaiting = () => showBuffering(true);
         video.onerror = () => {
-          setIsBuffering(false);
-          setError(`No se pudo cargar la señal (${currentStream.name})`);
+          showBuffering(false);
+          showError(`No se pudo cargar la señal (${currentStream.name})`);
         };
         if (av.playStream(streamUrl, currentStream.headers || {}, video) === false) throw new Error('AVPlay did not start');
       } catch (err: any) {
         console.error('[SportsPlayer] AVPlay error:', err);
         setUsingAvplay(false);
         document.documentElement.classList.remove('xuper-vod-avplay');
-        setError('Error iniciando el reproductor');
-        setIsBuffering(false);
+        showError('Error iniciando el reproductor');
+        showBuffering(false);
       }
     } else if (isDash && shaka && shaka.Player && shaka.Player.isBrowserSupported()) {
       // Shaka Player for MPEG-DASH & ClearKey DRM (Works in Chrome, Edge, Firefox, Tizen EME)
       try {
-        const player = new shaka.Player(video);
+        // The element is attached below: passing it to the constructor is deprecated since Shaka 4.x
+        const player = new shaka.Player();
         shakaRef.current = player;
 
         // Configure resilient buffer goals (5s rebuffering / 12s goal)
@@ -205,18 +258,19 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         }
 
         player.addEventListener('error', (event: any) => {
-          console.error('[SportsPlayer] Shaka error event:', event.detail);
-          setIsBuffering(false);
-          setError(`Error de señal: ${currentStream.name}`);
+          // Code and category only: a network error's data holds the full link
+          console.error('[SportsPlayer] Shaka error event:', event.detail && event.detail.code, event.detail && event.detail.category);
+          showBuffering(false);
+          showError(`Error de señal: ${currentStream.name}`);
         });
 
         player.addEventListener('buffering', (event: any) => {
-          setIsBuffering(Boolean(event.buffering));
+          showBuffering(Boolean(event.buffering));
         });
 
-        player.load(streamUrl).then(() => {
+        player.attach(video).then(() => player.load(streamUrl)).then(() => {
           console.log('[SportsPlayer] Shaka stream loaded successfully!');
-          setIsBuffering(false);
+          showBuffering(false);
           video.play().catch(err => {
             console.warn('[SportsPlayer] Unmuted autoplay blocked, retrying muted:', err);
             video.muted = true;
@@ -224,13 +278,13 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
           });
         }).catch((err: any) => {
           console.error('[SportsPlayer] Shaka load failed:', err);
-          setIsBuffering(false);
-          setError(`No se pudo cargar la señal (${currentStream.name})`);
+          showBuffering(false);
+          showError(`No se pudo cargar la señal (${currentStream.name})`);
         });
       } catch (err: any) {
         console.error('[SportsPlayer] Shaka init exception:', err);
-        setIsBuffering(false);
-        setError(`Error inicializando reproductor DASH (${currentStream.name})`);
+        showBuffering(false);
+        showError(`Error inicializando reproductor DASH (${currentStream.name})`);
       }
     } else if (isHls && Hls && Hls.isSupported()) {
       // Browser / Hls.js fallback with dev proxy support for local testing
@@ -268,11 +322,11 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
           video.play().catch(() => {});
         });
       });
-      hls.on(Hls.Events.FRAG_LOADED, () => setIsBuffering(false));
+      hls.on(Hls.Events.FRAG_LOADED, () => showBuffering(false));
       hls.on(Hls.Events.ERROR, (_: any, data: any) => {
         if (data.fatal) {
-          setIsBuffering(false);
-          setError(`Error de señal: ${currentStream.name}`);
+          showBuffering(false);
+          showError(`Error de señal: ${currentStream.name}`);
         }
       });
     } else {
@@ -281,18 +335,19 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         video.muted = true;
         video.play().catch(() => {});
       });
-      video.onplaying = () => setIsBuffering(false);
-      video.onwaiting = () => setIsBuffering(true);
+      video.onplaying = () => showBuffering(false);
+      video.onwaiting = () => showBuffering(true);
       video.onerror = () => {
-        setIsBuffering(false);
-        setError(`No se pudo cargar la señal (${currentStream.name})`);
+        showBuffering(false);
+        showError(`No se pudo cargar la señal (${currentStream.name})`);
       };
     }
 
     return () => {
+      run.end();
       cleanupPlayer();
     };
-  }, [currentStreamIdx, currentStream, cleanupPlayer]);
+  }, [currentStreamIdx, currentStream, cleanupPlayer, shakaTick, resolving]);
 
   // The first moment a signal plays, once per signal
   useEffect(() => {
@@ -308,10 +363,21 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     logPlayback({ kind: 'error', player: playerKindRef.current, detail: error, host: hostOf(currentStream?.url) });
     setFailed(prev => new Set(prev).add(currentStreamIdx));
     if (streams.length > 1) {
-      const next = streams.findIndex((_, i) => i !== currentStreamIdx && !failed.has(i));
+      const next = nextSignal(streams.length, currentStreamIdx, failed);
       setServerMenuIdx(next >= 0 ? next : currentStreamIdx);
       setShowServerMenu(true);
+      // The next signal that has not failed is tried by itself after a moment; any key leaves the choice to the viewer
+      if (next >= 0) {
+        setAutoNext(next);
+        autoNextTimerRef.current = setTimeout(() => {
+          autoNextTimerRef.current = null;
+          setAutoNext(null);
+          setShowServerMenu(false);
+          setCurrentStreamIdx(next);
+        }, AUTO_NEXT_MS);
+      }
     }
+    return cancelAutoNext;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
 
@@ -322,6 +388,9 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       if (Date.now() - openedAtRef.current < 600 && (e.key === 'Enter' || e.key === 'ArrowUp')) return;
 
       const isBack = e.key === 'Escape' || e.key === 'Backspace' || (e as any).keyCode === 10009;
+
+      // Any key while the next signal is about to be tried: the viewer chooses instead
+      if (autoNextTimerRef.current) cancelAutoNext();
 
       // Toggle match details with 'i' (Info key) or yellow remote button
       if (e.key === 'i' || (e as any).keyCode === 457 || (e as any).keyCode === 405) {
@@ -402,7 +471,10 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   return (
     <div style={{
       position: 'fixed',
-      inset: 0,
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
       backgroundColor: usingAvplay ? 'transparent' : '#000',
       zIndex: 9999,
       display: 'flex',
@@ -436,7 +508,11 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
           <div className="spp-error-detail">Transmisión deportiva en fase beta · {error}</div>
           {streams.length > 1 && showServerMenu ? (
             <>
-              <div className="spp-hint">Elige otra señal · OK para ver · Atrás para salir</div>
+              <div className="spp-hint">
+                {autoNext !== null && streams[autoNext]
+                  ? `Probando «${streams[autoNext].name}» en unos segundos · pulsa una tecla para elegir tú`
+                  : 'Elige otra señal · OK para ver · Atrás para salir'}
+              </div>
               {signalList}
             </>
           ) : (

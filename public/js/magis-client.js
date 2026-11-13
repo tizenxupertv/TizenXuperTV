@@ -27,7 +27,10 @@
   var PORTAL_CODE = 'masnew';
   var APP_ID = 'com.android.msandroid';
   var APK_VERSION = '49902';
-  var SPKG_VER = '2024-09-10 06:25:30_33_13_';
+  // Kept in sync with the working authorized backup. The portal rejects retired client builds.
+  var SPKG_VER = '2025-08-07 05:40:11_36_16_';
+  // The authorized client keeps the portal payload at 49902 but identifies the
+  // transport itself as build 43404. Both values are required by the provider.
   var APK_VER_HEADER = '43404';
   var USER_AGENT = 'okhttp/3.12.12';
   var CONTENT_TYPE = 'application/json;charset=utf-8';
@@ -86,10 +89,10 @@
     product: 'sdk_gphone64_arm64',
     cpu: 'arm64-v8a',
     B29: '',
-    reserve1: FIXED_RESERVE1,
+    reserve1: '',
     deviceToken: '',
-    drmId: FIXED_DRM_ID,
-    sdkVer: 33
+    drmId: '',
+    sdkVer: 36
   };
 
   var FINGERPRINT_FIXED = {
@@ -321,7 +324,9 @@
     userToken: '',
     snToken: '',
     ready: false,
-    busy: false
+    busy: false,
+    // true when the session came from the catalog server instead of this TV's own start (see ensureSession)
+    viaServer: false
   };
 
   // Restore cached session if available
@@ -397,6 +402,9 @@
   }
 
   function clearSession() {
+    // A server session the portal stopped accepting: the server is told, so it does not hand the same one again
+    if (session.viaServer && session.userToken) rejectedServerToken = session.userToken;
+    session.viaServer = false;
     session.ready = false;
     session.userId = '';
     session.userToken = '';
@@ -469,6 +477,16 @@
 
   // opts.onNet: called once the answer has arrived (before it is decrypted), so the request queue
   // moves on while the worker decrypts; opts.low: decrypt in the background worker
+  // Routes the portal answered 404 for: a newer version is tried first and, once it turns out not to exist,
+  // it is skipped for the rest of the session instead of failing before every working request
+  var missingRoutes = {};
+  function routeMissing(path) {
+    return missingRoutes[path] === true;
+  }
+  function noteRouteFailure(path, err) {
+    if (err && err.httpStatus === 404) missingRoutes[path] = true;
+  }
+
   function postHttp(path, payload, done, opts) {
     opts = opts || {};
     var bodyHex;
@@ -482,12 +500,19 @@
     var idx = 0;
     var finished = false;
     var tStart = Date.now();
+    // Last HTTP status a host answered with, handed to the caller with the failure (see routeMissing)
+    var lastStatus = 0;
+    function httpError(message) {
+      var e = new Error(message);
+      e.httpStatus = lastStatus;
+      return e;
+    }
 
     function tryHost() {
       if (finished) return;
       if (idx >= hosts.length || Date.now() - tStart >= REQUEST_MAX_MS) {
         finished = true;
-        return done(new Error(path + ': el portal no respondió'));
+        return done(httpError(path + ': el portal no respondió'));
       }
       var host = hosts[idx++];
       var url = isBrowserEnv ? ('/api/portalCore/' + path) : ('https://' + host + '/api/portalCore/' + path);
@@ -526,7 +551,10 @@
       try { xhr.setRequestHeader('apk', APP_ID); } catch (e) {}
       try { xhr.setRequestHeader('apkVer', APK_VER_HEADER); } catch (e) {}
       try { xhr.setRequestHeader('spkgVer', SPKG_VER); } catch (e) {}
-      try { xhr.setRequestHeader('User-Agent', USER_AGENT); } catch (e) {}
+      // Browsers forbid this header. The local development proxy supplies it instead.
+      if (!isBrowserEnv) {
+        try { xhr.setRequestHeader('User-Agent', USER_AGENT); } catch (e) {}
+      }
       try { xhr.setRequestHeader('Content-Type', CONTENT_TYPE); } catch (e) {}
 
       xhr.onload = function () {
@@ -574,9 +602,10 @@
           finished = true;
           return done(null, resp.data !== undefined && resp.data !== null ? resp.data : resp);
         } else {
+          lastStatus = xhr.status;
           if (isBrowserEnv) {
             finished = true;
-            return done(new Error(path + ': respuesta HTTP ' + xhr.status + ' en navegador local'));
+            return done(httpError(path + ': respuesta HTTP ' + xhr.status + ' en navegador local'));
           }
           tryHost();
         }
@@ -659,13 +688,44 @@
   var sessionStarting = false;
   var sessionWaiters = [];
   var sessionAttempt = 0;
+  var rejectedServerToken = '';
 
+  /** MAC sent with a request: this TV's own for its own session, the neutral one for a session of the catalog server */
+  function sessionMac() {
+    return session.viaServer ? '02:00:00:00:00:00' : deviceIdentity(false).etheMac;
+  }
+
+  /**
+   * The TV starts its own session with the portal, as it always did. Only when that fails does it ask the catalog
+   * server (xuper-catalog-session.js) for one, so the app does not depend on that server while the portal accepts it.
+   */
   function ensureSession(callback) {
     callback = callback || function () {};
     if (session.ready && session.userId && session.userToken) {
       return callback(null, session);
     }
-    startSession(false, callback);
+    startSession(false, function (err, res) {
+      if (!err) return callback(null, res);
+      var server = window.XuperCatalogSession;
+      if (!server || typeof server.acquire !== 'function') return callback(err);
+      console.warn('[MagisClient] own session failed, asking the catalog server: ' + (err.portalCode || err.message || err));
+      server.acquire(rejectedServerToken || undefined).then(function (grant) {
+        session.sn = String(grant.sn || '').toLowerCase();
+        session.userId = String(grant.userId || '');
+        session.userToken = String(grant.userToken || '');
+        session.viaServer = true;
+        session.ready = !!(session.sn && session.userId && session.userToken);
+        if (!session.ready) {
+          session.viaServer = false;
+          return callback(new Error('La sesión de catálogo no contiene los datos requeridos.'));
+        }
+        rejectedServerToken = '';
+        callback(null, session);
+      }, function () {
+        // The portal's own reason is the one worth showing
+        callback(err);
+      });
+    });
   }
 
   function startSession(freshIdentity, callback) {
@@ -674,6 +734,7 @@
 
     sessionStarting = true;
     session.ready = false;
+    session.viaServer = false;
     // An attempt that gives no answer at all (a decrypt worker that died) is given up, so the next call can start
     // another one; its late answers are ignored
     var attempt = ++sessionAttempt;
@@ -752,7 +813,7 @@
         session.userToken = uTok;
         session.ready = true;
         saveSession();
-        console.log('[MagisClient] Session established! UserId:', uId);
+        console.log('[MagisClient] Session established');
         notifyWaiters(null, session);
       });
     });
@@ -1438,10 +1499,14 @@
           }
 
           // Try modern v7/getLiveData first (Hydra 6.8.1), fallback to v6/getLiveData
+          if (routeMissing('v7/getLiveData')) {
+            return postHttp('v6/getLiveData', livePayload, handleLiveResponse);
+          }
           postHttp('v7/getLiveData', livePayload, function (err7, res7) {
             if (!err7 && res7 && res7.channelList) {
               return handleLiveResponse(null, res7);
             }
+            noteRouteFailure('v7/getLiveData', err7);
             postHttp('v6/getLiveData', livePayload, handleLiveResponse);
           });
         });
@@ -1573,9 +1638,11 @@
       var aIdx = 0;
 
       function tryStartLive(lastErr) {
+        while (aIdx < attempts.length - 1 && routeMissing(attempts[aIdx].path)) aIdx++;
         if (aIdx >= attempts.length) return callback(lastErr || new Error('startPlayLive failed'));
         var att = attempts[aIdx++];
         call(att.path, att.bean, function (sErr, sRes) {
+          noteRouteFailure(att.path, sErr);
           if (sErr) return tryStartLive(sErr);
           var addrList = sRes && sRes.liveAddressList || [];
           var validAddrs = addrList.filter(function (a) { return a && a.playCode && a.license; });
@@ -1822,7 +1889,7 @@
           type: reqType,
           sortType: '0',
           language: 'en',
-          macAddr: deviceIdentity(false).etheMac
+          macAddr: sessionMac()
         }, function (dErr, dRes) {
           if (dErr && dErr.portalCode === 'portal100006' && reqType !== '1') {
             return requestItem('1', onDone);
@@ -2300,7 +2367,7 @@
         contentId: String(contentId || ''),
         imdb: '',
         type: '0',
-        macAddr: deviceIdentity(false).etheMac
+        macAddr: sessionMac()
       }, function (pErr, pRes) {
         if (pErr) return callback(pErr);
         var data = pRes && pRes.data ? pRes.data : pRes;

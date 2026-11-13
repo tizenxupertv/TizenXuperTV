@@ -6,6 +6,7 @@
  * Server: the TizenXuper Bot Worker (TizenXuper Bot/src/tvApi.ts).
  * No relative imports, so test/accountService.test.ts can load this file in Node.
  */
+import { parseAppStatus, type AppStatus } from '../lib/appStatus.ts';
 import { dropCaches } from '../lib/safeStorage.ts';
 export const ACCOUNT_API_RELAY = 'https://tizenxuper-tv.pages.dev';
 export const ACCOUNT_API = 'https://tizenxuper-bot.tizenxupertv.workers.dev';
@@ -231,6 +232,17 @@ export function createAccountService(deps: AccountDeps) {
     },
 
     /** A newer version this TV has not been told about yet (shown once per version), after verify() */
+    /** The status the team set for every TV (lib/appStatus), or null. A failed request is "no status": the app stays usable */
+    async appStatus(): Promise<AppStatus | null> {
+      try {
+        const res = await post('/tv/maintenance/status', {});
+        if (!res.ok) return null;
+        return parseAppStatus(await res.json());
+      } catch {
+        return null;
+      }
+    },
+
     pendingUpdate(): UpdateInfo | null {
       if (!latest || !isNewerVersion(latest.version, deps.device().version)) return null;
       return read(UPDATE_SEEN_KEY) === latest.version ? null : latest;

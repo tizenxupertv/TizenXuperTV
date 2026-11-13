@@ -29,6 +29,12 @@ const SHELL_JSON = join(ROOT, 'update/shell.json');
 
 /** Scripts that stay in the package: big libraries and the portal snapshot */
 export const SHELL_SCRIPTS = ['js/hls.min.js', 'js/crypto-js.min.js', 'data/portal.js'];
+/**
+ * Files the bundle carries but boot.js does not run at start: the app loads them when it needs them
+ * (src/lib/lazyScript.ts). Shaka Player is one: only the DASH signals of Deportes use it. It stays in the bundle
+ * because a TV whose package predates it (installed at 1.10.x, updated by itself since) has no copy on disk.
+ */
+export const LAZY_FILES = ['js/shaka-player.compiled.js'];
 /** Package files never compared as shell: signatures written when signing */
 const IGNORED = new Set(['author-signature.xml', 'signature1.xml']);
 
@@ -52,6 +58,8 @@ export function packageLists(indexHtml) {
 
 function walk(dir, base = dir, out = []) {
   for (const name of readdirSync(dir)) {
+    // Finder leaves these behind; the signed package never carries them (tools/build-and-sign.sh)
+    if (name === '.DS_Store') continue;
     const full = join(dir, name);
     if (statSync(full).isDirectory()) walk(full, base, out);
     else out.push(relative(base, full).split(sep).join('/'));
@@ -111,7 +119,8 @@ export function missingReferences(files, available) {
 /** The bundle object for `version` from a built dist/ */
 export function collectBundle(distDir, version, shell) {
   const lists = packageLists(readFileSync(join(distDir, 'index.html'), 'utf8'));
-  const own = [...lists.scripts.filter(p => !SHELL_SCRIPTS.includes(p)), ...lists.styles];
+  const lazy = LAZY_FILES.filter(p => !lists.scripts.includes(p) && existsSync(join(distDir, p)));
+  const own = [...lists.scripts.filter(p => !SHELL_SCRIPTS.includes(p)), ...lists.styles, ...lazy];
   const files = {};
   for (const path of own) {
     const full = join(distDir, path);

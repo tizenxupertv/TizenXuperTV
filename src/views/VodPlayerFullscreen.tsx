@@ -6,7 +6,7 @@ import { playerService } from '../services/playerService';
 import { catalogService } from '../services/catalogService';
 import { getEpisodeStatus, canSaveProgress, reachedResumeGoal, retryStartAt } from '../lib/vodResume';
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
-import { logPlayback, setPlaybackContext } from '../lib/playbackLog';
+import { hostOf, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
 import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseHlsConfig, mseUnsupportedReason, wantedAudioIndex, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
 import { friendlyPortalError } from '../lib/portalErrors';
@@ -93,6 +93,17 @@ function formatTime(seconds: number): string {
 }
 
 /** AVPlay (hardware player) is only available on the Samsung TV */
+/** The title and its index asked from the dev server (/stream-proxy in vite.config.ts) instead of the CDN */
+function viaDevProxy(res: any): any {
+  const auth = (res.headers && res.headers['Content-Auth']) || '';
+  const license = (res.headers && res.headers['Content-License']) || '';
+  const wrap = (url: string) => url
+    ? `${location.origin}/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}`
+    : url;
+  // No headers of its own: the proxy sets them, and no host to pick another Content-Auth for
+  return { ...res, url: wrap(res.url), idxUrl: wrap(res.idxUrl), headers: {}, authByHost: undefined };
+}
+
 function hasAvPlay(): boolean {
   return !!(window.XuperAVPlay && window.webapis && window.webapis.avplay);
 }
@@ -130,6 +141,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   useEffect(() => {
     if (seasonNumber) setCurrentSeasonNum(seasonNumber);
   }, [seasonNumber]);
+
+  // While the player is open the saved position does not redraw the app under it: once, on leaving
+  useEffect(() => {
+    if (isTrailer) return;
+    return historyService.holdNotifications();
+  }, [isTrailer]);
 
   // The donation request waits for the player to be gone (lib/donateMoment)
   useEffect(() => {
@@ -216,6 +233,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const lastTokenRenewalRef = useRef<number>(Date.now());
   /** How long a seek may take before the timeline shows the TV's time again */
   const SEEK_SAFETY_MS = 6000;
+  const LONG_SEEK_SAFETY_MS = 24000;
   const toastTimerRef = useRef<any>(null);
   const [, setSettingsTick] = useState(0); // re-render after a setting changes
   const settings = settingsService.get();
@@ -254,6 +272,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
   // History & episode statuses (watched, progress, current)
   const historyEntry = historyService.getEntry(item.id);
+  const errorArt = item.backdrop || item.landscape || item.poster || '';
   const episodeStatuses = useMemo(() => {
     return effectiveEpisodes.map((ep, idx) =>
       getEpisodeStatus(ep, idx, historyEntry, currentSeasonNum)
@@ -463,7 +482,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       setAvMode(true);
       // AVPlay draws below the page: everything above it must be transparent
       document.documentElement.classList.add('xuper-vod-avplay');
-      console.log('[VodPlayer] AVPlay open', res.mime, String(res.url).slice(0, 60), 'startAt=' + startedAtRef.current);
+      console.log('[VodPlayer] AVPlay open', res.mime, hostOf(res.url), 'startAt=' + startedAtRef.current);
       // Resuming at an offset: ignore the TV's time until it confirms the seek (video.onresumeseek below)
       resumePendingRef.current = startedAtRef.current > 5;
       if (resumePendingRef.current) {
@@ -655,8 +674,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         const resumeAt = startedAtRef.current > 5 ? ` · retomar en ${Math.round(startedAtRef.current)} s` : '';
         logPlayback({ kind: 'info', player: 'VOD', detail: `${mseWhyNot ? `motor AVPlay (${mseWhyNot})` : 'motor MSE'}${res.codec ? ` · ${res.codec}` : ''}${resumeAt}` });
       }
-      if (hasAvPlay() && !isTrailer && !mseWhyNot) {
+      // Browser development has no AVPlay: the same MSE engine plays the title through the dev server proxy,
+      // which adds the portal headers and passes the byte ranges on
+      const mseInBrowser = !hasAvPlay() && import.meta.env.DEV;
+      if ((hasAvPlay() || mseInBrowser) && !isTrailer && !mseWhyNot) {
         // Indexed .ts on a TV with MSE: pieces by byte range, instant seeks inside the buffer
+        if (mseInBrowser) res = viaDevProxy(res);
         window.__xuperCurrentStreamMeta = { ...res, contentId, seasonId, trackIndex: portalTrackRef.current, startedAt: Date.now() };
         // The audios inside the file are the menu: choosing another one reopens the title on it, at the same position
         const fileLangs: AudioOption[] = [];
@@ -1011,8 +1034,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
       if (useAvPlayRef.current && window.XuperAVPlay) {
         // The timeline keeps the target until the TV confirms the seek (it can take several seconds on older
-        // TVs); with a fixed 2.5 s it jumped back to the old position while the TV was still seeking
-        if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + SEEK_SAFETY_MS;
+        // TVs); for long seeks (> 600s / 10min), extend the safety window up to 24s so the player doesn't bounce back prematurely
+        const isLongSeek = Math.abs((window.XuperAVPlay.currentTimeSec || 0) - target) >= 600;
+        const safetyMs = isLongSeek ? LONG_SEEK_SAFETY_MS : SEEK_SAFETY_MS;
+        if (pendingSeekRef.current) pendingSeekRef.current.until = Date.now() + safetyMs;
         const seekAt = Date.now();
         window.XuperAVPlay.seekTo(target, () => {
           // Slow seeks go to the playback log, to compare TVs
@@ -1062,6 +1087,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const acceptTime = (t: number): boolean => {
     const pending = pendingSeekRef.current;
     if (pending) {
+      // Wider landing tolerance for seeks (up to 8s) like Eclectic 2.0.36b so hardware AVPlay
+      // decoder resumes instantly without micro-stutters or bouncing
       const reached = Math.abs(t - pending.target) <= 8;
       const expired = pending.until > 0 && Date.now() > pending.until;
       if (!reached && !expired) return false;
@@ -1643,11 +1670,14 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
       {isBuffering && !error && <div className="vod-player-spinner" />}
 
-      {subtitleText && (
-        <div className={`vp-subtitle ${osdVisible ? 'is-raised' : ''} ${subSize} ${subStyle}`}>
-          {subtitleText.split('\n').map((line, i) => <div key={i}>{line}</div>)}
-        </div>
-      )}
+      {/* Subtitles Overlay */}
+      <div
+        className={`vp-subtitle ${osdVisible ? 'is-raised' : ''} ${subSize} ${subStyle}`}
+        hidden={!subtitleText}
+        style={{ display: subtitleText ? 'block' : 'none' }}
+      >
+        {subtitleText ? subtitleText.split('\n').map((line, i) => <div key={i}>{line}</div>) : null}
+      </div>
 
       {/* Apple TV Frosted Glass Seek HUD */}
       {seekHud && (
@@ -1680,6 +1710,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         </div>
       )}
 
+      {/* A failed title shows its own artwork, dimmed and drifting slowly, instead of a black screen */}
+      {error && errorArt && <div className="vod-player-error-art" style={{ backgroundImage: `url("${errorArt}")` }} />}
       {error && (
         <div className="vod-player-error">
           <div className="vod-player-error-title">{error}</div>

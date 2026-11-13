@@ -36,12 +36,21 @@ const NEWS_URL = 'https://telegra.ph/Novedades-de-TizenXuper-TV-11-07';
 /** First launch after the app updated itself: once per version. Same look as the restart dialog (UpdateReady) */
 export const UpdatedNotice: React.FC<{ version: string; onClose: () => void }> = ({ version, onClose }) => {
   useNoticeKeys(onClose);
+  const isBeta = version.indexOf('-beta') >= 0 || version.indexOf('beta') >= 0;
+
   return (
     <div className="upd-ready" role="dialog" aria-modal="true" aria-labelledby="upd-done-title">
       <div className="upd-ready-card is-wide">
-        <div className="upd-done-badge">Actualizada</div>
+        <div className={`upd-done-badge ${isBeta ? 'is-beta' : ''}`}>
+          {isBeta ? 'Versión Beta' : 'Actualizada'}
+        </div>
         <div className="upd-ready-title" id="upd-done-title">Ya tienes la versión {version}</div>
         <div className="upd-ready-desc">Tu sesión, tu lista y tus ajustes siguen igual.</div>
+        {isBeta && (
+          <div className="upd-done-beta-note">
+            Esta es una versión preliminar de prueba con funciones experimentales. Si encuentras algún fallo, repórtalo en el bot.
+          </div>
+        )}
         <div className="upd-done-cards">
           <div className="upd-done-news">
             <div className="upd-done-qr"><QrCode text={NEWS_URL} size={132} /></div>
@@ -66,6 +75,38 @@ export const UpdatedNotice: React.FC<{ version: string; onClose: () => void }> =
     </div>
   );
 };
+
+/**
+ * A notice from the team (lib/appStatus, level "notice"): the viewer reads it, closes it with OK or Back and keeps
+ * using the app. The text is the team's, so it serves any incident
+ */
+export const AppNotice: React.FC<{ message: string; onClose: () => void }> = ({ message, onClose }) => {
+  useNoticeKeys(onClose);
+  return (
+    <div className="upd-ready" role="alertdialog" aria-modal="true" aria-labelledby="app-notice-title">
+      <div className="upd-ready-card">
+        <div className="upd-done-badge app-notice-badge">Aviso</div>
+        <div className="upd-ready-title" id="app-notice-title">Información del servicio</div>
+        <div className="upd-ready-desc app-notice-text">{message}</div>
+        <div className="upd-done-hint">Puedes seguir usando la app. Este aviso se quitará cuando se resuelva.</div>
+        <div className="pf-btn is-focused upd-ready-btn" onClick={onClose}>Entendido</div>
+      </div>
+    </div>
+  );
+};
+
+/** The app replaced by a message while the team keeps it closed (lib/appStatus, level "block"). No keys: nothing to do */
+export const MaintenanceScreen: React.FC<{ message: string }> = ({ message }) => (
+  <main className="maintenance-screen" role="status">
+    <div className="maintenance-card">
+      <div className="maintenance-icon" aria-hidden="true">⚙</div>
+      <div className="maintenance-label">TIZENXUPER TV</div>
+      <h1>Estamos en mantenimiento</h1>
+      <p>{message}</p>
+      <span>Vuelve a intentarlo más tarde. Gracias por tu paciencia.</span>
+    </div>
+  </main>
+);
 
 /**
  * The donation request, shown after a title ended and the player closed (lib/donateMoment decides when). OK or Back

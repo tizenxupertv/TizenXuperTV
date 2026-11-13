@@ -186,7 +186,7 @@ export class SportsService {
               break;
             }
           } catch (embedErr) {
-            console.warn('[sports] Failed to resolve embed page:', pageUrl, embedErr);
+            console.warn('[sports] Failed to resolve embed page:', String(pageUrl).split('/')[2] || '', embedErr);
           }
         }
       }
@@ -195,6 +195,24 @@ export class SportsService {
     }
 
     return stream;
+  }
+
+  /** True when the signal's address must be worked out before playing it */
+  public needsResolving(stream: SportsStream | null | undefined): boolean {
+    return !!stream && !!stream.tokenApi;
+  }
+
+  /**
+   * The signal ready to play: its signed or extracted address when it has one to work out, the same signal
+   * otherwise or when that fails (the player then reports it as a signal that did not load)
+   */
+  public async resolveStream(stream: SportsStream): Promise<SportsStream> {
+    if (!this.needsResolving(stream)) return stream;
+    try {
+      return await this.resolveDynamicStream(stream);
+    } catch {
+      return stream;
+    }
   }
 
   public async getStreams(linksPath: string, forceRefresh = false): Promise<SportsStream[]> {
@@ -218,8 +236,10 @@ export class SportsService {
 
     const encrypted = await resp.text();
     const decrypted = decryptSportsPayload(encrypted);
-    const parsed = this.parseStreams(decrypted);
-    const streams = await Promise.all(parsed.map(s => this.resolveDynamicStream(s)));
+    // The list as the service gives it. A signal whose address has to be worked out (a signed link, a page to read)
+    // is resolved when the viewer picks it (resolveStream): doing all of them here made every match wait for
+    // requests to signals nobody opened, and a signed link could be minutes old by the time it was played
+    const streams = this.parseStreams(decrypted);
 
     this.streamsCache.set(linksPath, { streams, time: now });
     return streams;
@@ -244,6 +264,8 @@ export class SportsService {
 
     const now = Date.now();
     const events: SportsEvent[] = [];
+    // The feed can list the same match more than once: links seen per event id
+    const seenLinks = new Map<string, string[]>();
 
     for (const item of rawList) {
       if (!item) continue;
@@ -278,7 +300,13 @@ export class SportsService {
         now < startMillis ? 'scheduled' : now <= endMillis ? 'live' : 'finished';
 
       const isoStartTime = new Date(startMillis).toISOString();
-      const id = `ws:${sport}:${home}:${away}:${isoStartTime}`;
+      const baseId = `ws:${sport}:${home}:${away}:${isoStartTime}`;
+      const links = seenLinks.get(baseId) || [];
+      if (links.indexOf(linksPath) >= 0) continue;
+      links.push(linksPath);
+      seenLinks.set(baseId, links);
+      // Same match with other signals stays as its own card, with its own id
+      const id = links.length > 1 ? `${baseId}#${links.length}` : baseId;
 
       events.push({
         id,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { posterInWindow } from '../../lib/posterWindow';
 import { ensurePortalSnapshot } from '../../lib/portalSnapshot';
+import { getTvProfile } from '../../lib/tvProfile';
 import { TabId } from '../layout/TopNavbar';
 import { LiveChannel } from '../../types/channel';
 import { VodItem } from '../../types/vod';
@@ -26,6 +27,13 @@ export interface SearchModalProps {
 // Cached catalog items across search modal mounts for instant opening
 let cachedAllVodItems: VodItem[] | null = null;
 const searchResultCache = new Map<string, { items: VodItem[]; total: number; at: number }>();
+
+/** Line under the title, as on the home cards: score and year, else the first genre */
+export function cardMeta(item: VodItem): string {
+  const score = item.score && item.score !== '0' ? `★ ${item.score}` : '';
+  const year = item.year && item.year !== '—' ? item.year : '';
+  return [score, year].filter(Boolean).join(' · ') || (item.genres && item.genres[0]) || '';
+}
 
 const RECENT_SEARCHES_KEY = 'xuper_recent_searches_v1';
 const MAX_RECENT = 10;
@@ -68,23 +76,19 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   recentSearchesRef.current = recentSearches;
   const recentListRef = useRef<HTMLDivElement>(null);
   const [kb, setKb] = useState<KbState>(KB_INITIAL);
+  const typedOnKeyboardRef = useRef(false);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
 
   const isTvSearch = currentTab === 'tv';
 
   const submitSearch = (customQ?: string) => {
     const targetQ = (customQ !== undefined ? customQ : query).trim();
+    // One letter matches almost every title: a search needs at least two.
+    // An empty one still moves the focus to the popular titles
+    if (targetQ.length === 1) return;
     setSubmittedQuery(targetQ);
     setFocusedResultIndex(0);
     setFocusArea('results');
-
-    if (targetQ.length >= 2) {
-      setRecentSearches(prev => {
-        const next = [targetQ, ...prev.filter(s => s.toLowerCase() !== targetQ.toLowerCase())].slice(0, MAX_RECENT);
-        saveRecentSearches(next);
-        return next;
-      });
-    }
   };
 
   const clearRecentSearches = () => {
@@ -102,18 +106,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     setRecentIndex(0);
   };
 
-  // Responsive columns: 6 columns on 1080p/desktop (>=1300px), 5 on smaller screens (<1300px), 2 for live TV
-  const [vodCols, setVodCols] = useState<number>(() => {
-    return typeof window !== 'undefined' && window.innerWidth < 1300 ? 5 : 6;
-  });
-
-  useEffect(() => {
-    const onResize = () => {
-      setVodCols(window.innerWidth < 1300 ? 5 : 6);
-    };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
+  // The stage is always 1920 wide: 6 columns for VOD, 2 for live TV
+  const vodCols = 6;
 
   // All VOD items from catalog (cached across mounts for instant opening)
   const [allVodItems, setAllVodItems] = useState<VodItem[]>(cachedAllVodItems || []);
@@ -136,7 +130,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       });
       cachedAllVodItems = unique;
       setAllVodItems(unique);
-    });
+    }).catch(() => {});
   }, []);
 
   // Comprehensive list of ALL channels across all categories
@@ -279,10 +273,26 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     const local = localHaystacks.filter(h => h.title.includes(q) || h.rest.includes(q)).map(h => h.item);
     const seen = new Set(local.map(it => it.id));
     const remote = remoteVod.filter(it => !seen.has(it.id));
-    return enrichSearchItems(local.concat(remote).slice(0, 120), allVodItems, true);
+    // Tizen <= 4 / low-memory TVs (1 GB RAM) can exhaust memory decoding 120 full-size posters.
+    // Cap to 24 for low-memory TVs, 48 for mid-tier, and 120 for modern TVs.
+    const profile = getTvProfile();
+    const maxItems = profile.lowMemory ? 24 : profile.tier === 'mid' ? 48 : 120;
+    return enrichSearchItems(local.concat(remote).slice(0, maxItems), allVodItems, true);
   }, [isTvSearch, submittedQuery, allVodItems, localHaystacks, remoteVod, popular]);
 
   const totalResults = isTvSearch ? filteredChannels.length : filteredVod.length;
+
+  // A search goes to the recent list once it finds something, so dead ends are not kept
+  useEffect(() => {
+    const q = submittedQuery.trim();
+    if (q.length < 2 || totalResults === 0) return;
+    setRecentSearches(prev => {
+      if (prev[0] === q) return prev;
+      const next = [q, ...prev.filter(s => s.toLowerCase() !== q.toLowerCase())].slice(0, MAX_RECENT);
+      saveRecentSearches(next);
+      return next;
+    });
+  }, [submittedQuery, totalResults]);
 
   const showSkeleton = !isTvSearch && ((!submittedQuery.trim() && !popular && popularLoading) || (!!submittedQuery.trim() && remoteState === 'loading' && totalResults === 0));
 
@@ -300,6 +310,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       setFocusedResultIndex(0);
       setFocusArea('keyboard');
       setKb(KB_INITIAL);
+      typedOnKeyboardRef.current = false;
     }
     prevOpenRef.current = isOpen;
   }, [isOpen]);
@@ -425,6 +436,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
         if (/^[A-Za-z0-9\u00C0-\u024F ._\-'&@+]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
           e.stopImmediatePropagation();
+          // Remote digit keys also arrive here: only letters mean a real keyboard is in use
+          if (!/^[0-9]$/.test(e.key)) typedOnKeyboardRef.current = true;
           typeKey(e.key === ' ' ? 'space' : e.key);
           return;
         }
@@ -437,6 +450,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
             setRecentIndex(0);
             return;
           }
+          typedOnKeyboardRef.current = false;
           const next = moveCursor(kb, 'down');
           if (next) setKb(next);
           return;
@@ -445,6 +459,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           e.preventDefault();
           e.stopImmediatePropagation();
           const dir = e.key === 'ArrowUp' ? 'up' : e.key === 'ArrowLeft' ? 'left' : 'right';
+          typedOnKeyboardRef.current = false;
           const next = moveCursor(kb, dir);
           if (next) {
             setKb(next);
@@ -458,7 +473,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           e.preventDefault();
           e.stopImmediatePropagation();
           const currentKey = keyAt(kb);
-          if (currentKey === 'ok') {
+          // After typing on a real keyboard, Enter searches instead of pressing the focused on-screen key
+          if (currentKey === 'ok' || typedOnKeyboardRef.current) {
             submitSearch(query);
           } else {
             typeKey(currentKey);
@@ -585,16 +601,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                   </>
                 )}
               </div>
-              {query && (
-                <button
-                  type="button"
-                  className="search-input-submit-btn"
-                  onClick={() => submitSearch(query)}
-                  title="Buscar"
-                >
-                  Buscar
-                </button>
-              )}
             </div>
 
             <div className="search-keyboard-wrap">
@@ -688,10 +694,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
               {Array.from({ length: 10 }, (_, i) => (
                 <div key={i} className="search-vod-card svc-skeleton">
                   <div className="svc-poster-wrap skeleton-shimmer" />
-                  <div className="svc-info">
-                    <div className="svc-skeleton-line" />
-                    <div className="svc-skeleton-line is-short" />
-                  </div>
                 </div>
               ))}
             </div>
@@ -789,12 +791,11 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                           }
                         }}
                       />
-                      {item.score && item.score !== '0' && <div className="svc-score-badge">★ {item.score}</div>}
-                      <div className="svc-kind-badge">{item.kind === 'serie' ? 'SERIE' : 'PELÍCULA'}</div>
-                    </div>
-                    <div className="svc-info">
-                      <div className="svc-title">{item.title}</div>
-                      <div className="svc-meta">{[item.year, item.genres?.[0]].filter(Boolean).join(' • ')}</div>
+                      <div className="svc-kind-badge">{item.kind === 'serie' ? 'Serie' : 'Película'}</div>
+                      <div className="poster-bottom-vignette">
+                        <div className="poster-vignette-title">{item.title || 'Sin título'}</div>
+                        <div className="poster-vignette-genre">{cardMeta(item)}</div>
+                      </div>
                     </div>
                   </div>
                 );

@@ -9,6 +9,8 @@ type Catalog = Awaited<ReturnType<typeof catalogService.fetchCatalog>>;
 
 /** VOD catalog lists and watch history; `onLoaded` runs once when the catalog arrives */
 export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
+  const [catalogError, setCatalogError] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(true);
   const [featuredItems, setFeaturedItems] = useState<VodItem[]>([]);
   const [movieItems, setMovieItems] = useState<VodItem[]>([]);
   const [seriesItems, setSeriesItems] = useState<VodItem[]>([]);
@@ -37,7 +39,7 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
       setCatalogRows(catalog.rowsByGroup || {});
       setPortalRows(catalog.portalRows || {});
       if (onLoadedRef.current) onLoadedRef.current(catalog);
-    });
+    }).catch(() => setCatalogError(true)).finally(() => setCatalogLoading(false));
 
     return () => {
       unsubHist();
@@ -57,6 +59,8 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
   }, [movieItems, seriesItems, featuredItems]);
 
   return {
+    catalogError,
+    catalogLoading,
     featuredItems,
     movieItems,
     seriesItems,

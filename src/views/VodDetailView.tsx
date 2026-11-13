@@ -1,3 +1,4 @@
+import { friendlyPortalError } from '../lib/portalErrors';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { VodItem, VodEpisode, VodSeason, PersonDetail, PersonResult } from '../types/vod';
 import { catalogService, getPersons } from '../services/catalogService';
@@ -104,7 +105,8 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     seasons: VodSeason[];
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  // Why the detail did not load, in words for the viewer; null when it loaded
+  const [loadError, setLoadError] = useState<string | null>(null);
   // Season details & episodes of a season other than the opened one
   const [currentSeasonData, setCurrentSeasonData] = useState<{ item: VodItem; seasonId: string; episodes: VodEpisode[] } | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
@@ -118,7 +120,6 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   const activeCastRef = useRef<HTMLDivElement>(null);
   const modalBodyRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
-  const textRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -155,7 +156,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     const currentToken = ++viewTokenRef.current;
     let isMounted = true;
     setIsLoading(true);
-    setLoadError(false);
+    setLoadError(null);
     setCurrentSeasonData(null);
     setLocalSynopsisModal(false);
 
@@ -179,7 +180,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     }).catch(err => {
       if (!isMounted || currentToken !== viewTokenRef.current) return;
       console.warn('[VodDetailView] Detail load failed:', err);
-      setLoadError(true);
+      setLoadError(friendlyPortalError(err, 'No se pudieron cargar los episodios.'));
       setDetailData({
         item,
         episodes: [],
@@ -235,14 +236,14 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     }
   }, [effectiveCast]);
 
-  const modalArea: SynopsisModalArea = focus.synopsisModalArea || (effectiveCast.length > 0 ? 'cast' : 'text');
+  const modalArea: SynopsisModalArea = focus.synopsisModalArea || (effectiveCast.length > 0 ? 'cast' : 'close');
 
   // Direct container scroll management for modal on Samsung Tizen
   useEffect(() => {
     if (!focus.showSynopsisModal && !localSynopsisModal) return;
 
-    if (modalArea === 'close' || modalArea === 'text') {
-      if (modalBodyRef.current) {
+    if (modalArea === 'close') {
+      if (modalBodyRef.current && effectiveCast.length > 0) {
         modalBodyRef.current.scrollTop = 0;
       }
     } else if (modalArea === 'cast' && activeCastRef.current && modalBodyRef.current) {
@@ -547,7 +548,10 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     }
   }, [focus.area]);
 
-  const backdropUrl = currentItem.backdrop || currentItem.landscape || currentItem.poster || 'assets/placeholder_landscape.png';
+  const rawBackdrop = currentItem.backdrop || currentItem.landscape || currentItem.poster || 'assets/placeholder_landscape.png';
+  const backdropUrl = import.meta.env.DEV && /^https?:/.test(rawBackdrop)
+    ? `${location.origin}/stream-proxy?url=${encodeURIComponent(rawBackdrop)}`
+    : rawBackdrop;
 
   // Visible range of episodes: the focused one in the ranges row, else the focused/current episode's
   const visibleRange = focus.area === 'epRanges' && focus.rangeIndex !== undefined
@@ -845,7 +849,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                 ) : loadError ? (
                   <div className="vod-episodes-empty-card">
                     <div className="vod-episodes-empty-icon">⚠️</div>
-                    <div className="vod-episodes-empty-text">No se pudieron cargar los episodios. Vuelve a abrir la ficha para reintentar.</div>
+                    <div className="vod-episodes-empty-text">{loadError} Vuelve a abrir la ficha para reintentar.</div>
                   </div>
                 ) : episodes.length === 0 ? (
                   <div className="vod-episodes-empty-card">
@@ -981,18 +985,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                   )}
                 </div>
                 <div className="synopsis-modal-body" ref={modalBodyRef}>
-                  <div
-                    ref={modalArea === 'text' ? textRef : null}
-                    className={`synopsis-modal-text-wrap ${modalArea === 'text' ? 'is-focused' : ''}`}
-                    tabIndex={0}
-                  >
-                    <p className="synopsis-modal-text">{currentItem.synopsis}</p>
-                    {modalArea === 'text' && effectiveCast.length > 0 && (
-                      <div className="synopsis-modal-nav-hint">
-                        Presiona <b>[▼]</b> para ver Reparto y Equipo
-                      </div>
-                    )}
-                  </div>
+                  <p className="synopsis-modal-text">{currentItem.synopsis}</p>
 
                   {/* Reparto y Equipo inside the dialog */}
                   {effectiveCast.length > 0 && (
@@ -1049,15 +1042,8 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                   {modalArea === 'cast' && effectiveCast.length > 0 && (
                     <span>Navega con <b>[◀ ▲ ▼ ▶]</b> · Presiona <b>[OK]</b> para filmografía · <b>[▲]</b> para volver arriba · <b>[Atrás]</b> para salir</span>
                   )}
-                  {modalArea === 'text' && (
-                    <span>{effectiveCast.length > 0 ? (
-                      <>Presiona <b>[▼]</b> para ver Reparto y Equipo · <b>[▲]</b> para botón Cerrar · <b>[Atrás]</b> para salir</>
-                    ) : (
-                      <>Presiona <b>[▲]</b> para botón Cerrar · <b>[Atrás]</b> o <b>[OK]</b> para cerrar</>
-                    )}</span>
-                  )}
                   {modalArea === 'close' && (
-                    <span>Presiona <b>[OK]</b> o <b>[Atrás]</b> para cerrar · <b>[▼]</b> para volver al contenido</span>
+                    <span>Presiona <b>[OK]</b> o <b>[Atrás]</b> para cerrar{effectiveCast.length > 0 && <> · <b>[▼]</b> para ver Reparto y Equipo</>}</span>
                   )}
                 </div>
               </div>

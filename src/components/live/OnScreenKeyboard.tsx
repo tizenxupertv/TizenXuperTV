@@ -153,7 +153,7 @@ export const OnScreenKeyboard: React.FC<OnScreenKeyboardProps> = ({ state, focus
               className={`osk-key ${ACTION_KEYS.indexOf(cell.k) !== -1 ? 'is-action' : ''} ${cell.k === 'ok' ? 'is-ok' : ''} ${
                 focused && state.r === r && state.c === c ? 'is-focused' : ''
               }`}
-              style={cell.w > 1 ? { gridColumn: `span ${cell.w}` } : undefined}
+              style={{ flex: `${cell.w} ${cell.w} 0%`, minWidth: 0, ...(cell.w > 1 ? { gridColumn: `span ${cell.w}` } : {}) }}
               onClick={() => onPress && onPress(cell.k)}
             >
               {label(cell.k)}
