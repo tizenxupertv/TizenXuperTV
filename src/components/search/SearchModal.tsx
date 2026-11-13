@@ -69,23 +69,18 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   recentSearchesRef.current = recentSearches;
   const recentListRef = useRef<HTMLDivElement>(null);
   const [kb, setKb] = useState<KbState>(KB_INITIAL);
+  const typedOnKeyboardRef = useRef(false);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
 
   const isTvSearch = currentTab === 'tv';
 
   const submitSearch = (customQ?: string) => {
     const targetQ = (customQ !== undefined ? customQ : query).trim();
+    // One letter matches almost every title: a search needs at least two
+    if (targetQ.length < 2) return;
     setSubmittedQuery(targetQ);
     setFocusedResultIndex(0);
     setFocusArea('results');
-
-    if (targetQ.length >= 2) {
-      setRecentSearches(prev => {
-        const next = [targetQ, ...prev.filter(s => s.toLowerCase() !== targetQ.toLowerCase())].slice(0, MAX_RECENT);
-        saveRecentSearches(next);
-        return next;
-      });
-    }
   };
 
   const clearRecentSearches = () => {
@@ -279,6 +274,18 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
   const totalResults = isTvSearch ? filteredChannels.length : filteredVod.length;
 
+  // A search goes to the recent list once it finds something, so dead ends are not kept
+  useEffect(() => {
+    const q = submittedQuery.trim();
+    if (q.length < 2 || totalResults === 0) return;
+    setRecentSearches(prev => {
+      if (prev[0] === q) return prev;
+      const next = [q, ...prev.filter(s => s.toLowerCase() !== q.toLowerCase())].slice(0, MAX_RECENT);
+      saveRecentSearches(next);
+      return next;
+    });
+  }, [submittedQuery, totalResults]);
+
   const showSkeleton = !isTvSearch && ((!submittedQuery.trim() && !popular && popularLoading) || (!!submittedQuery.trim() && remoteState === 'loading' && totalResults === 0));
 
   // Auto-focus input only when search opens fresh (preserves query & results when returning from VOD detail view!)
@@ -295,6 +302,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       setFocusedResultIndex(0);
       setFocusArea('keyboard');
       setKb(KB_INITIAL);
+      typedOnKeyboardRef.current = false;
     }
     prevOpenRef.current = isOpen;
   }, [isOpen]);
@@ -420,6 +428,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
         if (/^[A-Za-z0-9\u00C0-\u024F ._\-'&@+]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
           e.stopImmediatePropagation();
+          // Remote digit keys also arrive here: only letters mean a real keyboard is in use
+          if (!/^[0-9]$/.test(e.key)) typedOnKeyboardRef.current = true;
           typeKey(e.key === ' ' ? 'space' : e.key);
           return;
         }
@@ -432,6 +442,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
             setRecentIndex(0);
             return;
           }
+          typedOnKeyboardRef.current = false;
           const next = moveCursor(kb, 'down');
           if (next) setKb(next);
           return;
@@ -440,6 +451,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           e.preventDefault();
           e.stopImmediatePropagation();
           const dir = e.key === 'ArrowUp' ? 'up' : e.key === 'ArrowLeft' ? 'left' : 'right';
+          typedOnKeyboardRef.current = false;
           const next = moveCursor(kb, dir);
           if (next) {
             setKb(next);
@@ -453,7 +465,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           e.preventDefault();
           e.stopImmediatePropagation();
           const currentKey = keyAt(kb);
-          if (currentKey === 'ok') {
+          // After typing on a real keyboard, Enter searches instead of pressing the focused on-screen key
+          if (currentKey === 'ok' || typedOnKeyboardRef.current) {
             submitSearch(query);
           } else {
             typeKey(currentKey);
