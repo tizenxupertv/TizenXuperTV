@@ -93,6 +93,17 @@ function formatTime(seconds: number): string {
 }
 
 /** AVPlay (hardware player) is only available on the Samsung TV */
+/** The title and its index asked from the dev server (/stream-proxy in vite.config.ts) instead of the CDN */
+function viaDevProxy(res: any): any {
+  const auth = (res.headers && res.headers['Content-Auth']) || '';
+  const license = (res.headers && res.headers['Content-License']) || '';
+  const wrap = (url: string) => url
+    ? `${location.origin}/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}`
+    : url;
+  // No headers of its own: the proxy sets them, and no host to pick another Content-Auth for
+  return { ...res, url: wrap(res.url), idxUrl: wrap(res.idxUrl), headers: {}, authByHost: undefined };
+}
+
 function hasAvPlay(): boolean {
   return !!(window.XuperAVPlay && window.webapis && window.webapis.avplay);
 }
@@ -663,8 +674,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         const resumeAt = startedAtRef.current > 5 ? ` · retomar en ${Math.round(startedAtRef.current)} s` : '';
         logPlayback({ kind: 'info', player: 'VOD', detail: `${mseWhyNot ? `motor AVPlay (${mseWhyNot})` : 'motor MSE'}${res.codec ? ` · ${res.codec}` : ''}${resumeAt}` });
       }
-      if (hasAvPlay() && !isTrailer && !mseWhyNot) {
+      // Browser development has no AVPlay: the same MSE engine plays the title through the dev server proxy,
+      // which adds the portal headers and passes the byte ranges on
+      const mseInBrowser = !hasAvPlay() && import.meta.env.DEV;
+      if ((hasAvPlay() || mseInBrowser) && !isTrailer && !mseWhyNot) {
         // Indexed .ts on a TV with MSE: pieces by byte range, instant seeks inside the buffer
+        if (mseInBrowser) res = viaDevProxy(res);
         window.__xuperCurrentStreamMeta = { ...res, contentId, seasonId, trackIndex: portalTrackRef.current, startedAt: Date.now() };
         // The audios inside the file are the menu: choosing another one reopens the title on it, at the same position
         const fileLangs: AudioOption[] = [];
