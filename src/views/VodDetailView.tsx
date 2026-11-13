@@ -1,6 +1,5 @@
 import { friendlyPortalError } from '../lib/portalErrors';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import ReactDOM from 'react-dom';
 import { VodItem, VodEpisode, VodSeason, PersonDetail, PersonResult } from '../types/vod';
 import { catalogService, getPersons } from '../services/catalogService';
 import { PersonDetailModal } from '../components/vod/PersonDetailModal';
@@ -570,7 +569,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   const score = currentItem.score && currentItem.score !== '0' ? currentItem.score : '';
   const year = currentItem.year && currentItem.year !== '—' ? currentItem.year : '';
 
-  return ReactDOM.createPortal(
+  return (
     <div className="vod-detail-screen" ref={rootScrollRef}>
       {/* Immersive Cinema Backdrop */}
       <div className="vod-detail-backdrop">
@@ -1073,5 +1072,5 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
       )}
 
     </div>
-  , document.body);
+  );
 };
