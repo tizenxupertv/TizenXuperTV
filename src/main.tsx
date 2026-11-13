@@ -183,7 +183,7 @@ async function mountApp() {
     try {
       await new Promise<void>((resolve, reject) => {
         const script = document.createElement('script');
-        script.src = '/js/local-catalog-mock.js';
+        script.src = '/tools/local-catalog-mock.js';
         script.onload = () => resolve();
         script.onerror = () => reject(new Error('Could not load the local catalog simulator'));
         document.head.appendChild(script);
