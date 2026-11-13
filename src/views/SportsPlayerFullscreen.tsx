@@ -1,3 +1,4 @@
+import { AUTO_NEXT_MS, nextSignal } from '../lib/nextSignal';
 import { createRunGuard } from '../lib/runGuard';
 import { loadShaka } from '../lib/lazyScript';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -36,6 +37,16 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   const openedAtRef = useRef(Date.now());
   // Signals that failed in this session, marked in the list
   const [failed, setFailed] = useState<Set<number>>(() => new Set());
+  // The signal about to be tried by itself after a failure (index), or null
+  const [autoNext, setAutoNext] = useState<number | null>(null);
+  const autoNextTimerRef = useRef<any>(null);
+  const cancelAutoNext = useCallback(() => {
+    if (autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
+      autoNextTimerRef.current = null;
+    }
+    setAutoNext(null);
+  }, []);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
@@ -349,10 +360,21 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     logPlayback({ kind: 'error', player: playerKindRef.current, detail: error, host: hostOf(currentStream?.url) });
     setFailed(prev => new Set(prev).add(currentStreamIdx));
     if (streams.length > 1) {
-      const next = streams.findIndex((_, i) => i !== currentStreamIdx && !failed.has(i));
+      const next = nextSignal(streams.length, currentStreamIdx, failed);
       setServerMenuIdx(next >= 0 ? next : currentStreamIdx);
       setShowServerMenu(true);
+      // The next signal that has not failed is tried by itself after a moment; any key leaves the choice to the viewer
+      if (next >= 0) {
+        setAutoNext(next);
+        autoNextTimerRef.current = setTimeout(() => {
+          autoNextTimerRef.current = null;
+          setAutoNext(null);
+          setShowServerMenu(false);
+          setCurrentStreamIdx(next);
+        }, AUTO_NEXT_MS);
+      }
     }
+    return cancelAutoNext;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
 
@@ -363,6 +385,9 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       if (Date.now() - openedAtRef.current < 600 && (e.key === 'Enter' || e.key === 'ArrowUp')) return;
 
       const isBack = e.key === 'Escape' || e.key === 'Backspace' || (e as any).keyCode === 10009;
+
+      // Any key while the next signal is about to be tried: the viewer chooses instead
+      if (autoNextTimerRef.current) cancelAutoNext();
 
       // Toggle match details with 'i' (Info key) or yellow remote button
       if (e.key === 'i' || (e as any).keyCode === 457 || (e as any).keyCode === 405) {
@@ -480,7 +505,11 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
           <div className="spp-error-detail">Transmisión deportiva en fase beta · {error}</div>
           {streams.length > 1 && showServerMenu ? (
             <>
-              <div className="spp-hint">Elige otra señal · OK para ver · Atrás para salir</div>
+              <div className="spp-hint">
+                {autoNext !== null && streams[autoNext]
+                  ? `Probando «${streams[autoNext].name}» en unos segundos · pulsa una tecla para elegir tú`
+                  : 'Elige otra señal · OK para ver · Atrás para salir'}
+              </div>
               {signalList}
             </>
           ) : (
