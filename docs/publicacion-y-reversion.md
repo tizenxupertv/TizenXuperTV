@@ -62,8 +62,10 @@ Sobre nosotros) recibe la publicación más reciente, incluidas las preliminares
 7. Prueba en un televisor antes de publicar: instala actualizando, sin desinstalar.
 8. Publicación en GitHub **marcada como preliminar** y con `dev` como destino, etiqueta `vx.y.z`. Archivos: los dos de
    actualización, el `.wgt` firmado y la copia `TizenXuperTV.wgt`, como en las publicaciones anteriores.
-9. El bot anuncia la preliminar en el grupo Beta. Añade la sección de la versión a la página de novedades del bot
-   (`guide/`) y ejecuta `npm run guide` en `TizenXuper Bot`.
+9. El bot anuncia la preliminar en el grupo Beta, y la página de novedades (`tizenxuper-tv.pages.dev/novedades`)
+   se actualiza sola con las notas de la publicación. No hay que ejecutar `npm run guide` para esto: ese comando
+   republica las guías de telegra.ph y deja `src/guidePages.ts` del bot apuntando otra vez a la página antigua de
+   novedades (comprobado el 13 de noviembre de 2026 con la 1.17.0).
 
 ## Promover una beta a estable
 
