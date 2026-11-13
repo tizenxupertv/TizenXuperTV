@@ -349,7 +349,33 @@ class HistoryService {
     };
   }
 
+  private held = 0;
+  private heldDirty = false;
+
+  /**
+   * Keeps the screens from redrawing on every save until the returned function is called. The player saves the
+   * position every 15 seconds; each save made the whole app under it (rows, the title page) render again for
+   * nothing the viewer can see. The data is saved as always; only the redraw waits, and happens once on release
+   */
+  public holdNotifications(): () => void {
+    this.held++;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.held--;
+      if (this.held === 0 && this.heldDirty) {
+        this.heldDirty = false;
+        this.notify();
+      }
+    };
+  }
+
   private notify() {
+    if (this.held > 0) {
+      this.heldDirty = true;
+      return;
+    }
     this.listeners.forEach(cb => {
       try { cb(); } catch (e) {}
     });
