@@ -3,8 +3,10 @@ import { fetchWithTimeout } from '../lib/fetchTimeout';
 import { placeExtraChannels } from '../lib/extraChannels';
 
 const DOMAINS = ['https://playlatam.site', 'https://epictvparaiphone.top', 'https://epicplustv.com'];
-const PULSERA_URL = 'https://playlatam.site/iphone/pulsera';
-const CANALES_URL = 'https://playlatam.site/iphone/canales';
+// Browser development goes through the Vite proxy: the source does not allow cross-origin requests
+const API_BASE = import.meta.env && import.meta.env.DEV ? '/epic-api' : 'https://playlatam.site';
+const PULSERA_URL = `${API_BASE}/iphone/pulsera`;
+const CANALES_URL = `${API_BASE}/iphone/canales`;
 const LOGO_BASE = 'https://playlatam.site';
 
 const STORAGE_KEY = 'xuper_epic_pulsera_v1';
