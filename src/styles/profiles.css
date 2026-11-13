@@ -26,41 +26,30 @@
   gap: 32px;
 }
 .lp-picker-brand {
-  margin-bottom: -6px;
-  transform: scale(1.05);
-}
-.lp-picker-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
+  /* Where the app header draws it, so the logo does not move when the app appears */
+  position: absolute;
+  left: 48px;
+  top: 17px;
 }
 .lp-picker-title {
-  margin: 0;
-  font-size: 46px;
+  margin: 0 0 24px;
+  font-size: 52px;
   font-weight: 900;
   color: #ffffff;
   letter-spacing: -0.5px;
 }
-.lp-picker-subtitle {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 500;
-  color: #94a3b8;
-}
 .lp-picker-row {
   display: flex;
-  gap: 44px;
-  margin-top: 10px;
-  margin-bottom: 8px;
+  gap: 56px;
+  margin-bottom: 12px;
   align-items: flex-start;
 }
 .lp-picker-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  width: 176px;
+  gap: 18px;
+  width: 220px;
   cursor: pointer;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -73,12 +62,10 @@
 .lp-picker-item.is-focused .lp-avatar {
   border-color: #ffffff;
   opacity: 1;
-  transform: scale(1.12);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(255, 255, 255, 0.2);
 }
 .lp-picker-name {
   max-width: 100%;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 700;
   color: #94a3b8;
   overflow: hidden;
@@ -89,20 +76,21 @@
 .lp-picker-item.is-focused .lp-picker-name {
   color: #ffffff;
   font-weight: 800;
-  transform: translateY(2px);
 }
 .lp-picker-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 48px;
   margin: 0;
-  font-size: 15px;
+  font-size: 17px;
   color: #64748b;
-  max-width: 640px;
   text-align: center;
-  line-height: 1.5;
 }
 
 .lp-add-circle {
-  width: 132px;
-  height: 132px;
+  width: 176px;
+  height: 176px;
   border-radius: 50%;
   border: 3px dashed rgba(255, 255, 255, 0.35);
   box-sizing: border-box;
@@ -110,7 +98,7 @@
   align-items: center;
   justify-content: center;
   color: #cbd5e1;
-  font-size: 56px;
+  font-size: 72px;
   font-weight: 300;
   background: rgba(255, 255, 255, 0.03);
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border 0.2s ease, background 0.2s ease;
@@ -119,8 +107,6 @@
   border: 4px solid #ffffff;
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
-  transform: scale(1.12);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(255, 255, 255, 0.2);
 }
 .lp-picker-avatar { position: relative; }
 .lp-picker-edit {
@@ -144,14 +130,14 @@
   text-transform: uppercase;
 }
 .lp-manage-btn {
-  height: 48px;
-  min-width: 240px;
-  padding: 0 32px;
+  height: 54px;
+  min-width: 260px;
+  padding: 0 36px;
   border-radius: 9999px;
   background: rgba(255, 255, 255, 0.08);
   border: 2px solid rgba(255, 255, 255, 0.16);
   color: #e2e8f0;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.3px;
   cursor: pointer;
@@ -166,7 +152,6 @@
   background: #ffffff !important;
   color: #000000 !important;
   border-color: #ffffff !important;
-  transform: scale(1.04);
 }
 
 /* Dialogs: what to do with a profile, and the name editor */
