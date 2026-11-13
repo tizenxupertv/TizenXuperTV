@@ -58,6 +58,8 @@ export function packageLists(indexHtml) {
 
 function walk(dir, base = dir, out = []) {
   for (const name of readdirSync(dir)) {
+    // Finder leaves these behind; the signed package never carries them (tools/build-and-sign.sh)
+    if (name === '.DS_Store') continue;
     const full = join(dir, name);
     if (statSync(full).isDirectory()) walk(full, base, out);
     else out.push(relative(base, full).split(sep).join('/'));
