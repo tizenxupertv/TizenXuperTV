@@ -131,6 +131,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     if (seasonNumber) setCurrentSeasonNum(seasonNumber);
   }, [seasonNumber]);
 
+  // While the player is open the saved position does not redraw the app under it: once, on leaving
+  useEffect(() => {
+    if (isTrailer) return;
+    return historyService.holdNotifications();
+  }, [isTrailer]);
+
   // The donation request waits for the player to be gone (lib/donateMoment)
   useEffect(() => {
     if (isTrailer) return;
@@ -255,6 +261,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
   // History & episode statuses (watched, progress, current)
   const historyEntry = historyService.getEntry(item.id);
+  const errorArt = item.backdrop || item.landscape || item.poster || '';
   const episodeStatuses = useMemo(() => {
     return effectiveEpisodes.map((ep, idx) =>
       getEpisodeStatus(ep, idx, historyEntry, currentSeasonNum)
@@ -1688,6 +1695,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         </div>
       )}
 
+      {/* A failed title shows its own artwork, dimmed and drifting slowly, instead of a black screen */}
+      {error && errorArt && <div className="vod-player-error-art" style={{ backgroundImage: `url("${errorArt}")` }} />}
       {error && (
         <div className="vod-player-error">
           <div className="vod-player-error-title">{error}</div>
