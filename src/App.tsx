@@ -28,6 +28,7 @@ import { completeSplashTask, preloadImages } from './lib/splash';
 import { optimizedImage } from './lib/imageCache';
 import { VodItem, VodEpisode } from './types/vod';
 import { LiveChannel, LiveCategory } from './types/channel';
+import { paneDisplay, supportsDisplayContents } from './lib/paneDisplay';
 import { historyService } from './services/historyService';
 import type { HistoryItem } from './types/history';
 import { settingsService, subtitleChoiceIndex, applySettingChoice, SETTINGS_ROW } from './services/settingsService';
@@ -49,6 +50,9 @@ import { UpdateReady } from './components/common/UpdateReady';
 import { pk } from './lib/localProfiles';
 import { ProfileMenu, type ProfileMenuAction } from './components/layout/ProfileMenu';
 import { ProfilePickerScreen } from './screens/ProfilePickerScreen';
+
+/** Tizen 4.0 / 5.0 have no display: contents (see lib/paneDisplay.ts) */
+const PANE_CONTENTS = supportsDisplayContents();
 
 /** The home's hero stops rotating after this long without a key press */
 const HERO_IDLE_MS = 2 * 60 * 1000;
@@ -854,7 +858,7 @@ export const App: React.FC = () => {
       <div
         className="tab-pane-live-tv"
         style={{
-          display: selectedTab === 'tv' ? 'contents' : 'none',
+          display: paneDisplay(selectedTab === 'tv', PANE_CONTENTS),
           visibility: selectedTab === 'tv' && (activeDetailItem || activeVodPlayer) ? 'hidden' : undefined,
           pointerEvents: selectedTab === 'tv' && (activeDetailItem || activeVodPlayer) ? 'none' : undefined,
         }}
