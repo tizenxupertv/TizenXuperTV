@@ -4,7 +4,9 @@ import {
   getPersons,
   getPersonWorks,
   getChannelCatchup,
-  getCatchupStreamUrl
+  getCatchupStreamUrl,
+  getPortalColumns,
+  getPortalColumnPage
 } from '../src/services/catalogService.ts';
 
 test('catalogService: getPersons fetches and separates directors and actors', async () => {
@@ -82,5 +84,46 @@ test('catalogService: getChannelCatchup and getCatchupStreamUrl retrieve BTV rep
 
   const url = await getCatchupStreamUrl('espn_hd', 'btv_1');
   assert.equal(url, 'https://stream.server.tv/btv/replay_btv_1.m3u8');
+});
+
+test('catalogService: local portal contract loads categories and a movie page', async () => {
+  const requested: Array<{ kind: string; args: unknown[] }> = [];
+  (globalThis as any).window = {
+    MagisClient: {
+      columns: (parentId: number, cb: Function) => {
+        requested.push({ kind: 'columns', args: [parentId] });
+        cb(null, [
+          { id: 91001, code: 'movies-action', name: 'Acción', free: false, sequence: 1 },
+          { id: 91002, code: 'movies-drama', name: 'Drama', free: false, sequence: 2 }
+        ]);
+      },
+      columnPage: (columnId: number, pageNum: number, pageSize: number, cb: Function) => {
+        requested.push({ kind: 'columnPage', args: [columnId, pageNum, pageSize] });
+        assert.equal(columnId, 91001);
+        assert.equal(pageNum, 1);
+        assert.equal(pageSize, 24);
+        cb(null, {
+          total: 1,
+          items: [{
+            id: 'local-movie-1',
+            name: 'Película de prueba',
+            year: '2026',
+            score: '8.0',
+            genre: 'Action',
+            poster: 'assets/placeholder_vertical.png'
+          }]
+        });
+      }
+    }
+  };
+
+  const columns = await getPortalColumns(91000);
+  const page = await getPortalColumnPage(91001, 1, 24);
+
+  assert.deepEqual(columns.map(column => column.name), ['Acción', 'Drama']);
+  assert.equal(page.total, 1);
+  assert.equal(page.items[0].title, 'Película de prueba');
+  assert.equal(page.items[0].year, '2026');
+  assert.deepEqual(requested.map(entry => entry.kind), ['columns', 'columnPage']);
 });
 

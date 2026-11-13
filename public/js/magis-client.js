@@ -27,7 +27,10 @@
   var PORTAL_CODE = 'masnew';
   var APP_ID = 'com.android.msandroid';
   var APK_VERSION = '49902';
-  var SPKG_VER = '2024-09-10 06:25:30_33_13_';
+  // Kept in sync with the working authorized backup. The portal rejects retired client builds.
+  var SPKG_VER = '2025-08-07 05:40:11_36_16_';
+  // The authorized client keeps the portal payload at 49902 but identifies the
+  // transport itself as build 43404. Both values are required by the provider.
   var APK_VER_HEADER = '43404';
   var USER_AGENT = 'okhttp/3.12.12';
   var CONTENT_TYPE = 'application/json;charset=utf-8';
@@ -86,10 +89,10 @@
     product: 'sdk_gphone64_arm64',
     cpu: 'arm64-v8a',
     B29: '',
-    reserve1: FIXED_RESERVE1,
+    reserve1: '',
     deviceToken: '',
-    drmId: FIXED_DRM_ID,
-    sdkVer: 33
+    drmId: '',
+    sdkVer: 36
   };
 
   var FINGERPRINT_FIXED = {
@@ -526,7 +529,10 @@
       try { xhr.setRequestHeader('apk', APP_ID); } catch (e) {}
       try { xhr.setRequestHeader('apkVer', APK_VER_HEADER); } catch (e) {}
       try { xhr.setRequestHeader('spkgVer', SPKG_VER); } catch (e) {}
-      try { xhr.setRequestHeader('User-Agent', USER_AGENT); } catch (e) {}
+      // Browsers forbid this header. The local development proxy supplies it instead.
+      if (!isBrowserEnv) {
+        try { xhr.setRequestHeader('User-Agent', USER_AGENT); } catch (e) {}
+      }
       try { xhr.setRequestHeader('Content-Type', CONTENT_TYPE); } catch (e) {}
 
       xhr.onload = function () {
@@ -662,6 +668,17 @@
 
   function ensureSession(callback) {
     callback = callback || function () {};
+    if (window.XuperCatalogSession && typeof window.XuperCatalogSession.acquire === 'function') {
+      window.XuperCatalogSession.acquire().then(function (grant) {
+        session.sn = String(grant.sn || '').toLowerCase();
+        session.userId = String(grant.userId || '');
+        session.userToken = String(grant.userToken || '');
+        session.ready = !!(session.sn && session.userId && session.userToken);
+        if (!session.ready) return callback(new Error('La sesión de catálogo no contiene los datos requeridos.'));
+        callback(null, session);
+      }, callback);
+      return;
+    }
     if (session.ready && session.userId && session.userToken) {
       return callback(null, session);
     }
@@ -720,7 +737,7 @@
         authVersion: '',
         authCode: '',
         preCode: '',
-        macAddr: identity.etheMac,
+        macAddr: '02:00:00:00:00:00',
         reserve1: '',
         openNum: 4,
         channel: 'default',
@@ -1822,7 +1839,7 @@
           type: reqType,
           sortType: '0',
           language: 'en',
-          macAddr: deviceIdentity(false).etheMac
+          macAddr: '02:00:00:00:00:00'
         }, function (dErr, dRes) {
           if (dErr && dErr.portalCode === 'portal100006' && reqType !== '1') {
             return requestItem('1', onDone);
@@ -2300,7 +2317,7 @@
         contentId: String(contentId || ''),
         imdb: '',
         type: '0',
-        macAddr: deviceIdentity(false).etheMac
+        macAddr: '02:00:00:00:00:00'
       }, function (pErr, pRes) {
         if (pErr) return callback(pErr);
         var data = pRes && pRes.data ? pRes.data : pRes;
