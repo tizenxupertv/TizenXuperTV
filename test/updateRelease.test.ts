@@ -114,3 +114,20 @@ test('references: template paths and folders are not counted as files', () => {
   assert.deepEqual(missingReferences({ a: 'x("assets/logo.png"); y(`assets/catalog/${n}.jpg`); z("assets/")' }, available), []);
   assert.deepEqual(missingReferences({ a: "x('images/gone.png')" }, available), ['images/gone.png']);
 });
+
+test('a file loaded on demand travels in the bundle without being run at start, and is not a shell file', () => {
+  const k = keys();
+  const dir = fixture(BOOT(k.pub), { 'js/shaka-player.compiled.js': 'var shaka={Player:1};' });
+  const { bundle, own } = collectBundle(dir, '1.16.1', 1);
+  assert.equal(bundle.files['js/shaka-player.compiled.js'], 'var shaka={Player:1};');
+  assert.ok(!bundle.scripts.includes('js/shaka-player.compiled.js'), 'boot.js must not run it at start');
+  assert.ok(own.includes('js/shaka-player.compiled.js'));
+  assert.ok(!('js/shaka-player.compiled.js' in shellFiles(dir, own)), 'carried by the bundle, so not compared as shell');
+});
+
+test('a package without the on-demand file builds the same bundle as before', () => {
+  const k = keys();
+  const { bundle, own } = collectBundle(fixture(BOOT(k.pub)), '1.16.1', 1);
+  assert.deepEqual(own, OWN);
+  assert.ok(!('js/shaka-player.compiled.js' in bundle.files));
+});

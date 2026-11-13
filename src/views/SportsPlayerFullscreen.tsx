@@ -1,3 +1,4 @@
+import { loadShaka } from '../lib/lazyScript';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../styles/sportsPlayer.css';
 import { MatchCrest, MatchHeader } from '../components/sports/MatchHeader';
@@ -38,6 +39,9 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
   const shakaRef = useRef<any>(null);
+  // Shaka is asked for once per signal; the tick runs the playback effect again when the load settles
+  const shakaTriedRef = useRef<number | null>(null);
+  const [shakaTick, setShakaTick] = useState(0);
   const osdTimerRef = useRef<any>(null);
   const errorRef = useRef<string | null>(null);
   // Which player and link the current signal uses, for the Perfil › Diagnóstico report
@@ -121,10 +125,17 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
 
     const streamUrl = currentStream.url;
     const isAvPlayAvailable = !!(window as any).webapis?.avplay && !!(window as any).XuperAVPlay;
-    const shaka = (window as any).shaka;
     const Hls = (window as any).Hls;
 
     const isDash = streamUrl.includes('.mpd') || streamUrl.includes('dash') || Boolean(currentStream.drmApi);
+    // Shaka Player is loaded by the first DASH signal, not at every start of the app (lib/lazyScript). This effect
+    // runs again when it arrives; when it cannot be loaded the signal goes on to the next way of playing it
+    if (isDash && !(window as any).shaka && shakaTriedRef.current !== currentStreamIdx) {
+      shakaTriedRef.current = currentStreamIdx;
+      loadShaka().then(() => setShakaTick(t => t + 1));
+      return;
+    }
+    const shaka = (window as any).shaka;
     const isHls = streamUrl.includes('.m3u8') || streamUrl.includes('hls');
 
     playerKindRef.current = isAvPlayAvailable && !isDash ? 'AVPlay'
@@ -292,7 +303,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     return () => {
       cleanupPlayer();
     };
-  }, [currentStreamIdx, currentStream, cleanupPlayer]);
+  }, [currentStreamIdx, currentStream, cleanupPlayer, shakaTick]);
 
   // The first moment a signal plays, once per signal
   useEffect(() => {
