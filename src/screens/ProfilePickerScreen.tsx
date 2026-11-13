@@ -8,6 +8,9 @@ import '../styles/profiles.css';
 /** How long a message ("Perfil creado") stays */
 const NOTICE_MS = 3000;
 
+/** Size of a profile on the "¿Quién está viendo?" screen (the add circle matches it in profiles.css) */
+const PICKER_AVATAR = 176;
+
 /** A profile's round badge: its initial on its color */
 export const ProfileAvatar: React.FC<{ profile: LocalProfile; size?: number }> = ({ profile, size = 132 }) => (
   <div className="lp-avatar" style={{ backgroundColor: profile.color, width: size, height: size, fontSize: Math.round(size * 0.44) }}>
@@ -196,17 +199,12 @@ export const ProfilePickerScreen: React.FC<ProfilePickerScreenProps> = ({ onDone
       <div className="lp-picker-brand">
         <BrandLogo />
       </div>
-      <div className="lp-picker-header">
-        <h1 className="lp-picker-title">{managing ? 'Administrar perfiles' : '¿Quién está viendo?'}</h1>
-        <p className="lp-picker-subtitle">
-          {managing ? 'Selecciona un perfil para cambiarle el nombre o eliminarlo' : 'Elige tu perfil para continuar'}
-        </p>
-      </div>
+      <h1 className="lp-picker-title">{managing ? 'Administrar perfiles' : '¿Quién está viendo?'}</h1>
       <div className="lp-picker-row">
         {profiles.map((p, i) => (
           <div key={p.id} className={`lp-picker-item ${!onManageBtn && i === index ? 'is-focused' : ''}`} onClick={() => activateTile(i)}>
             <div className="lp-picker-avatar">
-              <ProfileAvatar profile={p} />
+              <ProfileAvatar profile={p} size={PICKER_AVATAR} />
               {managing && <div className="lp-picker-edit">{PencilIcon}</div>}
             </div>
             <div className="lp-picker-name">{p.name}</div>
@@ -229,7 +227,7 @@ export const ProfilePickerScreen: React.FC<ProfilePickerScreenProps> = ({ onDone
           ? 'Cambiando de perfil…'
           : managing
             ? 'Elige un perfil para cambiarle el nombre o eliminarlo.'
-            : 'Cada perfil tiene su historial, Mi lista, canales favoritos, ajustes y pestañas en este TV.'}
+            : 'Cada perfil guarda su historial, Mi lista, favoritos y ajustes en este TV.'}
       </p>
 
       {editor && (
