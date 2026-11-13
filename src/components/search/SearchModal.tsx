@@ -28,6 +28,13 @@ export interface SearchModalProps {
 let cachedAllVodItems: VodItem[] | null = null;
 const searchResultCache = new Map<string, { items: VodItem[]; total: number; at: number }>();
 
+/** Line under the title, as on the home cards: score and year, else the first genre */
+export function cardMeta(item: VodItem): string {
+  const score = item.score && item.score !== '0' ? `★ ${item.score}` : '';
+  const year = item.year && item.year !== '—' ? item.year : '';
+  return [score, year].filter(Boolean).join(' · ') || (item.genres && item.genres[0]) || '';
+}
+
 const RECENT_SEARCHES_KEY = 'xuper_recent_searches_v1';
 const MAX_RECENT = 10;
 
@@ -76,8 +83,9 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
   const submitSearch = (customQ?: string) => {
     const targetQ = (customQ !== undefined ? customQ : query).trim();
-    // One letter matches almost every title: a search needs at least two
-    if (targetQ.length < 2) return;
+    // One letter matches almost every title: a search needs at least two.
+    // An empty one still moves the focus to the popular titles
+    if (targetQ.length === 1) return;
     setSubmittedQuery(targetQ);
     setFocusedResultIndex(0);
     setFocusArea('results');
@@ -686,10 +694,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
               {Array.from({ length: 10 }, (_, i) => (
                 <div key={i} className="search-vod-card svc-skeleton">
                   <div className="svc-poster-wrap skeleton-shimmer" />
-                  <div className="svc-info">
-                    <div className="svc-skeleton-line" />
-                    <div className="svc-skeleton-line is-short" />
-                  </div>
                 </div>
               ))}
             </div>
@@ -787,12 +791,10 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                           }
                         }}
                       />
-                      {item.score && item.score !== '0' && <div className="svc-score-badge">★ {item.score}</div>}
-                      <div className="svc-kind-badge">{item.kind === 'serie' ? 'SERIE' : 'PELÍCULA'}</div>
-                    </div>
-                    <div className="svc-info">
-                      <div className="svc-title">{item.title}</div>
-                      <div className="svc-meta">{[item.year, item.genres?.[0]].filter(Boolean).join(' • ')}</div>
+                      <div className="poster-bottom-vignette">
+                        <div className="poster-vignette-title">{item.title || 'Sin título'}</div>
+                        <div className="poster-vignette-genre">{cardMeta(item)}</div>
+                      </div>
                     </div>
                   </div>
                 );
