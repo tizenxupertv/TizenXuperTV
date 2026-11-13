@@ -77,6 +77,38 @@ export const UpdatedNotice: React.FC<{ version: string; onClose: () => void }> =
 };
 
 /**
+ * A notice from the team (lib/appStatus, level "notice"): the viewer reads it, closes it with OK or Back and keeps
+ * using the app. The text is the team's, so it serves any incident
+ */
+export const AppNotice: React.FC<{ message: string; onClose: () => void }> = ({ message, onClose }) => {
+  useNoticeKeys(onClose);
+  return (
+    <div className="upd-ready" role="alertdialog" aria-modal="true" aria-labelledby="app-notice-title">
+      <div className="upd-ready-card">
+        <div className="upd-done-badge app-notice-badge">Aviso</div>
+        <div className="upd-ready-title" id="app-notice-title">Información del servicio</div>
+        <div className="upd-ready-desc app-notice-text">{message}</div>
+        <div className="upd-done-hint">Puedes seguir usando la app. Este aviso se quitará cuando se resuelva.</div>
+        <div className="pf-btn is-focused upd-ready-btn" onClick={onClose}>Entendido</div>
+      </div>
+    </div>
+  );
+};
+
+/** The app replaced by a message while the team keeps it closed (lib/appStatus, level "block"). No keys: nothing to do */
+export const MaintenanceScreen: React.FC<{ message: string }> = ({ message }) => (
+  <main className="maintenance-screen" role="status">
+    <div className="maintenance-card">
+      <div className="maintenance-icon" aria-hidden="true">⚙</div>
+      <div className="maintenance-label">TIZENXUPER TV</div>
+      <h1>Estamos en mantenimiento</h1>
+      <p>{message}</p>
+      <span>Vuelve a intentarlo más tarde. Gracias por tu paciencia.</span>
+    </div>
+  </main>
+);
+
+/**
  * The donation request, shown after a title ended and the player closed (lib/donateMoment decides when). OK or Back
  * closes it: there is nothing to choose on the TV, the donation happens on the phone
  */
