@@ -58,6 +58,11 @@ interface CategoryRowProps {
   onSelect?: (idx: number) => void;
 }
 
+/** Tag of a category, one rule for its row and for the header of its channels: flagged ones and the sports ones */
+export function categoryBadge(cat: LiveCategory): string {
+  return cat.badge || (cat.isEspn || /deportes/i.test(cat.name) ? 'Beta' : '');
+}
+
 /** One category of the live list (memoized like ChannelRow) */
 export const CategoryRow = React.memo<CategoryRowProps>(({ cat, idx, active, cursor, onSelect }) => (
   <div
@@ -65,6 +70,6 @@ export const CategoryRow = React.memo<CategoryRowProps>(({ cat, idx, active, cur
     onClick={() => onSelect && onSelect(idx)}
   >
     <span className="live-cat-vname">{cat.name}</span>
-    {cat.badge && <span className="beta-pill live-cat-badge">{cat.badge}</span>}
+    {categoryBadge(cat) && <span className="beta-pill live-cat-badge">{categoryBadge(cat)}</span>}
   </div>
 ));
