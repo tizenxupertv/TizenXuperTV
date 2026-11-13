@@ -301,7 +301,6 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
   const lastRow = focusRow + ROWS_AFTER;
   const windowItems = results.items.slice(firstRow * COLS, (lastRow + 1) * COLS);
   const totalLabel = results.total < 0 ? 'Cargando…' : `${results.total.toLocaleString('es')} títulos`;
-  const typeLabel = TYPES.find(t => t.value === root)?.label || '';
 
   return (
     <div className="filter-screen" style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
@@ -375,7 +374,6 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
 
         <div className="filter-main">
           <div className="filter-results-head">
-            <span className="filter-results-type">{typeLabel}</span>
             <span>{totalLabel}</span>
             {activeFilters.map(r => (
               <span key={r.key} className="filter-active-chip">{r.options[selectedIndex(r)]?.label}</span>
@@ -424,7 +422,8 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
                             }}
                           />
                         )}
-                        <div className="svc-kind-badge">{item.kind === 'serie' ? 'Serie' : 'Película'}</div>
+                        {/* Película and Series already say the kind in their tab: only the mixed tabs need the tag */}
+                        {root !== 'movies' && root !== 'series' && <div className="svc-kind-badge">{item.kind === 'serie' ? 'Serie' : 'Película'}</div>}
                         <div className="poster-bottom-vignette">
                           <div className="poster-vignette-title">{item.title || 'Sin título'}</div>
                           <div className="poster-vignette-genre">{cardMeta(item)}</div>
