@@ -1,3 +1,4 @@
+import { createRunGuard } from '../lib/runGuard';
 import { loadShaka } from '../lib/lazyScript';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../styles/sportsPlayer.css';
@@ -98,6 +99,10 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     setUsingAvplay(false);
     const video = videoRef.current;
     if (video) {
+      // Handlers of the signal that is going away: they closed over its name
+      video.onerror = null;
+      video.onplaying = null;
+      video.onwaiting = null;
       try {
         video.pause();
         video.removeAttribute('src');
@@ -110,17 +115,22 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
 
   // Initialize playback for the selected stream
   useEffect(() => {
+    // A signal that failed keeps reporting errors for a few seconds. Everything this run sets on screen goes through
+    // the guard, so once the viewer picks another signal the old one can no longer show its error over the new one
+    const run = createRunGuard();
+    const showError = run.wrap((msg: string | null) => setError(msg));
+    const showBuffering = run.wrap((on: boolean) => setIsBuffering(on));
     if (!currentStream || !currentStream.url) {
-      setError('Servidor sin URL disponible');
-      setIsBuffering(false);
+      showError('Servidor sin URL disponible');
+      showBuffering(false);
       return;
     }
 
     const video = videoRef.current;
     if (!video) return;
 
-    setError(null);
-    setIsBuffering(true);
+    showError(null);
+    showBuffering(true);
     (window as any).XuperPlatform?.setScreenSaver?.(false);
 
     const streamUrl = currentStream.url;
@@ -162,19 +172,19 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         document.documentElement.classList.add('xuper-vod-avplay');
         const av = (window as any).XuperAVPlay;
         av._nextKind = 'live';
-        video.onplaying = () => setIsBuffering(false);
-        video.onwaiting = () => setIsBuffering(true);
+        video.onplaying = () => showBuffering(false);
+        video.onwaiting = () => showBuffering(true);
         video.onerror = () => {
-          setIsBuffering(false);
-          setError(`No se pudo cargar la señal (${currentStream.name})`);
+          showBuffering(false);
+          showError(`No se pudo cargar la señal (${currentStream.name})`);
         };
         if (av.playStream(streamUrl, currentStream.headers || {}, video) === false) throw new Error('AVPlay did not start');
       } catch (err: any) {
         console.error('[SportsPlayer] AVPlay error:', err);
         setUsingAvplay(false);
         document.documentElement.classList.remove('xuper-vod-avplay');
-        setError('Error iniciando el reproductor');
-        setIsBuffering(false);
+        showError('Error iniciando el reproductor');
+        showBuffering(false);
       }
     } else if (isDash && shaka && shaka.Player && shaka.Player.isBrowserSupported()) {
       // Shaka Player for MPEG-DASH & ClearKey DRM (Works in Chrome, Edge, Firefox, Tizen EME)
@@ -217,17 +227,17 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
 
         player.addEventListener('error', (event: any) => {
           console.error('[SportsPlayer] Shaka error event:', event.detail);
-          setIsBuffering(false);
-          setError(`Error de señal: ${currentStream.name}`);
+          showBuffering(false);
+          showError(`Error de señal: ${currentStream.name}`);
         });
 
         player.addEventListener('buffering', (event: any) => {
-          setIsBuffering(Boolean(event.buffering));
+          showBuffering(Boolean(event.buffering));
         });
 
         player.load(streamUrl).then(() => {
           console.log('[SportsPlayer] Shaka stream loaded successfully!');
-          setIsBuffering(false);
+          showBuffering(false);
           video.play().catch(err => {
             console.warn('[SportsPlayer] Unmuted autoplay blocked, retrying muted:', err);
             video.muted = true;
@@ -235,13 +245,13 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
           });
         }).catch((err: any) => {
           console.error('[SportsPlayer] Shaka load failed:', err);
-          setIsBuffering(false);
-          setError(`No se pudo cargar la señal (${currentStream.name})`);
+          showBuffering(false);
+          showError(`No se pudo cargar la señal (${currentStream.name})`);
         });
       } catch (err: any) {
         console.error('[SportsPlayer] Shaka init exception:', err);
-        setIsBuffering(false);
-        setError(`Error inicializando reproductor DASH (${currentStream.name})`);
+        showBuffering(false);
+        showError(`Error inicializando reproductor DASH (${currentStream.name})`);
       }
     } else if (isHls && Hls && Hls.isSupported()) {
       // Browser / Hls.js fallback with dev proxy support for local testing
@@ -279,11 +289,11 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
           video.play().catch(() => {});
         });
       });
-      hls.on(Hls.Events.FRAG_LOADED, () => setIsBuffering(false));
+      hls.on(Hls.Events.FRAG_LOADED, () => showBuffering(false));
       hls.on(Hls.Events.ERROR, (_: any, data: any) => {
         if (data.fatal) {
-          setIsBuffering(false);
-          setError(`Error de señal: ${currentStream.name}`);
+          showBuffering(false);
+          showError(`Error de señal: ${currentStream.name}`);
         }
       });
     } else {
@@ -292,15 +302,16 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         video.muted = true;
         video.play().catch(() => {});
       });
-      video.onplaying = () => setIsBuffering(false);
-      video.onwaiting = () => setIsBuffering(true);
+      video.onplaying = () => showBuffering(false);
+      video.onwaiting = () => showBuffering(true);
       video.onerror = () => {
-        setIsBuffering(false);
-        setError(`No se pudo cargar la señal (${currentStream.name})`);
+        showBuffering(false);
+        showError(`No se pudo cargar la señal (${currentStream.name})`);
       };
     }
 
     return () => {
+      run.end();
       cleanupPlayer();
     };
   }, [currentStreamIdx, currentStream, cleanupPlayer, shakaTick]);
