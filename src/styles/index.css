@@ -5143,6 +5143,19 @@ html.xuper-vod-avplay .app-root,
   background-color: transparent !important;
 }
 
+/* Live on AVPlay (playerService): the same see-through page, also through the black fullscreen layers, or the
+   channel plays its sound behind them with no picture */
+html.xuper-live-avplay,
+html.xuper-live-avplay body,
+html.xuper-live-avplay #root,
+html.xuper-live-avplay .app-root,
+html.xuper-live-avplay .live-tv-view-2col,
+html.xuper-live-avplay .live-grand-preview-box,
+html.xuper-live-avplay .live-grand-preview-box .live-preview-video {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
 /* ===== VOD player overlay (Apple TV style) ===== */
 .vp-osd {
   position: absolute;
