@@ -54,7 +54,7 @@ La revisión confirma que TizenXuper ya tiene los puntos de integración necesar
 
 **Objetivo:** conseguir y renovar una sesión temporal desde un backend autorizado.
 
-**Estado:** implementada la ruta primaria de migración usando el servidor autorizado que ya usa el respaldo. `xuper-server-client.js` solicita una sesión de catálogo; `xuper-catalog-session.js` mantiene una identidad local estable y conserva la sesión únicamente en memoria. `magis-client.js` usa esa sesión antes de hacer consultas de catálogo.
+**Estado:** implementada. El televisor inicia primero su propia sesión con el portal, como en las versiones estables. Solo si eso falla pide una al servidor autorizado que ya usa el respaldo: `xuper-server-client.js` la solicita y `xuper-catalog-session.js` mantiene una identidad local estable y conserva esa sesión únicamente en memoria. Así la app no depende de ese servidor mientras el portal acepte al televisor (decisión del 13 de noviembre de 2026).
 
 Las pruebas cubren la reutilización de una sesión vigente, la estabilidad del identificador local y el rechazo de respuestas incompletas. El siguiente control manual será confirmar en Chrome que el servidor devuelve un catálogo real y, después, repetirlo en el TV.
 
