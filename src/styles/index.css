@@ -2698,34 +2698,6 @@ html, body {
 .synopsis-modal-body {
   max-height: 420px;
   overflow-y: auto;
-  padding-right: 12px;
-  scrollbar-width: thin;
-}
-
-.synopsis-modal-text-wrap {
-  padding: 8px 12px;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  transition: all 0.15s ease;
-  outline: none;
-}
-
-.synopsis-modal-text-wrap.is-focused {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: #ffffff;
-  box-shadow: none;
-}
-
-.synopsis-modal-nav-hint {
-  display: inline-block;
-  margin-top: 10px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.12);
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(56, 189, 248, 0.3);
 }
 
 .synopsis-modal-text {
@@ -9334,7 +9306,6 @@ html.legacy-video .match-nav-play-btn,
 html.legacy-video .match-nav-tab,
 html.legacy-video .synopsis-modal-cast-card,
 html.legacy-video .synopsis-modal-close-btn,
-html.legacy-video .synopsis-modal-text-wrap,
 html.legacy-video .tg-login-btn,
 html.legacy-video .tg-login-notice-box {
   transition: none;
