@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { addCssFallbacks } from '../vite-tv-compat.ts';
+import { addCssFallbacks, toStageUnits } from '../vite-tv-compat.ts';
 
 describe('addCssFallbacks', () => {
   it('expands single-value inset into top/right/bottom/left fallbacks', () => {
@@ -36,5 +36,18 @@ describe('addCssFallbacks', () => {
     const output = addCssFallbacks(input);
     assert.match(output, /font-size:\s*20px;/);
     assert.match(output, /font-size:\s*min\(20px, 30px\);/);
+  });
+});
+
+describe('toStageUnits', () => {
+  it('turns viewport units into pixels of the 1920x1080 stage', () => {
+    assert.strictEqual(toStageUnits('.a { width: 100vw; height: 100vh; }'), '.a { width: 1920px; height: 1080px; }');
+    assert.strictEqual(toStageUnits('.a { padding: 0 min(48px, 2.5vw); }'), '.a { padding: 0 min(48px, 48px); }');
+    assert.strictEqual(toStageUnits('.a { height: calc(100vh - 68px); top: clamp(74px, 9vh, 92px); }'), '.a { height: calc(1080px - 68px); top: clamp(74px, 97.2px, 92px); }');
+  });
+
+  it('leaves everything else alone', () => {
+    const css = '.col-5vw, #a5vh { width: 50%; margin: 5px; color: #05vhaa; } @media (max-width: 1300px) { .b { flex: 1 1 calc(20% - 10px); } }';
+    assert.strictEqual(toStageUnits(css), css);
   });
 });
