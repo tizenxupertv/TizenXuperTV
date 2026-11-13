@@ -5,6 +5,7 @@ import { normalizeChannel } from '../lib/channelKey';
 import { hostOf, isIspBlockPage, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSequenceFixer } from '../lib/mediaSequence';
 import { shouldMoveLiveToAvPlay, videoCodecRejected } from '../lib/liveVideoFallback';
+import { isStaleLinkStatus } from '../lib/liveLink';
 import { epicSportsService } from './epicSportsService';
 
 declare global {
@@ -779,8 +780,8 @@ class PlayerService {
           const httpCode = data.response && data.response.code ? Number(data.response.code) : 0;
           const status = httpCode ? ` ${httpCode}` : '';
 
-          // Self-healing token refresh on HTTP 401/403 during live playback
-          if ((httpCode === 401 || httpCode === 403) && code && !selfHealingAuth && Date.now() - lastAuthRefreshAt > 60000 &&
+          // Self-healing token refresh when the link is refused, taken or gone (401/403/409/410)
+          if (isStaleLinkStatus(httpCode) && code && !selfHealingAuth && Date.now() - lastAuthRefreshAt > 60000 &&
             window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
             selfHealingAuth = true;
             lastAuthRefreshAt = Date.now();
