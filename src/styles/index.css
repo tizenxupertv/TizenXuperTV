@@ -220,48 +220,6 @@ html, body {
   color: #000000;
 }
 
-@media (max-width: 1550px) {
-  .app-header {
-    padding: 0 20px;
-  }
-  .header-navbar {
-    margin: 0 8px;
-  }
-  .navbar-track {
-    gap: 5px;
-  }
-  .nav-tab-btn {
-    padding: 5px 10px;
-    font-size: 11.5px;
-    gap: 5px;
-    letter-spacing: 0.2px;
-  }
-  .nav-tab-btn svg {
-    width: 16px;
-    height: 16px;
-  }
-}
-
-@media (max-width: 1200px) {
-  .app-header {
-    padding: 0 14px;
-  }
-  .header-navbar {
-    margin: 0 6px;
-  }
-  .navbar-track {
-    gap: 3px;
-  }
-  .nav-tab-btn {
-    padding: 4px 7px;
-    font-size: 10.5px;
-    gap: 4px;
-  }
-  .brand-title {
-    font-size: 16px;
-  }
-}
-
 /* ==========================================================================
    Full Width Page Container (Starts at 68px)
    ========================================================================== */
@@ -4983,21 +4941,6 @@ html, body {
   }
   .search-body .search-vod-grid > * {
     flex: none;
-  }
-}
-
-@media (max-width: 1300px) {
-  .search-body .search-vod-grid > * {
-    flex: 1 1 calc(20% - 10px);
-  }
-  @supports (display: grid) {
-    .search-body .search-vod-grid {
-      grid-template-columns: repeat(5, 1fr);
-      gap: 12px;
-    }
-    .search-body .search-vod-grid > * {
-      flex: none;
-    }
   }
 }
 
