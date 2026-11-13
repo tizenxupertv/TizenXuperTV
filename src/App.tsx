@@ -969,7 +969,7 @@ export const App: React.FC = () => {
           onOpenSynopsisModal={() => setDetailFocus(prev => ({
             ...prev,
             showSynopsisModal: true,
-            synopsisModalArea: detail.detailCast.length > 0 ? 'cast' : 'text',
+            synopsisModalArea: detail.detailCast.length > 0 ? 'cast' : 'close',
             castIndex: 0
           }))}
           onCloseSynopsisModal={() => setDetailFocus(prev => ({
