@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildVodPlaylist, canPlayVodWithMse, cdnHeaders, fileAudioLanguages, indexDuration, mseHlsConfig, mseSourceAt, mseSourceCount, mseUnsupportedReason, MSE_PLAYLIST_URL, playlistLoader, wantedAudioIndex, VOD_ENGINE_KEY } from '../src/lib/vodMseEngine.ts';
+import { buildVodPlaylist, canPlayVodWithMse, cdnHeaders, fileAudioLanguages, indexDuration, mseHlsConfig, mseNetworkAction, MSE_RETRY_WINDOW_MS, mseSourceAt, mseSourceCount, mseUnsupportedReason, MSE_PLAYLIST_URL, playlistLoader, wantedAudioIndex, VOD_ENGINE_KEY } from '../src/lib/vodMseEngine.ts';
 import { makeIdxg } from './helpers/idxg.ts';
 
 /** A TV window: MSE plays the given types, hls.js and the bridge factory are there */
@@ -185,4 +185,14 @@ test('an index the main CDN does not have is read from a backup, whose media and
 test('when no CDN has the index, the error says what the main one answered and how many were tried', async () => {
   const fetchFn: any = async () => ({ ok: false, status: 404, headers: { get: () => null } });
   await assert.rejects(buildVodPlaylist(withBackups, fetchFn), /índice HTTP 404 \(3 CDN\)/);
+});
+
+test('mseNetworkAction: next CDN first, then one retry of the same CDN, then AVPlay', () => {
+  const now = 1_000_000;
+  assert.equal(mseNetworkAction({ cdnsLeft: 2, lastRetryAt: 0, now }), 'next-cdn');
+  assert.equal(mseNetworkAction({ cdnsLeft: 0, lastRetryAt: 0, now }), 'retry');
+  // Failed again right after its retry: the CDN is down, AVPlay is the last resort
+  assert.equal(mseNetworkAction({ cdnsLeft: 0, lastRetryAt: now - 30_000, now }), 'avplay');
+  // A drop long after the last retry (the title played meanwhile) gets its own retry
+  assert.equal(mseNetworkAction({ cdnsLeft: 0, lastRetryAt: now - MSE_RETRY_WINDOW_MS - 1, now }), 'retry');
 });
