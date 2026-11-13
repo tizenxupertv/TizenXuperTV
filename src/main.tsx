@@ -15,6 +15,7 @@ import './styles/textSize.css';
 import { installTvDebug } from './debug/tvDebug';
 import { logPlayback } from './lib/playbackLog';
 import { getTvProfile } from './lib/tvProfile';
+import { completeSplashTask, startSplash } from './lib/splash';
 
 installTvDebug();
 
@@ -36,12 +37,13 @@ installTvDebug();
 
 /** The saved session is confirmed once the first screen has loaded */
 const VERIFY_DELAY_MS = 8000;
+const localCatalogMock = import.meta.env.DEV && new URLSearchParams(window.location.search).get('localCatalogMock') === '1';
 
 /** Sign-in with Telegram is required: the app only mounts with a session */
 const Root: React.FC = () => {
-  const [signedIn, setSignedIn] = useState(() => accountService.isSignedIn());
+  const [signedIn, setSignedIn] = useState(() => localCatalogMock || accountService.isSignedIn());
   // "¿Quién está viendo?" before the app, when the TV has two or more local profiles
-  const [picking, setPicking] = useState(() => localProfiles.needsPicker());
+  const [picking, setPicking] = useState(() => !localCatalogMock && localProfiles.needsPicker());
   // A newer version announced by the server, shown once per version
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   // The version this launch runs, when the app updated itself to it (shown once)
@@ -67,7 +69,19 @@ const Root: React.FC = () => {
     return null;
   });
   const [closedNotice, setClosedNotice] = useState<string | null>(null);
+
+  // The splash also covers sign-in and profile selection. Starting it here guarantees
+  // that a logged-out browser never leaves the initial screen covered indefinitely.
+  useEffect(() => { startSplash(); }, []);
   useEffect(() => {
+    if (signedIn && !picking) return;
+    completeSplashTask('catalog');
+    completeSplashTask('images');
+    completeSplashTask('live');
+  }, [signedIn, picking]);
+
+  useEffect(() => {
+    if (localCatalogMock) return;
     if (appStatus && appStatus.updatedAt === 'preview') return;
     let alive = true;
     const refresh = () => {
@@ -92,6 +106,7 @@ const Root: React.FC = () => {
 
   // Self-update checks run in the background, signed in or not (public/js/boot.js, services/updateService.ts)
   useEffect(() => {
+    if (localCatalogMock) return;
     updateService.start();
     return updateService.subscribe(() => setTick(t => t + 1));
   }, []);
@@ -99,6 +114,7 @@ const Root: React.FC = () => {
   // A session revoked on the server (TV unlinked) restarts the app at the sign-in screen;
   // without a connection the saved session keeps working
   useEffect(() => {
+    if (localCatalogMock) return;
     if (!signedIn) return;
     const t = setTimeout(() => {
       accountService.verify().then(result => {
