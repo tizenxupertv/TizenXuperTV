@@ -104,3 +104,20 @@ test('only signals with valid resolved URLs are playable', async () => {
   assert.equal(isPlayableStream({ ...base, url: '', tokenApi: '{"type":"embed"}' }), false);
   assert.equal(isPlayableStream({ ...base, url: 'invalid-scheme' }), false);
 });
+
+test('a signal is resolved when it is picked: one without work to do comes back as it is', async () => {
+  const service = new SportsService();
+  const plain = { name: 'TV QUALITY', url: 'http://example.com/live/index.m3u8', scheme: 0, headers: {} };
+  assert.equal(service.needsResolving(plain), false);
+  assert.equal(await service.resolveStream(plain), plain);
+  assert.equal(service.needsResolving(null), false);
+});
+
+test('a signal whose address cannot be worked out is returned unchanged instead of failing', async () => {
+  const service = new SportsService();
+  const broken = { name: 'X', url: 'http://example.com/a.m3u8', scheme: 0, headers: {}, tokenApi: '{not json' };
+  assert.equal(service.needsResolving(broken), true);
+  assert.deepEqual(await service.resolveStream(broken), broken);
+  const unknown = { name: 'Y', url: 'http://example.com/b.m3u8', scheme: 0, headers: {}, tokenApi: '{"type":"other"}' };
+  assert.deepEqual(await service.resolveStream(unknown), unknown);
+});
