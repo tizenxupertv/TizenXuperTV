@@ -1,4 +1,4 @@
-/* Development-only catalog provider. Enable with ?localCatalogMock=1 while running Vite. */
+/* Catalog fixture served by Vite in development with ?localCatalogMock=1. */
 (function (root) {
   'use strict';
   var params = new URLSearchParams(root.location && root.location.search || '');
