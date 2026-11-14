@@ -214,6 +214,15 @@
     }
   }
 
+  /* The splash in index.html shows the version of the installed package (it is written at build time and a
+     self-update never replaces index.html): show the one that runs instead */
+  function showVersion(version) {
+    try {
+      var el = document.querySelector('#xuper-splash .xs-version');
+      if (el && version) el.textContent = 'v' + version;
+    } catch (e) {}
+  }
+
   function start(meta, bundle) {
     var booting = parse(lsGet(K_BOOTING));
     var pick = choose(meta, bundle, { packaged: info.packaged, shell: SHELL, bad: badList(), booting: booting });
@@ -225,6 +234,7 @@
       startedBundle = pick.bundle.version;
       var count = booting && booting.version === startedBundle ? (booting.count || 0) + 1 : 1;
       lsPut(K_BOOTING, JSON.stringify({ version: startedBundle, count: count }));
+      showVersion(startedBundle);
       window.addEventListener('error', onEarlyError);
       try {
         swapStyles(pick.bundle);
@@ -240,6 +250,7 @@
       }
     }
     info.running = info.packaged;
+    showVersion(info.packaged);
     loadScripts(window.__XUPER_SCRIPTS || [], null);
   }
 
