@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EPIC_RESOLVE, deviceTimeZone, epicMenuPath, epicOptions, epicResolved, epicSport, epicStartMillis, epicTeams, parseEpicMenu } from '../src/lib/epicMenu.ts';
+import { EPIC_RESOLVE, deviceTimeZone, epicMenuPath, epicOptionLabel, epicOptions, epicResolved, epicSport, epicStartMillis, epicTeams, parseEpicMenu } from '../src/lib/epicMenu.ts';
 
 // Shape of one event of /menu (13-nov-2026), trimmed
 const match = {
@@ -35,7 +35,7 @@ test('epicStartMillis: the agenda hour is Bogotá time', () => {
 
 test('epicOptions: same link once, direct HLS plays as is, pages go through /resolve, no YouTube', () => {
   const opts = epicOptions(match);
-  assert.deepEqual(opts.map(o => o.name), ['ESPN 2 · Opción 1', 'DAZN CA · Opción 1']);
+  assert.deepEqual(opts.map(o => o.name), ['Opción 1 · ESPN 2', 'Opción 2 · DAZN']);
   assert.equal(opts[0].tokenApi, EPIC_RESOLVE);
   assert.equal(opts[1].tokenApi, undefined);
 });
@@ -60,13 +60,15 @@ test('epicResolved: the address /resolve gives, with its Referer and Origin', ()
   assert.equal(epicResolved(opt, { stream: '' }), null);
 });
 
-test('epicOptions: each channel numbers its own options, unnamed ones are just options', () => {
-  const names = epicOptions({ cocinas: [
-    { fuente: 'tvlibre', canales: [{ name: 'TUDN', url: 'https://a.example/1' }, { name: 'FOX Sports 2', url: 'https://a.example/2' }] },
-    { fuente: 'perelman', canales: [{ publico: 'TUDN', name: 'x', url: 'https://b.example/1' }, { name: '', url: 'https://b.example/2' }] }
-  ] }).map(o => o.name);
-  assert.deepEqual(names, ['TUDN · Opción 1', 'FOX Sports 2 · Opción 1', 'TUDN · Opción 2', 'Opción 1']);
+test('epicOptionLabel: order number, the channel when it is one, HD kept, source names out', () => {
+  // The options of Colombia vs Chile on 13-nov
+  const names = ['Caracol TV', 'Caracol Colombia', 'Sport 4 Israel', 'Sport 4 Israel', 'PirloTV Col-Chi 5', 'PirloTV Col-Chi 6 (HD)', 'Opción 3', '', 'ESPN 2 (HD)', 'Fox Sports 2 USA', 'Canal 2', 'Puente ip01'];
+  assert.deepEqual(names.map((n, i) => epicOptionLabel(n, i + 1)), [
+    'Opción 1 · Caracol TV', 'Opción 2 · Caracol', 'Opción 3 · Sport 4', 'Opción 4 · Sport 4', 'Opción 5', 'Opción 6 · HD',
+    'Opción 7', 'Opción 8', 'Opción 9 · ESPN 2 HD', 'Opción 10 · Fox Sports 2', 'Opción 11', 'Opción 12'
+  ]);
 });
+
 test('epicMenuPath asks the agenda in the TV zone, Bogotá when the TV does not say', () => {
   assert.match(epicMenuPath('America/Mexico_City'), /tz=America%2FMexico_City&/);
   assert.match(epicMenuPath(''), /tz=America%2FBogota&/);
