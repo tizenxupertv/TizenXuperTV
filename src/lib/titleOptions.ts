@@ -37,6 +37,25 @@ export function qualityMatches(label: string, option: string): boolean {
   return !!wanted && String(label || '').indexOf(wanted) !== -1;
 }
 
+/** Indices of the quality options a title's tracks really deliver: 0 (Auto) and the ones some track has */
+export function deliveredQualities(trackQualities: string[], qualityOptions: string[]): number[] {
+  return [0, ...range(qualityOptions.length, 1).filter(i => trackQualities.some(q => qualityMatches(q, qualityOptions[i])))];
+}
+
+/**
+ * The track to switch to for a quality option, among the tracks in the audio of the one playing; -1 when no such
+ * track exists or it is the one already playing.
+ */
+export function trackForQuality(
+  tracks: Array<{ index: number; audio: string; quality: string }>,
+  currentIndex: number,
+  option: string
+): number {
+  const current = tracks.find(t => t.index === currentIndex);
+  const found = tracks.find(t => qualityMatches(t.quality, option) && (!current || t.audio === current.audio));
+  return found && found.index !== currentIndex ? found.index : -1;
+}
+
 export function titleChoices(media: TitleMedia | null, languageCount: number, qualityOptions: string[], lang: LanguageRules): TitleChoices {
   if (!media) {
     return { audio: range(languageCount), subs: range(languageCount + 1), quality: range(qualityOptions.length) };

@@ -11,6 +11,7 @@ import { createSeekHold, formatSkip } from '../lib/seekAccel';
 import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseHlsConfig, mseNetworkAction, mseSourceAt, mseSourceCount, mseUnsupportedReason, wantedAudioIndex, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
 import { friendlyPortalError } from '../lib/portalErrors';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
+import { deliveredQualities, trackForQuality } from '../lib/titleOptions';
 import {
   SubtitleTrack,
   SubtitleCue,
@@ -210,6 +211,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const [subIndex, setSubIndex] = useState<number>(-1);
   const [cues, setCues] = useState<SubtitleCue[]>([]);
   const [audioOptions, setAudioOptions] = useState<AudioOption[]>([]);
+  // The portal tracks of the title (audio and quality of each) and the one playing: the Resolución menu offers only
+  // the qualities they have
+  const [portalTracks, setPortalTracks] = useState<Array<{ index: number; audio: string; quality: string }>>([]);
+  const portalTrackNowRef = useRef(0);
   const [audioIndex, setAudioIndex] = useState<number>(0);
   // Remote focus: center transport (default), controls row, timeline scrubber, or episode drawer
   const [focusArea, setFocusArea] = useState<'center' | 'controls' | 'timeline' | 'episodes'>('center');
@@ -653,6 +658,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       setStreamInfoText([res.quality, res.codec, res.audio && `Audio: ${res.audio}`].filter(Boolean).join(' · '));
       setQuality(res.quality || '');
       const tracks: any[] = Array.isArray(res.tracks) ? res.tracks : [];
+      setPortalTracks(tracks.map(t => ({ index: t.index, audio: String(t.audio || ''), quality: String(t.quality || '') })));
+      portalTrackNowRef.current = typeof res.trackIndex === 'number' ? res.trackIndex : 0;
       setAudioOptions(tracks.length > 0
         ? tracks.map(t => ({ kind: 'portal' as const, index: t.index, label: languageName(t.audio) + (tracks.length > 1 && t.quality ? ` · ${t.quality}` : '') }))
         : [{ kind: 'portal', index: 0, label: languageName(res.audio) }]);
@@ -1227,8 +1234,9 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     close: true,
     apply: () => chooseAudio(r.value)
   }));
-  const qualityMenuRows: SettingRow[] = QUALITY_OPTIONS.map((opt, i) => {
-    const qLabel = i === 0 ? 'Auto' : opt.toUpperCase();
+  // Only the qualities the title delivers (lib/titleOptions.ts): the catalog declares more than the portal serves
+  const qualityMenuRows: SettingRow[] = deliveredQualities(portalTracks.map(t => t.quality), QUALITY_OPTIONS).map(i => {
+    const qLabel = i === 0 ? 'Auto' : QUALITY_OPTIONS[i].toUpperCase();
     return {
       group: 'Resolución',
       label: qLabel,
@@ -1236,6 +1244,13 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       close: true,
       apply: () => {
         settingsService.set({ quality: i });
+        // A track in that quality reloads the title on it, at the same position
+        const next = i === 0 ? -1 : trackForQuality(portalTracks, portalTrackNowRef.current, QUALITY_OPTIONS[i]);
+        if (next !== -1) {
+          audioPrefAppliedRef.current = true;
+          portalTrackRef.current = next;
+          setRetryTick(t => t + 1);
+        }
         flash(`Resolución: ${qLabel}`);
       }
     };

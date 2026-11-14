@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { effectiveChoice, ownAudioName, qualityMatches, titleChoices } from '../src/lib/titleOptions.ts';
+import { deliveredQualities, effectiveChoice, ownAudioName, qualityMatches, titleChoices, trackForQuality } from '../src/lib/titleOptions.ts';
 
 import { PREF_LANG_CODES, languageName, sameLanguage } from '../src/lib/subtitles.ts';
 
@@ -40,4 +40,23 @@ test('the effective choice is the profile one when available, else the first all
 test("the title's own language names the audio when no preference exists in it", () => {
   assert.equal(ownAudioName({ audios: ['Francés'], qualities: [], subtitles: [] }, lang), 'FRANCÉS');
   assert.equal(ownAudioName(null, lang), '');
+});
+
+test('the quality menu offers Auto and only what the tracks deliver', () => {
+  const QUALITY_OPTIONS = ['Auto', '1080p', '720p', '480p'];
+  assert.deepEqual(deliveredQualities(['720p'], QUALITY_OPTIONS), [0, 2]);
+  assert.deepEqual(deliveredQualities(['1080P', '720p'], QUALITY_OPTIONS), [0, 1, 2]);
+  assert.deepEqual(deliveredQualities([], QUALITY_OPTIONS), [0]);
+});
+
+test('choosing a quality switches to its track in the same audio, when there is one', () => {
+  const tracks = [
+    { index: 0, audio: 'spa', quality: '720p' },
+    { index: 1, audio: 'eng', quality: '1080p' },
+    { index: 2, audio: 'spa', quality: '1080p' }
+  ];
+  assert.equal(trackForQuality(tracks, 0, '1080p'), 2);
+  assert.equal(trackForQuality(tracks, 0, '720p'), -1);
+  assert.equal(trackForQuality(tracks, 0, '480p'), -1);
+  assert.equal(trackForQuality([{ index: 0, audio: 'spa', quality: '720p' }], 0, '1080p'), -1);
 });
