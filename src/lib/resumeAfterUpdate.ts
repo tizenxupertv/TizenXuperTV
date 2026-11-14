@@ -14,7 +14,7 @@ export const AWAY_MIN_MS = 30 * 60 * 1000;
 
 export type WakeAction = 'none' | 'reload' | 'reload_live';
 
-/** What to do when the app is visible again. `playing` = a movie or a fullscreen live channel is open */
+/** What to do when the app is visible again. `playing` = a movie, a Deportes stream or a fullscreen live channel is open */
 export function wakeAction(s: { downloaded: boolean; playing: boolean; liveOnly: boolean; awayMs: number }): WakeAction {
   if (!s.downloaded) return 'none';
   if (!s.playing) return 'reload';

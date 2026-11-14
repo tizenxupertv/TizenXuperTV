@@ -189,11 +189,12 @@ export const App: React.FC = () => {
   // left for the next launch. Restarting = reloading the page (public/js/boot.js starts the new version).
   const [, setUpdateTick] = useState(0);
   useEffect(() => updateService.subscribe(() => setUpdateTick(t => t + 1)), []);
-  const isPlaying = !!activeVodPlayer || isFullscreenLive;
+  // A Deportes stream counts too: no restart prompt and no reload in the middle of a match
+  const isPlaying = !!activeVodPlayer || isFullscreenLive || !!activeSportsPlayer;
   const playingRef = useRef(isPlaying);
   playingRef.current = isPlaying;
   const liveOnlyRef = useRef(false);
-  liveOnlyRef.current = isFullscreenLive && !activeVodPlayer;
+  liveOnlyRef.current = isFullscreenLive && !activeVodPlayer && !activeSportsPlayer;
   // Back from another app or with the screen on again: apply it right away, unless a video is playing. A live channel
   // left open while the TV was off for a long time is reopened after the reload (lib/resumeAfterUpdate.ts)
   useEffect(() => {
