@@ -155,11 +155,22 @@ interface Props {
   paused?: boolean;
   onFocusHeader: () => void;
   onPlayEventStream: (event: SportsEvent, streamIndex: number, streams: SportsStream[]) => void;
+  /** Where the agenda and the options come from: Deportes (default) or the EPIC+ trial tab */
+  source?: SportsSource;
 }
 
-export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onFocusHeader, onPlayEventStream }) => {
-  const [events, setEvents] = useState<SportsEvent[]>(() => sportsService.peekEvents());
-  const [loading, setLoading] = useState(() => sportsService.peekEvents().length === 0);
+/** What the view reads from a sports source */
+export interface SportsSource {
+  peekEvents(): SportsEvent[];
+  getEvents(force?: boolean): Promise<SportsEvent[]>;
+  getStreams(linksPath: string): Promise<SportsStream[]>;
+}
+
+export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onFocusHeader, onPlayEventStream, source = sportsService }) => {
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
+  const [events, setEvents] = useState<SportsEvent[]>(() => source.peekEvents());
+  const [loading, setLoading] = useState(() => source.peekEvents().length === 0);
   const [error, setError] = useState(false);
   const [sport, setSport] = useState<SportCategory>('all');
   const [focusArea, setFocusArea] = useState<'sidebar' | 'content'>('sidebar');
@@ -182,11 +193,11 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
   const lastKeyAtRef = useRef(0);
 
   const load = useCallback(async (force = false) => {
-    const shown = force ? [] : sportsService.peekEvents();
+    const shown = force ? [] : sourceRef.current.peekEvents();
     setError(false);
     if (!shown.length) setLoading(true);
     try {
-      setEvents(await sportsService.getEvents(force));
+      setEvents(await sourceRef.current.getEvents(force));
       loadedAtRef.current = Date.now();
     } catch (e) {
       if (!shown.length) setError(true);
@@ -207,7 +218,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
       if (document.hidden || pausedRef.current) return;
       if (nowMs - loadedAtRef.current < RELOAD_EVERY_MS || nowMs - lastKeyAtRef.current < RELOAD_IDLE_MS) return;
       loadedAtRef.current = nowMs;
-      sportsService.getEvents(true).then(list => { if (list.length) setEvents(list); }, () => {});
+      sourceRef.current.getEvents(true).then(list => { if (list.length) setEvents(list); }, () => {});
     }, RELOAD_CHECK_MS);
     return () => clearInterval(t);
   }, []);
@@ -352,7 +363,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     setStreamFocus(0);
     setStreamsLoading(true);
     try {
-      const list = (await sportsService.getStreams(ev.linksPath)).filter(isPlayableStream);
+      const list = (await sourceRef.current.getStreams(ev.linksPath)).filter(isPlayableStream);
       if (list.length === 1) {
         setSelected(null);
         onPlayEventStream(ev, 0, list);
