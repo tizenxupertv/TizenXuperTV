@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { TabId, getTabs, isSportsTab } from './components/layout/TopNavbar';
-import { epicAgendaService } from './services/epicAgendaService';
+import { deportesSource } from './services/sportsSources';
 import { tabPrefs } from './services/tabPrefs';
 import { parentalService } from './services/parentalService';
 import { Header } from './components/layout/Header';
@@ -888,7 +888,7 @@ export const App: React.FC = () => {
       </div>
 
       {/* View: DEPORTES (Cartelera deportiva en vivo y transmisiones) */}
-      {/* EPIC+ is a trial of the same view with EPIC+'s own agenda (services/epicAgendaService.ts) */}
+      {/* Deportes: the main agenda plus EPIC+'s as Fútbol+ (services/sportsSources.ts) */}
       {isSportsTab(selectedTab) && (
         <div
           className="tab-pane-sports"
@@ -898,8 +898,7 @@ export const App: React.FC = () => {
           }}
         >
           <SportsView
-            key={selectedTab}
-            source={selectedTab === 'deportes-epic' ? epicAgendaService : undefined}
+            source={deportesSource}
             isFocusActive={focusDomain === 'content' && !activeSportsPlayer && !activeDetailItem && !activeVodPlayer}
             paused={!!activeSportsPlayer || !!activeDetailItem || !!activeVodPlayer}
             onFocusHeader={returnToHeader}
