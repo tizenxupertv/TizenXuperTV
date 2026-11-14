@@ -29,6 +29,17 @@ export class SportsService {
     this.resolvers.set(tokenApi, resolve);
   }
 
+  /**
+   * Works out ahead the next signals of a registered source (EPIC+), so switching to them does not wait for it.
+   * The main agenda's signals are not prepared: their links are signed for minutes and resolved when picked.
+   */
+  public prepareStreams(streams: SportsStream[]): void {
+    for (const s of streams) {
+      const resolve = s && s.tokenApi ? this.resolvers.get(s.tokenApi) : undefined;
+      if (resolve) resolve(s).catch(() => {});
+    }
+  }
+
   public setBaseUrl(url: string) {
     this.baseUrl = url.endsWith('/') ? url : `${url}/`;
   }

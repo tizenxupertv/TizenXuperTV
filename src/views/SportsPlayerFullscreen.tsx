@@ -74,6 +74,10 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     return () => { alive = false; };
   }, [listedStream]);
   const currentStream = resolved && resolved.from === listedStream ? resolved.stream : listedStream;
+  // The next two signals are worked out meanwhile (EPIC+ only), so the switch to them, by hand or after a failure, is quick
+  useEffect(() => {
+    sportsService.prepareStreams(streams.slice(currentStreamIdx + 1, currentStreamIdx + 3));
+  }, [streams, currentStreamIdx]);
   const versus = !!event.away && event.away.trim().toLowerCase() !== event.home.trim().toLowerCase();
   const score = versus ? scoreboardService.findScore(event.home, event.away) : null;
 

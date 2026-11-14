@@ -1,7 +1,7 @@
 import type { SportsEvent, SportsStream } from '../types/sports.ts';
 import type { SportsSource } from '../views/SportsView';
 import { EPIC_LINKS_PREFIX } from '../lib/epicMenu';
-import { sportsService } from './sportsService';
+import { sportsService } from './sportsService.ts';
 import { epicAgendaService } from './epicAgendaService';
 
 /**
