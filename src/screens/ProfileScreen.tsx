@@ -138,7 +138,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [updateResult, setUpdateResult] = useState<'uptodate' | 'downloaded' | 'reinstall' | 'error' | null>(null);
   const mountedRef = useRef(true);
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const [reportState, setReportState] = useState<'idle' | 'sending' | 'ok' | 'too_many' | 'signed_out' | 'error'>('idle');
+  const [reportState, setReportState] = useState<'idle' | 'diagnosing' | 'sending' | 'ok' | 'too_many' | 'signed_out' | 'error'>('idle');
+  /** When the last network check finished: a report sent within REPORT_DIAG_FRESH_MS of it does not run another */
+  const diagAtRef = useRef(0);
   const [loggingOut, setLoggingOut] = useState(false);
   // "Borrar historial": confirmation (0 = Cancelar, selected first; 1 = Sí, borrar) and the result message
   const [confirmClear, setConfirmClear] = useState(false);
@@ -173,9 +175,24 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   // The bot accepts 32 kB and keeps 110 events. 24000 characters leave room for the accents and other characters
   // that take more than one byte, and fit the 100 playback events the app keeps
   const REPORT_MAX_CHARS = 24000;
-  // Problem report for support: TV, network, last network check and recent playback events
+  /** A network check this recent goes with the report as it is; an older one (or none) is run again first */
+  const REPORT_DIAG_FRESH_MS = 10 * 60 * 1000;
+  // Problem report for support. Without a recent network check, one runs first (servers, then speed) so every
+  // report says what the network did; a failed check still lets the report go, with what could be measured
   const sendReport = () => {
-    if (reportState === 'sending') return;
+    if (reportState === 'sending' || reportState === 'diagnosing') return;
+    if (report && Date.now() - diagAtRef.current < REPORT_DIAG_FRESH_MS) {
+      sendReportWith(report, speed);
+      return;
+    }
+    setReportState('diagnosing');
+    runDiag()
+      .then(r => (mountedRef.current ? runSpeed().then(sp => ({ r, sp })) : { r, sp: null }))
+      .then(({ r, sp }) => { if (mountedRef.current) sendReportWith(r, sp); });
+  };
+
+  // Problem report for support: TV, network, last network check and recent playback events
+  const sendReportWith = (report: DiagReport | null, speed: SpeedResult | null) => {
     setReportState('sending');
     const { version, model } = accountService.deviceInfo();
     let network = '';
@@ -262,18 +279,24 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const settings = settingsService.get();
   const hasPin = parentalService.hasPin();
 
-  const runDiag = (): Promise<void> => {
-    if (diagRunning) return Promise.resolve();
+  /** Runs the network check; resolves with its result (also kept for the screen), null when one is already running */
+  const runDiag = (): Promise<DiagReport | null> => {
+    if (diagRunning) return Promise.resolve(report);
     setDiagRunning(true);
     const sample = catalogItems.find(it => it && it.poster && !it.poster.includes('placeholder')) || catalogItems[0];
     return diagnosticService.run(sample)
-      .then(r => setReport(r))
-      .catch(() => setReport({ verdict: 'portal-down', hosts: [], portalMs: null, cdns: 0 }))
-      .then(() => setDiagRunning(false));
+      .catch((): DiagReport => ({ verdict: 'portal-down', hosts: [], portalMs: null, cdns: 0 }))
+      .then(r => {
+        diagAtRef.current = Date.now();
+        setReport(r);
+        setDiagRunning(false);
+        return r;
+      });
   };
 
-  const runSpeed = (): Promise<void> => {
-    if (speedRunning) return Promise.resolve();
+  /** Measures the speed; resolves with the result, null when it failed or one is already running */
+  const runSpeed = (): Promise<SpeedResult | null> => {
+    if (speedRunning) return Promise.resolve(speed);
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     speedAbort.current = ctrl;
     setSpeedRunning(true);
@@ -283,9 +306,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       signal: ctrl ? ctrl.signal : undefined,
       onProgress: p => { if (p.phase === 'download') setSpeedLive(p.mbps); }
     })
-      .then(r => setSpeed(r))
-      .catch(() => { if (!(ctrl && ctrl.signal.aborted)) setSpeedError(true); })
-      .then(() => setSpeedRunning(false));
+      .then((r): SpeedResult | null => { setSpeed(r); return r; })
+      .catch(() => { if (!(ctrl && ctrl.signal.aborted)) setSpeedError(true); return null; })
+      .then(r => { setSpeedRunning(false); return r; });
   };
 
   const checkUpdates = () => {
@@ -805,7 +828,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               {diagRunning || speedRunning ? 'Diagnosticando…' : report ? 'Diagnosticar de nuevo' : 'Diagnosticar'}
             </div>
             <div className={`pf-btn ${isF('report') ? 'is-focused' : ''}`} onClick={tap('report')}>
-              {reportState === 'sending' ? 'Enviando…' : 'Enviar reporte a soporte'}
+              {reportState === 'diagnosing' ? 'Diagnosticando…' : reportState === 'sending' ? 'Enviando…' : 'Enviar reporte a soporte'}
             </div>
           </div>
           <div className={`pf-diag-summary pf-diag-verdict ${diagRunning ? '' : verdict ? verdict.cls : ''}`}>
@@ -827,7 +850,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           {tested && hostsFailed.length > 0 && (
             <div className="pf-diag-failed">Sin respuesta: {hostsFailed.join(', ')}</div>
           )}
-          {reportState !== 'idle' && reportState !== 'sending' && (
+          {reportState !== 'idle' && reportState !== 'sending' && reportState !== 'diagnosing' && (
             <div className={`pf-diag-report ${reportState}`}>
               {reportState === 'ok' && '✓ Reporte enviado. Te responderemos por Telegram.'}
               {reportState === 'too_many' && 'Ya enviaste varios reportes esta hora. Espera un poco antes de enviar otro.'}
