@@ -18,6 +18,7 @@ interface Score { homeScore: string; awayScore: string; state: string; periodDet
 const SPORTS: Array<{ id: SportCategory; label: string }> = [
   { id: 'all', label: 'Todos' },
   { id: 'football', label: 'Fútbol' },
+  { id: 'football_plus', label: 'Fútbol+' },
   { id: 'basketball', label: 'Básquet' },
   { id: 'american_football', label: 'Fútbol americano' },
   { id: 'baseball', label: 'Béisbol' },
@@ -265,13 +266,14 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
   }), [events, scores, now]);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: liveEvents.length };
+    // Fútbol+ (EPIC+) repeats matches of the main list: only in its own category, not in Todos
+    const c: Record<string, number> = { all: liveEvents.filter(e => e.sport !== 'football_plus').length };
     liveEvents.forEach(e => { c[e.sport] = (c[e.sport] || 0) + 1; });
     return c;
   }, [liveEvents]);
   const chips = useMemo(() => SPORTS.filter(s => s.id === 'all' || counts[s.id]), [counts]);
 
-  const filtered = useMemo(() => (sport === 'all' ? liveEvents : liveEvents.filter(e => e.sport === sport)), [liveEvents, sport]);
+  const filtered = useMemo(() => (sport === 'all' ? liveEvents.filter(e => e.sport !== 'football_plus') : liveEvents.filter(e => e.sport === sport)), [liveEvents, sport]);
 
   const lines: Line[] = useMemo(() => {
     const live = filtered.filter(e => e.status === 'live');

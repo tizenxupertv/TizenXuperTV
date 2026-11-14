@@ -1,9 +1,9 @@
 /**
- * EPIC+ agenda (`/menu`, docs/epic-pwa-api.md) turned into the app's sports events, for the "EPIC+" tab that is
- * tried next to Deportes. Pure: no requests here (services/epicAgendaService.ts does them).
+ * EPIC+ agenda (`/menu`, docs/epic-pwa-api.md) turned into the app's sports events: Deportes shows them as the
+ * "Fútbol+" category. Pure: no requests here (services/epicAgendaService.ts does them).
  * No relative imports except types, so tests can load this file in Node.
  */
-import type { SportCategory, SportsEvent, SportsStream } from '../types/sports.ts';
+import type { SportsEvent, SportsStream } from '../types/sports.ts';
 
 /** tokenApi of an option whose address EPIC+ works out (`/resolve`) when the viewer picks it */
 export const EPIC_RESOLVE = 'epic-resolve';
@@ -34,26 +34,6 @@ export function epicMenuPath(timeZone: string): string {
 }
 const MATCH_MS = 150 * 60 * 1000;
 const MAX_OPTIONS = 12;
-
-const SPORTS: Array<[RegExp, SportCategory, string]> = [
-  [/americano|nfl/, 'american_football', 'Fútbol Americano'],
-  [/futbol|soccer/, 'football', 'Fútbol'],
-  [/basket|baloncesto|nba/, 'basketball', 'Básquetbol'],
-  [/beisbol|baseball|mlb/, 'baseball', 'Béisbol'],
-  [/box|ufc|mma|lucha|combate/, 'fighting', 'Combate'],
-  [/tenis|tennis/, 'tennis', 'Tenis'],
-  [/f1|formula|motor|nascar|moto/, 'motor_sport', 'Motor']
-];
-
-function plain(s: unknown): string {
-  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-}
-
-export function epicSport(deporte: any): { sport: SportCategory; label: string } {
-  const key = plain(deporte && (deporte.clave || deporte.nombre));
-  for (const [re, sport, label] of SPORTS) if (re.test(key)) return { sport, label };
-  return { sport: 'other', label: (deporte && deporte.nombre) || 'Otros' };
-}
 
 /** "Liga: Local vs Visitante" -> teams; a title without "vs" is the home side alone */
 export function epicTeams(title: string): { home: string; away: string } {
@@ -123,15 +103,14 @@ export function parseEpicMenu(menu: any, now = Date.now()): SportsEvent[] {
     if (!e || e.oculto || e.id == null) continue;
     const start = epicStartMillis(e.date, e.hour);
     if (!start) continue;
-    const { sport, label } = epicSport(e.deporte);
     const { home, away } = epicTeams(e.titulo || e.description);
     const options = epicOptions(e);
     const live = e.status === 'live';
     const status: SportsEvent['status'] = live ? 'live' : e.ended || now > start + MATCH_MS ? 'finished' : 'scheduled';
     events.push({
       id: `epic-${e.id}`,
-      sport,
-      sportLabel: label,
+      sport: 'football_plus',
+      sportLabel: 'Fútbol+',
       league: String(e.liga || ''),
       home,
       away,
