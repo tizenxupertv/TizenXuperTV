@@ -27,8 +27,22 @@ const LANG_NAMES: Record<string, string> = {
 /** Distinguishes Spanish dialects (Latino vs España / Castellano) and languages */
 export function languageName(code: string | undefined): string {
   const raw = String(code || '').trim();
+  if (!raw) return 'Original';
+
+  // Support comma-separated language codes, e.g. "SPA,SPA,ENG"
+  if (raw.includes(',')) {
+    const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+    const names: string[] = [];
+    for (const p of parts) {
+      const n = languageName(p);
+      if (n && n !== 'Original' && !names.includes(n)) {
+        names.push(n);
+      }
+    }
+    if (names.length > 0) return names.join(', ');
+  }
+
   const c = raw.toLowerCase();
-  if (!c) return 'Original';
 
   // Explicit Latin American Spanish variants
   if (/latino|latam|latin|419|es[-_]419|es[-_]la|es[-_]mx|es[-_]ar|es[-_]co|spa[-_]lat/i.test(c)) {
@@ -68,6 +82,9 @@ export function languageName(code: string | undefined): string {
 export const PREF_LANG_CODES = ['es-lat', 'es-es', 'pt', 'en'];
 
 export function sameLanguage(code: string | undefined, pref: string): boolean {
+  if (code && code.includes(',')) {
+    return code.split(',').some(part => sameLanguage(part.trim(), pref));
+  }
   const trackLang = languageName(code);
   const prefLang = languageName(pref);
 
@@ -90,6 +107,112 @@ export function sameLanguage(code: string | undefined, pref: string): boolean {
   }
 
   return trackLang === prefLang;
+}
+
+/**
+ * Formats a list of raw audio language codes (e.g. ['SPA', 'SPA', 'ENG'] or ['SPA,SPA,ENG'])
+ * into user-friendly distinct labels (e.g. ['Español (Latino)', 'Español (España)', 'Inglés']).
+ */
+export function formatAudioTrackList(langs: (string | undefined)[]): { lang: string; label: string }[] {
+  const expanded: string[] = [];
+  for (const l of langs) {
+    const str = String(l || '').trim();
+    if (str.includes(',')) {
+      expanded.push(...str.split(',').map(s => s.trim()).filter(Boolean));
+    } else if (str) {
+      expanded.push(str);
+    }
+  }
+  if (expanded.length === 0) return [{ lang: '', label: 'Original' }];
+
+  let spanishCount = 0;
+  for (const l of expanded) {
+    const norm = l.toLowerCase();
+    if (norm.startsWith('es') || norm.startsWith('spa') || norm.startsWith('esp')) {
+      spanishCount++;
+    }
+  }
+
+  let spanishSeen = 0;
+  return expanded.map(raw => {
+    const norm = raw.toLowerCase();
+    const isSpanish = norm.startsWith('es') || norm.startsWith('spa') || norm.startsWith('esp');
+    if (isSpanish && !norm.includes('lat') && !norm.includes('es-') && !norm.includes('cast')) {
+      spanishSeen++;
+      if (spanishCount > 1) {
+        return {
+          lang: raw,
+          label: spanishSeen === 1 ? 'Español (Latino)' : 'Español (España)'
+        };
+      }
+      return { lang: raw, label: 'Español (Latino)' };
+    }
+    return { lang: raw, label: languageName(raw) };
+  });
+}
+
+/** Formats raw video dimensions (e.g. 1920×800) or quality string into a standard player badge (e.g. 1080p, 4K) */
+export function formatResolutionBadge(dimensions?: string, quality?: string): string {
+  const m = String(dimensions || '').match(/(\d+)\s*[×x]\s*(\d+)/);
+  if (m) {
+    const w = parseInt(m[1], 10);
+    const h = parseInt(m[2], 10);
+    if (w >= 3800 || h >= 2000) return '4K';
+    if (w >= 1900 || h >= 1000) return '1080p';
+    if (w >= 1200 || h >= 700) return '720p';
+    if (w >= 640 || h >= 400) return '480p';
+  }
+  const s = String(quality || '').toLowerCase();
+  if (s.includes('4k') || s.includes('2160')) return '4K';
+  if (s.includes('1080') || s.includes('fhd')) return '1080p';
+  if (s.includes('720') || s.includes('hd')) return '720p';
+  if (s.includes('480') || s.includes('sd')) return '480p';
+  return quality || dimensions || '';
+}
+
+/**
+ * Normalizes quality definitions into short standard tags: '4K', 'FHD', 'HD', 'SD'.
+ * Handles strings like '1080p', '1080P', '4K', '2160p', 'HD', 'FHD', 'UHD', arrays or comma-separated lists.
+ */
+/**
+ * The first candidate that really names a quality. A catalog title often carries an empty list, which `||` takes
+ * as present and so hid the qualities already known from the cache.
+ */
+export function firstQuality(...candidates: Array<string | string[] | null | undefined>): string | string[] | undefined {
+  for (const c of candidates) {
+    if (Array.isArray(c) ? c.some(q => String(q || '').trim()) : String(c || '').trim()) return c as string | string[];
+  }
+  return undefined;
+}
+
+export function formatQualityTag(quality?: string | string[], category?: string): string {
+  if (!quality && category) {
+    const cat = String(category).toLowerCase();
+    if (cat.includes('uhd') || cat.includes('4k')) return '4K';
+  }
+  if (!quality) return '';
+  const list: string[] = Array.isArray(quality)
+    ? quality
+    : String(quality).split(',').map(s => s.trim()).filter(Boolean);
+
+  let bestRank = 0;
+  let bestTag = '';
+
+  for (const item of list) {
+    const s = String(item || '').toLowerCase().trim();
+    if (!s) continue;
+    if (s.includes('4k') || s.includes('2160') || s.includes('uhd')) {
+      if (bestRank < 4) { bestRank = 4; bestTag = '4K'; }
+    } else if (s.includes('1080') || s.includes('fhd')) {
+      if (bestRank < 3) { bestRank = 3; bestTag = 'FHD'; }
+    } else if (s.includes('720') || s.includes('hd')) {
+      if (bestRank < 2) { bestRank = 2; bestTag = 'HD'; }
+    } else if (s.includes('480') || s.includes('sd')) {
+      if (bestRank < 1) { bestRank = 1; bestTag = 'SD'; }
+    }
+  }
+
+  return bestTag;
 }
 
 function toSeconds(stamp: string): number {
@@ -126,7 +249,12 @@ export async function loadSubtitle(url: string): Promise<SubtitleCue[]> {
     const res = await fetch(url);
     return parseSubtitles(await res.text());
   } catch (e) {
-    if (!import.meta.env.DEV) throw e;
+    const isLocal = typeof window !== 'undefined' && (
+      import.meta.env.DEV ||
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1'
+    );
+    if (!isLocal) throw e;
     const res = await fetch(`/stream-proxy?url=${encodeURIComponent(url)}`);
     return parseSubtitles(await res.text());
   }

@@ -2,6 +2,7 @@ import type { VodItem, VodEpisode, VodSeason, PersonDetail, PersonResult } from 
 import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../lib/catalogOrganizer.ts';
 import { formatDuration } from '../lib/vodResume.ts';
 import { collectPosterAlternates } from '../lib/searchArtwork.ts';
+import { getCachedTitleMeta, setCachedTitleMeta } from '../lib/titleMetaCache.ts';
 import { catalogProvider } from './catalogProvider.ts';
 
 declare global {
@@ -118,6 +119,8 @@ function normalizeItem(raw: any, index: number): VodItem {
     row: rowName,
     streamUrl: raw.streamUrl || raw.stream_url || '',
     trailerUrl: raw.trailerUrl || raw.trailer_url || raw.trailer || raw.previewUrl || raw.preview_url || undefined,
+    quality: raw.quality || raw.definition || undefined,
+    qualities: Array.isArray(raw.qualities) ? raw.qualities : (raw.quality ? String(raw.quality).split(',') : undefined),
     seasons: raw.seasons || [],
     episodes: raw.episodes || []
   };
@@ -420,6 +423,19 @@ class CatalogService {
 
           cleanedSeasons.sort((a, b) => a.number - b.number);
 
+          const hasCC = Boolean((res.item as any)?.moreSubtitle || (res.item as any)?.subtitles?.length);
+          const epQualities = episodes.flatMap(ep => ep.qualities || (ep.quality ? [ep.quality] : []));
+          const mergedQualities = detailItem.qualities && detailItem.qualities.length ? detailItem.qualities : epQualities;
+          setCachedTitleMeta(item.id, {
+            quality: detailItem.quality,
+            qualities: mergedQualities,
+            hasCC,
+            year: detailItem.year,
+            duration: detailItem.duration,
+            actors: detailItem.actors,
+            director: detailItem.director
+          });
+
           return {
             item: detailItem,
             episodes,
@@ -688,4 +704,70 @@ export function getCatchupStreamUrl(channelCode: string, contentId: string, colu
       resolve(res.url);
     });
   });
+}
+
+const metaEnrichInFlight = new Map<string, Promise<void>>();
+const metaEnrichAttempted = new Set<string>();
+/** Titles whose play options were already asked for in this run: a title without subtitles or year stays without them */
+const mediaEnrichAttempted = new Set<string>();
+
+/**
+ * Fetches detail (and optionally mediaOptions) in the background for a title
+ * and persists its quality/CC metadata in titleMetaCache.
+ */
+export function enrichTitleMeta(item: VodItem, includeMediaOptions = false): Promise<void> {
+  if (!item?.id) return Promise.resolve();
+  const id = String(item.id);
+  const cached = getCachedTitleMeta(id);
+  const hasQuality = Boolean(cached?.quality || cached?.qualities?.length || item.quality || item.qualities?.length);
+  const hasCC = Boolean(cached?.hasCC || (item as any).moreSubtitle || (item as any).subtitles?.length);
+
+  const hasYear = Boolean(cached?.year || (item.year && item.year !== '—'));
+
+  if (hasQuality && (!includeMediaOptions || (hasCC && hasYear))) {
+    return Promise.resolve();
+  }
+  // Asked once per run: the hero used to ask again on every pass for a title that has no subtitles to find
+  if (metaEnrichAttempted.has(id) && (!includeMediaOptions || mediaEnrichAttempted.has(id))) {
+    return Promise.resolve();
+  }
+  const existing = metaEnrichInFlight.get(id);
+  if (existing) return existing;
+
+  metaEnrichAttempted.add(id);
+  if (includeMediaOptions) mediaEnrichAttempted.add(id);
+  const task = (async () => {
+    try {
+      const detail = await catalogService.getVodDetail(item);
+      const afterDetail = getCachedTitleMeta(id);
+      const stillNeedsMedia =
+        includeMediaOptions &&
+        (!(afterDetail?.quality || afterDetail?.qualities?.length) || !afterDetail?.hasCC);
+
+      if (stillNeedsMedia && window.MagisClient && typeof window.MagisClient.mediaOptions === 'function') {
+        const playableId = detail.item.isSeries && detail.episodes.length ? detail.episodes[0].id : detail.item.id;
+        const playableSeries = detail.item.isSeries ? (detail.seasons[0]?.id || detail.item.id) : '';
+        await new Promise<void>(resolve => {
+          window.MagisClient.mediaOptions(playableId, playableSeries, (err: any, m: any) => {
+            if (!err && m) {
+              setCachedTitleMeta(id, {
+                qualities: Array.isArray(m.qualities) ? m.qualities : undefined,
+                hasCC: Array.isArray(m.subtitles) && m.subtitles.length > 0
+              });
+            }
+            resolve();
+          });
+        });
+      }
+    } catch {
+      // Best-effort background enrichment; a failed request may be tried again later
+      metaEnrichAttempted.delete(id);
+      mediaEnrichAttempted.delete(id);
+    } finally {
+      metaEnrichInFlight.delete(id);
+    }
+  })();
+
+  metaEnrichInFlight.set(id, task);
+  return task;
 }

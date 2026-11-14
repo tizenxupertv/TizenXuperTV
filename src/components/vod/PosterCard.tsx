@@ -4,6 +4,9 @@ import { isImagePrecached, markImageLoaded, markImageFailed } from '../../lib/im
 import { useCardImage } from '../../lib/useCardImage';
 import { collectPosterAlternates } from '../../lib/searchArtwork';
 import { startImageTracking } from '../../lib/perfMonitor';
+import { formatQualityTag, firstQuality } from '../../lib/subtitles';
+import { useTitleMeta } from '../../lib/titleMetaCache';
+import { enrichTitleMeta } from '../../services/catalogService';
 
 interface PosterCardProps {
   item: VodItem;
@@ -88,6 +91,23 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
     }
   };
 
+  const cachedMeta = useTitleMeta(item.id);
+
+  const qualityTag = useMemo(() => {
+    return formatQualityTag(
+      firstQuality(item.qualities, item.quality, cachedMeta?.qualities, cachedMeta?.quality),
+      item.category
+    );
+  }, [item.quality, item.qualities, cachedMeta?.quality, cachedMeta?.qualities, item.category]);
+
+  useEffect(() => {
+    if (!isFocused || qualityTag || !item.id) return;
+    const timer = setTimeout(() => {
+      enrichTitleMeta(item, false);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [isFocused, qualityTag, item.id]);
+
   const categoryName = item.isSeries ? 'Programa de TV' : 'Película';
   // Only what the catalog knows: score, year, genres, category
   const genresStr = item.genres && item.genres.length ? item.genres.slice(0, 2).join(' · ') : (item.category || '');
@@ -127,7 +147,12 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
           <div className="poster-rank-badge">{rank}</div>
         )}
 
-
+        {/* Quality Tag (4K, FHD, HD) in top-right corner */}
+        {qualityTag && !isWide && (
+          <div className={`poster-quality-badge ${qualityTag === '4K' ? 'is-4k' : ''}`}>
+            {qualityTag}
+          </div>
+        )}
 
         {/* Wide Card top-right translucent action circle */}
         {isWide && (
