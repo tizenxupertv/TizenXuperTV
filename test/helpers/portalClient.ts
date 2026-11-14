@@ -7,11 +7,14 @@ const JS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..
 
 export interface FakeRequest {
   url: string;
+  body?: string;
   aborted: boolean;
   /** Answers as a network error */
   fail(): void;
   /** Some bytes arrived */
   progress(): void;
+  /** Sends an HTTP response back to XHR */
+  respond(status: number, body: string): void;
 }
 
 /**
@@ -46,11 +49,20 @@ export function loadPortalClient(onRequest: (req: FakeRequest) => void) {
           if (this.req!.aborted) return;
           this.readyState = 3;
           if (this.onprogress) this.onprogress();
+        },
+        respond: (status: number, text: string) => {
+          if (this.req!.aborted) return;
+          this.readyState = 4;
+          this.status = status;
+          this.responseText = text;
+          if (this.onreadystatechange) this.onreadystatechange();
+          if (this.onload) this.onload();
         }
       };
     }
     setRequestHeader() {}
-    send() {
+    send(body?: string) {
+      if (body !== undefined) this.req!.body = String(body);
       requests.push(this.req!);
       onRequest(this.req!);
     }
