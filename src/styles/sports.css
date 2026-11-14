@@ -53,6 +53,20 @@
 .spb-live-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px; }
 .spb-league { font-size: 14px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .spb-league.is-small { font-size: 12px; margin-bottom: 8px; }
+/* Fútbol+ (EPIC+) match: a small cyan badge before the league */
+.spb-plus {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: rgba(0, 229, 255, 0.16);
+  border: 1px solid rgba(0, 229, 255, 0.45);
+  color: #67e8f9;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
 .spb-live-tag {
   display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 8px; flex-shrink: 0;
   background: rgba(239, 68, 68, 0.14); color: #f87171; font-size: 14px; font-weight: 800;
