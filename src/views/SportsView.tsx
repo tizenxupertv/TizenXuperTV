@@ -93,7 +93,8 @@ const LiveCard = React.memo<CardProps>(({ ev, focused, score: s, onOpen }) => {
   return (
     <div className={`spb-live-card ${focused ? 'spb-focus' : ''}`} onClick={() => onOpen(ev)}>
       <div className="spb-live-top">
-        <span className="spb-league"><PlusBadge ev={ev} />{leagueOf(ev)}</span>
+        <span className="spb-league">{leagueOf(ev)}</span>
+        <PlusBadge ev={ev} />
         <span className="spb-live-tag"><span className="spb-dot" />{s && s.state === 'live' && s.periodDetail ? s.periodDetail : 'EN VIVO'}</span>
       </div>
       {vs ? (
@@ -120,7 +121,7 @@ const GridCard = React.memo<CardProps & { now: number }>(({ ev, focused, score: 
         <span className={`spb-when ${done ? 'is-done' : ''}`}>{done ? 'Final' : until}</span>
       </div>
       <div className="spb-card-body">
-        <div className="spb-league is-small"><PlusBadge ev={ev} />{leagueOf(ev)}</div>
+        <div className="spb-league-row"><span className="spb-league is-small">{leagueOf(ev)}</span><PlusBadge ev={ev} /></div>
         {vs ? (
           <>
             <div className="spb-team-line is-small">
