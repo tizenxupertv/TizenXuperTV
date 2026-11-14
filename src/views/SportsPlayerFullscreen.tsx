@@ -509,7 +509,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         <div className="spp-error">
           <MatchHeader event={event} />
           <div className="spp-error-msg">Esta señal no está disponible</div>
-          <div className="spp-error-detail">Transmisión deportiva en fase beta · {error}</div>
+          <div className="spp-error-detail">Transmisión deportiva · {error}</div>
           {streams.length > 1 && showServerMenu ? (
             <>
               <div className="spp-hint">
