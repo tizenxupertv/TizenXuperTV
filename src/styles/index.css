@@ -9284,3 +9284,18 @@ html.legacy-video .live-tuning-spinner {
 .maintenance-card p { color: #e2e8f0; font-size: 25px; line-height: 1.45; margin: 0 auto 22px; max-width: 760px; }
 .maintenance-card span { color: #94a3b8; font-size: 18px; }
 html.legacy-video .maintenance-card { box-shadow: none; }
+
+/* EPIC+ channel in TV en vivo (LiveRows isEpicChannel): the same D+ badge as its matches in Deportes */
+.live-dplus {
+  flex-shrink: 0;
+  margin-left: 10px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: rgba(0, 229, 255, 0.16);
+  border: 1px solid rgba(0, 229, 255, 0.45);
+  color: #67e8f9;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+}

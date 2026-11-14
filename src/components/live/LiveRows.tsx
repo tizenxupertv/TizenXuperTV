@@ -1,6 +1,9 @@
 import React from 'react';
 import { LiveChannel, LiveCategory } from '../../types/channel';
 
+/** A channel that comes from EPIC+ (services/epicSportsService.ts): it carries the D+ badge, like its matches in Deportes */
+export const isEpicChannel = (ch: LiveChannel) => String(ch.id || '').indexOf('epic-') === 0;
+
 interface ChannelRowProps {
   ch: LiveChannel;
   idx: number;
@@ -43,6 +46,7 @@ export const ChannelRow = React.memo<ChannelRowProps>(({ ch, idx, focused, tuned
           <span className="live-ch-name">{ch.name}</span>
           {tuned && <span className="live-playing-badge">▶ EN VIVO</span>}
           {fav && <span className="live-fav-icon">★</span>}
+          {isEpicChannel(ch) && <span className="live-dplus">D+</span>}
         </div>
         {subtitle && <div className="live-ch-now">{subtitle}</div>}
       </div>
