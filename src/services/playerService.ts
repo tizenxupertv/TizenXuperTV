@@ -4,6 +4,9 @@ import { backBufferFor } from '../lib/tvMemory';
 import { normalizeChannel } from '../lib/channelKey';
 import { hostOf, isIspBlockPage, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSequenceFixer } from '../lib/mediaSequence';
+import { shouldMoveLiveToAvPlay, videoCodecRejected } from '../lib/liveVideoFallback';
+import { unwrapPngTs } from '../lib/pngWrappedTs';
+import { isStaleLinkStatus } from '../lib/liveLink';
 import { epicSportsService } from './epicSportsService';
 
 declare global {
@@ -146,7 +149,7 @@ function liveOptimizedLoader(Hls: any): any {
   };
 }
 
-/** HLS.js fragment loader that strips the 67-byte fake PNG prefix from Epic Sports / Perelman segments */
+/** HLS.js fragment loader that takes the TS out of PNG-wrapped segments (Epic Sports / Perelman, lib/pngWrappedTs) */
 function epicFragmentLoader(Hls: any): any {
   const Base = Hls.DefaultConfig.loader;
   return class extends Base {
@@ -156,17 +159,22 @@ function epicFragmentLoader(Hls: any): any {
         ...callbacks,
         onSuccess: (response: any, stats: any, ctx: any, networkDetails: any) => {
           if (response && response.data instanceof ArrayBuffer) {
-            const bytes = new Uint8Array(response.data);
-            // Check PNG magic: 0x89 0x50 0x4E 0x47 and sync byte 0x47 at offset 67
-            if (bytes.length > 67 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[67] === 0x47) {
-              response.data = bytes.slice(67).buffer;
-            }
+            const unwrapped = unwrapPngTs(new Uint8Array(response.data));
+            if (unwrapped) response.data = unwrapped.slice().buffer;
           }
           onSuccess(response, stats, ctx, networkDetails);
         }
       });
     }
   };
+}
+
+
+/** AVPlay draws below the page: while it plays a live channel, the live layers must be see-through (index.css) */
+function setLiveAvPlayLook(on: boolean) {
+  try {
+    document.documentElement.classList.toggle('xuper-live-avplay', on);
+  } catch (e) {}
 }
 
 class PlayerService {
@@ -181,6 +189,8 @@ class PlayerService {
   private avPoll: any = null;
   private watchedEl: HTMLVideoElement | null = null;
   private usingAvPreview = false;
+  /** Channel moved from hls.js to AVPlay because the TV's MediaSource refused its video (once per tune) */
+  private avTriedCode = '';
   private onVideoPlaying = () => {
     if (this.status.state === 'loading' && this.status.code === this.activeChannelCode) {
       this.setStatus(this.status.code, 'playing');
@@ -293,6 +303,7 @@ class PlayerService {
     logPlayback({ kind: 'error', player: this.playerName(), detail: why + (this.lastHlsError ? ` · ${this.lastHlsError}` : '') });
     this.clearWatch();
     this.destroyHls();
+    setLiveAvPlayLook(false);
     if (this.usingAvPreview && window.XuperAVPlay && typeof window.XuperAVPlay.stopLive === 'function') {
       window.XuperAVPlay.stopLive();
     }
@@ -406,6 +417,7 @@ class PlayerService {
     this.clearWatch();
     this.setStatus('', 'idle');
     this.destroyHls();
+    setLiveAvPlayLook(false);
 
     if (window.XuperAVPlay && typeof window.XuperAVPlay.stopLive === 'function') {
       window.XuperAVPlay.stopLive();
@@ -547,6 +559,7 @@ class PlayerService {
     setPlaybackContext({ channel: channel.name, category: channel.categoryName, source: channel.url ? 'directo' : 'portal' });
     this.lastHlsError = '';
     this.usingAvPreview = false;
+    this.avTriedCode = '';
     this.watchStart(code, videoEl);
 
     // Global fallback bridge for AVPlay -> Hls.js fallback (Eclectic 2.0.36b pattern)
@@ -580,8 +593,7 @@ class PlayerService {
       } else if (window.XuperAVPlay && window.XuperAVPlay.playPreview) {
         // A direct link has no headers of its own: do not reuse the last portal channel's
         window.__xuperCurrentStreamMeta = null;
-        this.usingAvPreview = true;
-        window.XuperAVPlay.playPreview(channel.url, videoEl);
+        this.playAvPreview(channel.url, videoEl);
       } else {
         videoEl.src = channel.url;
         videoEl.play().catch(() => {});
@@ -612,8 +624,7 @@ class PlayerService {
                     } else if (fullscreen && window.XuperAVPlay && window.XuperAVPlay.playStream) {
                       this.playLiveStream(rMeta.url, rMeta.headers, videoEl);
                     } else if (window.XuperAVPlay && window.XuperAVPlay.playPreview) {
-                      this.usingAvPreview = true;
-                      window.XuperAVPlay.playPreview(rMeta.url, videoEl);
+                      this.playAvPreview(rMeta.url, videoEl);
                     } else {
                       this.streamHls(rMeta.url, videoEl, rMeta, code);
                     }
@@ -638,8 +649,7 @@ class PlayerService {
         } else if (fullscreen && window.XuperAVPlay && window.XuperAVPlay.playStream) {
           this.playLiveStream(streamMeta.url, streamMeta.headers, videoEl);
         } else if (window.XuperAVPlay && window.XuperAVPlay.playPreview) {
-          this.usingAvPreview = true;
-          window.XuperAVPlay.playPreview(streamMeta.url, videoEl);
+          this.playAvPreview(streamMeta.url, videoEl);
         } else {
           this.streamHls(streamMeta.url, videoEl, streamMeta, code);
         }
@@ -648,13 +658,41 @@ class PlayerService {
   }
 
   private playLiveStream(url: string, headers: any, videoEl: HTMLVideoElement | null) {
+    setLiveAvPlayLook(true);
     window.XuperAVPlay._nextKind = 'live';
     return window.XuperAVPlay.playStream(url, headers, videoEl);
+  }
+
+  private playAvPreview(url: string, videoEl: HTMLVideoElement) {
+    setLiveAvPlayLook(true);
+    this.usingAvPreview = true;
+    window.XuperAVPlay.playPreview(url, videoEl);
+  }
+
+  /**
+   * The TV's MediaSource refused the channel's video and hls.js went on with the sound alone: play the same link
+   * with AVPlay, which decodes it in hardware. Its own fallback brings the channel back to hls.js if it fails.
+   */
+  private moveLiveToAvPlay(url: string, videoEl: HTMLVideoElement, code: string) {
+    this.destroyHls();
+    try {
+      videoEl.pause();
+      videoEl.removeAttribute('src');
+      videoEl.load();
+    } catch {}
+    this.avTriedCode = code;
+    // Shows the channel cover again and waits for AVPlay's first picture
+    this.watchStart(code, videoEl);
+    const meta = window.__xuperCurrentStreamMeta;
+    const headers = (meta && meta.headers) || null;
+    if (this.isFullscreen && window.XuperAVPlay.playStream) this.playLiveStream(url, headers, videoEl);
+    else this.playAvPreview(url, videoEl);
   }
 
   private streamHls(url: string, videoEl: HTMLVideoElement, streamMeta?: any, code?: string) {
     if (!videoEl) return;
     this.destroyHls();
+    setLiveAvPlayLook(false);
 
     const isBrowserEnv = typeof window !== 'undefined' && (
       window.location.hostname === 'localhost' ||
@@ -722,11 +760,26 @@ class PlayerService {
 
         const onHlsError = (event: any, data: any) => {
           console.error('[HLS error]', data.type, data.details, data.fatal);
+          // The TV refused the video codec: hls.js dropped the picture and plays the sound alone (Tizen 3-5)
+          const lostVideo = videoCodecRejected(data);
+          if (lostVideo) {
+            logPlayback({ kind: 'error', player: 'HLS.js', detail: `MSE sin video (${lostVideo.slice(0, 60)})`, host: hostOf(currentSource) });
+            const ctx = {
+              hasAvPlay: !!(window.webapis && window.webapis.avplay && window.XuperAVPlay && window.XuperAVPlay.playPreview),
+              code: code && code === this.activeChannelCode ? code : '',
+              triedCode: this.avTriedCode
+            };
+            if (window.__xuperPreviewHls === hls && shouldMoveLiveToAvPlay(data, ctx)) {
+              logPlayback({ kind: 'info', player: 'AVPlay', detail: 'el canal pasa a AVPlay' });
+              this.moveLiveToAvPlay(currentSource, videoEl, ctx.code);
+            }
+            return;
+          }
           const httpCode = data.response && data.response.code ? Number(data.response.code) : 0;
           const status = httpCode ? ` ${httpCode}` : '';
 
-          // Self-healing token refresh on HTTP 401/403 during live playback
-          if ((httpCode === 401 || httpCode === 403) && code && !selfHealingAuth && Date.now() - lastAuthRefreshAt > 60000 &&
+          // Self-healing token refresh when the link is refused, taken or gone (401/403/409/410)
+          if (isStaleLinkStatus(httpCode) && code && !selfHealingAuth && Date.now() - lastAuthRefreshAt > 60000 &&
             window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
             selfHealingAuth = true;
             lastAuthRefreshAt = Date.now();

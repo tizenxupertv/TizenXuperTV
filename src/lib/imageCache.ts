@@ -74,6 +74,8 @@ export function preloadCardNeighbors(
       const idx = currentIndex + offset;
       if (idx < items.length) {
         const it = items[idx];
+        // Lists can hold empty entries: an uncaught error here stopped the prefetch (bot reports, 1.15.1)
+        if (!it) continue;
         const url = isWide ? (it.landscape || it.backdrop || it.poster) : (it.poster || it.landscape || it.backdrop);
         if (url && /^https?:/.test(url)) targets.push(url);
       }
@@ -84,6 +86,7 @@ export function preloadCardNeighbors(
       const bIdx = currentIndex - backOffset;
       if (bIdx >= 0) {
         const it = items[bIdx];
+        if (!it) continue;
         const url = isWide ? (it.landscape || it.backdrop || it.poster) : (it.poster || it.landscape || it.backdrop);
         if (url && /^https?:/.test(url)) targets.push(url);
       }
@@ -107,11 +110,6 @@ export function preloadCardNeighbors(
 }
 
 /** Returns the image URL synchronously without cascading re-renders */
-export function useCardImage(url: string, _w?: number, _h?: number, enabled = true): string | null {
-  if (!enabled || !url) return null;
-  return getDirectImageUrl(url);
-}
-
 /** Legacy signature compatibility for splash/preload logic */
 export function optimizedImage(url: string, _w?: number, _h?: number): Promise<string> {
   const direct = getDirectImageUrl(url);

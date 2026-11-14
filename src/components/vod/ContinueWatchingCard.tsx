@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HistoryItem } from '../../types/history';
-import { useCardImage, isImagePrecached, markImageLoaded, markImageFailed } from '../../lib/imageCache';
+import { isImagePrecached, markImageLoaded, markImageFailed } from '../../lib/imageCache';
+import { useCardImage } from '../../lib/useCardImage';
 
 interface ContinueWatchingCardProps {
   item: HistoryItem;

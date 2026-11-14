@@ -10,6 +10,7 @@ import { ProfilePickerScreen } from './screens/ProfilePickerScreen';
 import { localProfiles } from './lib/localProfiles';
 import { accountService, type UpdateInfo } from './services/accountService';
 import { updateService } from './services/updateService';
+import { cloudBackupService } from './services/cloudBackupService';
 import './styles/index.css';
 import './styles/textSize.css';
 import { installTvDebug } from './debug/tvDebug';
@@ -110,6 +111,11 @@ const Root: React.FC = () => {
     updateService.start();
     return updateService.subscribe(() => setTick(t => t + 1));
   }, []);
+
+  // Signed in: the lists, history and profiles go to the user's account, and come back on a TV that has none
+  useEffect(() => {
+    if (signedIn && !localCatalogMock) cloudBackupService.start();
+  }, [signedIn]);
 
   // A session revoked on the server (TV unlinked) restarts the app at the sign-in screen;
   // without a connection the saved session keeps working

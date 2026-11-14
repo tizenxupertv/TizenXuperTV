@@ -1,7 +1,7 @@
 import { AUTO_NEXT_MS, nextSignal } from '../lib/nextSignal';
 import { createRunGuard } from '../lib/runGuard';
 import { loadShaka } from '../lib/lazyScript';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import '../styles/sportsPlayer.css';
 import { MatchCrest, MatchHeader } from '../components/sports/MatchHeader';
 import { MatchDetailModal } from '../components/sports/MatchDetailModal';
@@ -9,6 +9,10 @@ import { scoreboardService } from '../services/scoreboardService';
 import { SportsEvent, SportsStream } from '../types/sports.ts';
 import { sportsService } from '../services/sportsService.ts';
 import { hostOf, logPlayback, setPlaybackContext } from '../lib/playbackLog';
+import { routeAt, routeCount, routeLabel } from '../lib/signalRoutes';
+
+/** A signal that shows no picture this long counts as failed (its other route or the next signal is tried) */
+const NO_PICTURE_MS = 20_000;
 import { backBufferFor } from '../lib/tvMemory';
 
 interface SportsPlayerFullscreenProps {
@@ -59,10 +63,16 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   // Which player and link the current signal uses, for the Perfil › Diagnóstico report
   const playerKindRef = useRef('');
   const startLoggedRef = useRef(false);
+  /** When the current route was started, for the time to the first picture in the log */
+  const startedAtRef = useRef(0);
+  // Route of the current signal being tried (0: its own address, then its alternates, lib/signalRoutes)
+  const [routeIdx, setRouteIdx] = useState(0);
+  useEffect(() => { setRouteIdx(0); }, [currentStreamIdx]);
 
   // The signal as listed, and the same one with its address worked out when it needs it (a signed link, a page to
   // read). That work happens here, when the signal is chosen, not for every signal of the match when it is opened
-  const listedStream = streams[currentStreamIdx] || streams[0];
+  const baseStream = streams[currentStreamIdx] || streams[0];
+  const listedStream = useMemo(() => (baseStream ? routeAt(baseStream, routeIdx) : baseStream), [baseStream, routeIdx]);
   const [resolved, setResolved] = useState<{ from: SportsStream; stream: SportsStream } | null>(null);
   const resolving = sportsService.needsResolving(listedStream) && !(resolved && resolved.from === listedStream);
   useEffect(() => {
@@ -74,6 +84,10 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     return () => { alive = false; };
   }, [listedStream]);
   const currentStream = resolved && resolved.from === listedStream ? resolved.stream : listedStream;
+  // The next two signals are worked out meanwhile (EPIC+ only), so the switch to them, by hand or after a failure, is quick
+  useEffect(() => {
+    sportsService.prepareStreams(streams.slice(currentStreamIdx + 1, currentStreamIdx + 3));
+  }, [streams, currentStreamIdx]);
   const versus = !!event.away && event.away.trim().toLowerCase() !== event.home.trim().toLowerCase();
   const score = versus ? scoreboardService.findScore(event.home, event.away) : null;
 
@@ -182,6 +196,14 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       : isDash && shaka?.Player ? `Shaka${currentStream.drmApi ? ' ClearKey' : ''}`
       : isHls && Hls?.isSupported?.() ? 'HLS.js' : 'HTML5';
     startLoggedRef.current = false;
+    startedAtRef.current = Date.now();
+    logPlayback({ kind: 'info', player: playerKindRef.current, detail: `prueba ${routeLabel(baseStream, routeIdx, hostOf(streamUrl))}`, host: hostOf(streamUrl) });
+    // Answering but no picture (a link that responds is not a signal that plays): give up on this route
+    const noPicture = setTimeout(() => {
+      if (!startLoggedRef.current) showError(`Sin imagen en ${NO_PICTURE_MS / 1000} s (${currentStream.name})`);
+    }, NO_PICTURE_MS);
+    // (its error goes through the run guard, so it is ignored once another signal or route has started)
+    void noPicture;
     setPlaybackContext({
       channel: versus ? `${event.home} vs ${event.away}` : event.home,
       category: event.league ? `Deportes · ${event.league}` : 'Deportes',
@@ -353,14 +375,21 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
   useEffect(() => {
     if (isBuffering || error || startLoggedRef.current || !currentStream?.url) return;
     startLoggedRef.current = true;
-    logPlayback({ kind: 'start', player: playerKindRef.current, detail: 'reproduciendo', host: hostOf(currentStream.url) });
+    const ms = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
+    logPlayback({ kind: 'start', player: playerKindRef.current, detail: `reproduciendo · primera imagen en ${ms} ms · ${routeLabel(baseStream, routeIdx, hostOf(currentStream.url))}`, host: hostOf(currentStream.url) });
   }, [isBuffering, error, currentStream]);
 
   // A failed signal: mark it and open the list on the next one that has not failed
   useEffect(() => {
     errorRef.current = error;
     if (!error) return;
-    logPlayback({ kind: 'error', player: playerKindRef.current, detail: error, host: hostOf(currentStream?.url) });
+    logPlayback({ kind: 'error', player: playerKindRef.current, detail: `${error} · ${routeLabel(baseStream, routeIdx, hostOf(currentStream?.url))}`, host: hostOf(currentStream?.url) });
+    // The same channel has another route: try it before marking the signal failed or moving to another one
+    if (routeIdx + 1 < routeCount(baseStream)) {
+      logPlayback({ kind: 'info', player: playerKindRef.current, detail: `cambia a la ruta ${routeIdx + 2} de «${baseStream.name}»` });
+      setRouteIdx(routeIdx + 1);
+      return;
+    }
     setFailed(prev => new Set(prev).add(currentStreamIdx));
     if (streams.length > 1) {
       const next = nextSignal(streams.length, currentStreamIdx, failed);
@@ -373,6 +402,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
           autoNextTimerRef.current = null;
           setAutoNext(null);
           setShowServerMenu(false);
+          logPlayback({ kind: 'info', player: playerKindRef.current, detail: `pasa a «${streams[next].name}» tras fallar «${baseStream.name}»` });
           setCurrentStreamIdx(next);
         }, AUTO_NEXT_MS);
       }
@@ -505,7 +535,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         <div className="spp-error">
           <MatchHeader event={event} />
           <div className="spp-error-msg">Esta señal no está disponible</div>
-          <div className="spp-error-detail">Transmisión deportiva en fase beta · {error}</div>
+          <div className="spp-error-detail">Transmisión deportiva · {error}</div>
           {streams.length > 1 && showServerMenu ? (
             <>
               <div className="spp-hint">

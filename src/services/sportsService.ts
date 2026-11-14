@@ -22,6 +22,23 @@ export class SportsService {
   private lastFetchTime: number = 0;
   private fetchPromise: Promise<SportsEvent[]> | null = null;
   private streamsCache: Map<string, { streams: SportsStream[]; time: number }> = new Map();
+  /** Other sources whose signals are worked out when picked (the EPIC+ tab), by their tokenApi */
+  private resolvers = new Map<string, (stream: SportsStream) => Promise<SportsStream>>();
+
+  public registerResolver(tokenApi: string, resolve: (stream: SportsStream) => Promise<SportsStream>): void {
+    this.resolvers.set(tokenApi, resolve);
+  }
+
+  /**
+   * Works out ahead the next signals of a registered source (EPIC+), so switching to them does not wait for it.
+   * The main agenda's signals are not prepared: their links are signed for minutes and resolved when picked.
+   */
+  public prepareStreams(streams: SportsStream[]): void {
+    for (const s of streams) {
+      const resolve = s && s.tokenApi ? this.resolvers.get(s.tokenApi) : undefined;
+      if (resolve) resolve(s).catch(() => {});
+    }
+  }
 
   public setBaseUrl(url: string) {
     this.baseUrl = url.endsWith('/') ? url : `${url}/`;
@@ -209,6 +226,8 @@ export class SportsService {
   public async resolveStream(stream: SportsStream): Promise<SportsStream> {
     if (!this.needsResolving(stream)) return stream;
     try {
+      const other = this.resolvers.get(stream.tokenApi || '');
+      if (other) return await other(stream);
       return await this.resolveDynamicStream(stream);
     } catch {
       return stream;

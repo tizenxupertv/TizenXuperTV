@@ -1130,6 +1130,8 @@ html, body {
 }
 
 .live-cat-vlist {
+  /* The rows' offsetParent: the category list scrolls by each row's real place (LiveTvView scrollRowIntoView) */
+  position: relative;
   flex: 1;
   overflow-y: auto;
   scrollbar-width: none;
@@ -1256,6 +1258,25 @@ html, body {
   pointer-events: none;
 }
 
+.live-signal-error-icon {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+.live-signal-error-icon.is-region,
+.live-signal-error-icon.is-isp {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.38);
+}
+
 .live-signal-error-title {
   color: #ffffff;
   font-size: 24px;
@@ -1263,9 +1284,23 @@ html, body {
 }
 
 .live-signal-error-desc {
+  max-width: 620px;
   color: #94a3b8;
   font-size: 16px;
   font-weight: 600;
+  line-height: 1.45;
+}
+
+/* What to do: a quiet pill under the explanation */
+.live-signal-error-hint {
+  margin-top: 6px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .live-channel-card {
@@ -5143,6 +5178,19 @@ html.xuper-vod-avplay .app-root,
   background-color: transparent !important;
 }
 
+/* Live on AVPlay (playerService): the same see-through page, also through the black fullscreen layers, or the
+   channel plays its sound behind them with no picture */
+html.xuper-live-avplay,
+html.xuper-live-avplay body,
+html.xuper-live-avplay #root,
+html.xuper-live-avplay .app-root,
+html.xuper-live-avplay .live-tv-view-2col,
+html.xuper-live-avplay .live-grand-preview-box,
+html.xuper-live-avplay .live-grand-preview-box .live-preview-video {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
 /* ===== VOD player overlay (Apple TV style) ===== */
 .vp-osd {
   position: absolute;
@@ -8266,7 +8314,7 @@ html.xuper-vod-avplay .app-root,
 .pf-toast.is-error { background: #7f1d1d; color: #fee2e2; }
 
 /* ==========================================================================
-   Perfil › Diagnóstico: one row of actions, the verdict, and a card per check
+   Perfil › Diagnóstico: one row of actions, the verdict, and a card per check (two rows of three)
    ========================================================================== */
 .pf-diag-actions { display: flex; gap: 16px; margin-top: 22px; flex-wrap: wrap; }
 .pf-diag-verdict { margin-top: 22px; font-size: 17px; font-weight: 700; max-width: 1100px; }
@@ -8278,13 +8326,13 @@ html.xuper-vod-avplay .app-root,
   margin-top: 18px;
 }
 .pf-diag-cards > * {
-  flex: 1 1 calc(25% - 12px);
+  flex: 1 1 calc(33.333% - 11px);
   min-width: 240px;
 }
 @supports (display: grid) {
   .pf-diag-cards {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
   .pf-diag-cards > * {
     flex: none;
@@ -9271,3 +9319,18 @@ html.legacy-video .live-tuning-spinner {
 .maintenance-card p { color: #e2e8f0; font-size: 25px; line-height: 1.45; margin: 0 auto 22px; max-width: 760px; }
 .maintenance-card span { color: #94a3b8; font-size: 18px; }
 html.legacy-video .maintenance-card { box-shadow: none; }
+
+/* EPIC+ channel in TV en vivo (LiveRows isEpicChannel): the same D+ badge as its matches in Deportes */
+.live-dplus {
+  flex-shrink: 0;
+  margin-left: 10px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: rgba(0, 229, 255, 0.16);
+  border: 1px solid rgba(0, 229, 255, 0.45);
+  color: #67e8f9;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+}

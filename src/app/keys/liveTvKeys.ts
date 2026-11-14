@@ -2,6 +2,7 @@ import { TvKey } from '../../hooks/useTvRemote';
 import { DEFAULT_LIVE_CATEGORIES } from '../../views/LiveTvView';
 import { isSameChannel } from '../../lib/channelKey';
 import { LiveTvState } from '../useLiveTv';
+import { SHOW_REPLAY } from '../../lib/liveFeatures';
 
 export type LiveTvKeysCtx = LiveTvState & {
   guardLiveCat: (catIndex: number, apply: () => void) => void;
@@ -158,12 +159,13 @@ export function handleLiveTvKeys(key: TvKey, ctx: LiveTvKeysCtx): boolean {
     }
     if (key === 'down') {
       if (liveTvFocus.btnIndex === 0) {
-        setLiveTvFocus(prev => ({ ...prev, btnIndex: 2 }));
+        // Replay hidden (lib/liveFeatures): down goes to Favorito
+        setLiveTvFocus(prev => ({ ...prev, btnIndex: SHOW_REPLAY ? 2 : 1 }));
       }
       return true;
     }
     if (key === 'left') {
-      if (liveTvFocus.btnIndex === 1) {
+      if (liveTvFocus.btnIndex === 1 && SHOW_REPLAY) {
         // Move from Favorito to Replay
         setLiveTvFocus(prev => ({ ...prev, btnIndex: 2 }));
       } else {

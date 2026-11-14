@@ -26,6 +26,39 @@ export interface MseVodSource {
   mime?: string;
   codec?: string;
   headers?: Record<string, string>;
+  /** The same file on the other CDNs the portal listed (magis-client.js), each with its own index and headers */
+  backupUrls?: Array<{ url: string; idxUrl?: string; headers?: Record<string, string> }>;
+}
+
+/** How many CDNs serve this title: the main one and its backups */
+export function mseSourceCount(res: MseVodSource): number {
+  return 1 + ((res.backupUrls && res.backupUrls.length) || 0);
+}
+
+/**
+ * The title as served by its `n`-th CDN (0: the main one), the CDNs after it left as its backups; null when it has
+ * no such CDN. A backup without headers of its own keeps the title's.
+ */
+export function mseSourceAt<T extends MseVodSource>(res: T, n: number): T | null {
+  if (n === 0) return res;
+  const backups = res.backupUrls || [];
+  const b = backups[n - 1];
+  if (!b || !b.url) return null;
+  return { ...res, url: b.url, idxUrl: b.idxUrl, headers: b.headers || res.headers, backupUrls: backups.slice(n) };
+}
+
+/** A same-CDN retry within this long of the previous one means the CDN is down: AVPlay is the last resort */
+export const MSE_RETRY_WINDOW_MS = 120000;
+
+/**
+ * What MSE does after a network failure while playing a title: the next CDN while there is one, then one retry of
+ * the same CDN (a 504 or a timeout usually passes), then AVPlay. AVPlay on Tizen 5.x cannot resume these files at
+ * the position (no duration), so falling to it costs the viewer the place in the title.
+ */
+export function mseNetworkAction(o: { cdnsLeft: number; lastRetryAt: number; now: number }): 'next-cdn' | 'retry' | 'avplay' {
+  if (o.cdnsLeft > 0) return 'next-cdn';
+  if (!o.lastRetryAt || o.now - o.lastRetryAt > MSE_RETRY_WINDOW_MS) return 'retry';
+  return 'avplay';
 }
 
 /** Why this title cannot play through MSE on this TV ('' when it can), for the playback log */
@@ -92,6 +125,8 @@ export interface VodPlaylist {
   playlist: string;
   duration: number;
   pieces: number;
+  /** CDNs passed over because they did not give the index: the playlist plays from mseSourceAt(src, skipped) */
+  skipped: number;
 }
 
 /** Downloads the index and groups its keyframes into pieces. `fetchFn` is injectable for tests */
@@ -113,9 +148,23 @@ async function loadIndexPieces(src: MseVodSource, fetchFn: typeof fetch): Promis
  * duration). `fetchFn` is injectable for tests.
  */
 export async function buildVodPlaylist(src: MseVodSource, fetchFn: typeof fetch = fetch): Promise<VodPlaylist> {
-  const segments = await loadIndexPieces(src, fetchFn);
-  const duration = segments.reduce((sum, s) => sum + s.duration, 0);
-  return { playlist: buildVodTsPlaylist({ segments }, src.url), duration, pieces: segments.length };
+  // A CDN without the index (404, a page that is not one, no answer) used to send the title to AVPlay, which cannot
+  // open these files on Tizen 4.0: the other CDNs of the title are asked first
+  const count = mseSourceCount(src);
+  let firstError: unknown = null;
+  for (let n = 0; n < count; n++) {
+    const source = mseSourceAt(src, n);
+    if (!source || !source.idxUrl) continue;
+    try {
+      const segments = await loadIndexPieces(source, fetchFn);
+      const duration = segments.reduce((sum, s) => sum + s.duration, 0);
+      return { playlist: buildVodTsPlaylist({ segments }, source.url), duration, pieces: segments.length, skipped: n };
+    } catch (e) {
+      if (firstError === null) firstError = e;
+    }
+  }
+  const why = (firstError as any)?.message || String(firstError || 'El título no tiene índice');
+  throw new Error(count > 1 ? `${why} (${count} CDN)` : why);
 }
 
 /**
