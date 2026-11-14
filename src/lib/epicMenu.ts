@@ -71,37 +71,36 @@ export function epicStartMillis(date: string, hour: string): number {
   return Number.isFinite(t) ? t : 0;
 }
 
-/** Options of a match, in the agenda's order: direct HLS links play as they are, the rest go through /resolve */
+/**
+ * Options of a match, in the agenda's order: direct HLS links play as they are, the rest go through /resolve.
+ * Shown as "Channel · Opción n" (numbered per channel); EPIC+'s source names (perelman, daddylive...) stay out.
+ */
 export function epicOptions(e: any): SportsStream[] {
-  const out: SportsStream[] = [];
+  const out: Array<SportsStream & { channel: string }> = [];
   const seen = new Set<string>();
-  const add = (ch: any, source: string) => {
+  const add = (ch: any) => {
     const url = String((ch && ch.url) || '').trim();
     if (!/^https?:\/\//.test(url) || seen.has(url) || /youtube\.com|youtu\.be/.test(url)) return;
     seen.add(url);
-    const name = String(ch.publico || ch.name || 'Opción').trim();
     const direct = /\.m3u8(\?|$)/.test(url);
     out.push({
-      name: source ? `${name} · ${source}` : name,
+      channel: String((ch && (ch.publico || ch.name)) || '').trim(),
+      name: '',
       url,
       scheme: 0,
       headers: {},
       tokenApi: direct ? undefined : EPIC_RESOLVE
     });
   };
-  for (const cocina of (e && e.cocinas) || []) {
-    for (const ch of (cocina && cocina.canales) || []) add(ch, String(cocina.fuente || ''));
-  }
-  for (const k of ['channels', 'channels_alt', 'channels_sky']) for (const ch of (e && e[k]) || []) add(ch, '');
-  // The same channel from one source comes several times (other servers): number the repeats
-  const list = out.slice(0, MAX_OPTIONS);
-  const seenNames = new Map<string, number>();
-  for (const o of list) {
-    const n = (seenNames.get(o.name) || 0) + 1;
-    seenNames.set(o.name, n);
-    if (n > 1) o.name = `${o.name} (${n})`;
-  }
-  return list;
+  for (const cocina of (e && e.cocinas) || []) for (const ch of (cocina && cocina.canales) || []) add(ch);
+  for (const k of ['channels', 'channels_alt', 'channels_sky']) for (const ch of (e && e[k]) || []) add(ch);
+  const counts = new Map<string, number>();
+  return out.slice(0, MAX_OPTIONS).map(({ channel, ...o }) => {
+    const key = channel.toLowerCase();
+    const n = (counts.get(key) || 0) + 1;
+    counts.set(key, n);
+    return { ...o, name: channel ? `${channel} · Opción ${n}` : `Opción ${n}` };
+  });
 }
 
 /** The agenda as the app's events (hidden ones left out) */
