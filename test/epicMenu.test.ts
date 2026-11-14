@@ -89,6 +89,10 @@ test('epicOptions: a DaddyLive channel listed as page and as manifest is one opt
     ['Opción 1 · Fox Soccer Plus', 'https://edge.example/premium756/index.m3u8', undefined],
     ['Opción 2 · ESPN', 'https://pelota.example/e?r=1', EPIC_RESOLVE]
   ]);
+  // The page of the same channel stays as its alternate route
+  assert.deepEqual(opts[0].alternates, [{ url: 'https://dlive.example/stream/stream-756.php', tokenApi: EPIC_RESOLVE }]);
+  assert.equal(opts[1].alternates, undefined);
+  assert.equal(opts[0].source, 'daddylive');
 });
 
 test('epicOptions: the tiktok family goes first and its first option reads Recomendada', () => {
@@ -104,4 +108,9 @@ test('epicOptions: the tiktok family goes first and its first option reads Recom
   assert.equal(opts[0].url, 'https://edge.example/premium756/index.m3u8');
   // Without that family, no option is called recommended
   assert.equal(epicOptions({ cocinas: [{ familia: 'zohan', canales: [{ publico: 'ESPN', url: 'https://z.example/1' }] }] })[0].name, 'Opción 1 · ESPN');
+});
+
+test('epicOptionLabel: source names before the channel stay out', () => {
+  assert.equal(epicOptionLabel('Bix Sportv BR', 5), 'Opción 5 · Sportv BR');
+  assert.equal(epicOptionLabel('sportsonline · BR1 (português de Brasil)', 7), 'Opción 7 · BR1 (português de Brasil)');
 });
