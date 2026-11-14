@@ -17,7 +17,7 @@ interface ChannelRowProps {
 /** One channel of the live list. Memoized: a key press only re-renders the rows whose state changed */
 export const ChannelRow = React.memo<ChannelRowProps>(({ ch, idx, focused, tuned, fav, onTune, onFullscreen }) => {
   const initials = String(ch.name || 'TV').trim().slice(0, 2).toUpperCase();
-  const subtitle = ch.now || (/espn/i.test(ch.name) ? 'Señal experimental · Beta' : undefined);
+  const subtitle = ch.now;
   return (
     <div
       className={`live-channel-card ${focused ? 'is-focused' : ''} ${tuned ? 'is-active-channel' : ''}`}
