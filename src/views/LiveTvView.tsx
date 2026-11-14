@@ -1161,7 +1161,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           {/* The tuned channel does not answer: say so instead of a black box */}
           {tunedIsDown && (
             liveStatus.reason === 'region' ? (
-              <SignalError icon="region" title={REGION_BLOCKED_TITLE} text={REGION_BLOCKED_TEXT} hint="Prueba con otro canal" />
+              <SignalError icon="region" title={REGION_BLOCKED_TITLE} text={REGION_BLOCKED_TEXT} />
             ) : liveStatus.reason === 'isp' ? (
               <SignalError
                 icon="isp"
@@ -1174,14 +1174,12 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                 icon="signal"
                 title="Señal no disponible"
                 text="Las señales deportivas dependen de servidores externos y a veces dejan de transmitir."
-                hint="Prueba con otra señal de la lista"
               />
             ) : (
               <SignalError
                 icon="signal"
                 title="Señal no disponible"
                 text="Este canal no responde en este momento. Si no abre ninguno, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en la red de la TV."
-                hint="Prueba con otro canal"
               />
             )
           )}
