@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { VodItem } from '../../types/vod';
-import { useCardImage, isImagePrecached, markImageLoaded, markImageFailed } from '../../lib/imageCache';
+import { isImagePrecached, markImageLoaded, markImageFailed } from '../../lib/imageCache';
+import { useCardImage } from '../../lib/useCardImage';
 import { collectPosterAlternates } from '../../lib/searchArtwork';
 import { startImageTracking } from '../../lib/perfMonitor';
 
