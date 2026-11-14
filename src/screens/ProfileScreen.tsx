@@ -25,7 +25,7 @@ import { localProfiles } from '../lib/localProfiles';
 /** Perfil › Sobre nosotros: what the self-update is doing on this TV */
 function updateLine(s: UpdateStatus): string {
   if (!s.canSelfUpdate) return 'Esta TV no puede actualizarse sola: las versiones nuevas se instalan con Apps2Samsung.';
-  if (s.needsReinstall) return 'Hay una versión nueva que necesita una instalación nueva y limpia: desinstala la app e instálala de nuevo.';
+  if (s.needsReinstall) return 'Hay una versión nueva que no puede instalarse sola: instala su archivo .wgt encima de la que tienes, sin desinstalar (desinstalar borra tu lista, tu historial y tus perfiles).';
   if (s.downloaded) return `Versión ${s.downloaded} descargada: se usará la próxima vez que abras la app.`;
   const installed = s.running && s.running !== s.packaged ? ` · instalada ${s.packaged}` : '';
   const last = s.lastCheck && !s.lastCheck.error ? new Date(s.lastCheck.at) : null;
@@ -956,7 +956,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 ? 'Buscando actualizaciones…'
                 : updateResult === 'uptodate' ? 'Estás al día.'
                 : updateResult === 'downloaded' ? `Versión ${updateService.status().downloaded} descargada. Reinicia para estrenarla.`
-                : updateResult === 'reinstall' ? 'Hay una versión nueva que necesita una instalación nueva y limpia: desinstala la app e instálala de nuevo.'
+                : updateResult === 'reinstall' ? 'Hay una versión nueva que no puede instalarse sola: instala su archivo .wgt encima de la que tienes, sin desinstalar (desinstalar borra tu lista, tu historial y tus perfiles).'
                 : updateResult === 'error' ? 'No se pudo comprobar. Revisa la conexión e inténtalo de nuevo.'
                 : updateLine(updateService.status())}
             </div>
