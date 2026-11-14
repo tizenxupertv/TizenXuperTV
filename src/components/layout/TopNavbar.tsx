@@ -23,7 +23,6 @@ export const TABS: TabItem[] = [
   {
     id: 'deportes',
     label: 'DEPORTES',
-    badge: 'BETA',
     icon: (
       <svg viewBox="0 0 33 33" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2">
         <path d="M9 7h15v7a7.5 7.5 0 0 1-15 0V7z" />

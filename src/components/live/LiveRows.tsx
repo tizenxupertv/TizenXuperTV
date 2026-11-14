@@ -58,9 +58,9 @@ interface CategoryRowProps {
   onSelect?: (idx: number) => void;
 }
 
-/** Tag of a category, one rule for its row and for the header of its channels: flagged ones and the sports ones */
+/** Tag of a category, one rule for its row and for the header of its channels: only Deportes+ and ESPN are Beta */
 export function categoryBadge(cat: LiveCategory): string {
-  return cat.badge || (cat.isEspn || /deportes/i.test(cat.name) ? 'Beta' : '');
+  return cat.badge || (cat.isEspn || cat.isEpicSports ? 'Beta' : '');
 }
 
 /** One category of the live list (memoized like ChannelRow) */
