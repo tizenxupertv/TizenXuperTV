@@ -52,6 +52,10 @@ export interface SportsStream {
   drmApi?: string;
   headers: Record<string, string>;
   tokenApi?: string;
+  /** Other addresses of the same channel (EPIC+: a manifest and its page), tried before the next signal */
+  alternates?: Array<{ url: string; tokenApi?: string }>;
+  /** Where the signal comes from (EPIC+ family or source), for the playback log */
+  source?: string;
 }
 
 
