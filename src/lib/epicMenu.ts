@@ -72,23 +72,48 @@ export function epicOptionLabel(rawName: string, n: number): string {
   return parts.join(' · ');
 }
 
-/** Options of a match, in the agenda's order: direct HLS links play as they are, the rest go through /resolve */
+/**
+ * The same channel of one source under two addresses (docs/epic-pwa-api.md, "Selección y reproducción"): DaddyLive
+ * lists channel N as a direct manifest (`/premiumN/index.m3u8`) and as its page (`/stream/stream-N.php`)
+ */
+export function epicChannelKey(url: string): string {
+  const m = /\/premium(\d+)\/index\.m3u8/.exec(url) || /\/stream\/stream-(\d+)\.php/.exec(url);
+  return m ? `daddylive:${m[1]}` : '';
+}
+
+/**
+ * Options of a match, in the agenda's order: direct HLS links play as they are, the rest go through /resolve.
+ * A channel listed twice keeps one option, its direct manifest when it has one.
+ */
 export function epicOptions(e: any): SportsStream[] {
   const out: Array<SportsStream & { channel: string }> = [];
   const seen = new Set<string>();
+  const byChannel = new Map<string, SportsStream & { channel: string }>();
   const add = (ch: any) => {
     const url = String((ch && ch.url) || '').trim();
     if (!/^https?:\/\//.test(url) || seen.has(url) || /youtube\.com|youtu\.be/.test(url)) return;
     seen.add(url);
     const direct = /\.m3u8(\?|$)/.test(url);
-    out.push({
+    const key = epicChannelKey(url);
+    const twin = key ? byChannel.get(key) : undefined;
+    if (twin) {
+      // Keep the place of the first one; take the direct manifest if this is it
+      if (direct && twin.tokenApi) {
+        twin.url = url;
+        twin.tokenApi = undefined;
+      }
+      return;
+    }
+    const option = {
       channel: String((ch && (ch.publico || ch.name)) || '').trim(),
       name: '',
       url,
       scheme: 0,
       headers: {},
       tokenApi: direct ? undefined : EPIC_RESOLVE
-    });
+    };
+    if (key) byChannel.set(key, option);
+    out.push(option);
   };
   for (const cocina of (e && e.cocinas) || []) for (const ch of (cocina && cocina.canales) || []) add(ch);
   for (const k of ['channels', 'channels_alt', 'channels_sky']) for (const ch of (e && e[k]) || []) add(ch);
