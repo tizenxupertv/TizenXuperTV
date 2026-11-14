@@ -110,11 +110,6 @@ export function preloadCardNeighbors(
 }
 
 /** Returns the image URL synchronously without cascading re-renders */
-export function useCardImage(url: string, _w?: number, _h?: number, enabled = true): string | null {
-  if (!enabled || !url) return null;
-  return getDirectImageUrl(url);
-}
-
 /** Legacy signature compatibility for splash/preload logic */
 export function optimizedImage(url: string, _w?: number, _h?: number): Promise<string> {
   const direct = getDirectImageUrl(url);

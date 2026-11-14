@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { coverStatsLine } from '../lib/coverCache';
 import { PinMode } from '../lib/screenStack';
 import { VodItem } from '../types/vod';
 import { HistoryItem } from '../types/history';
@@ -201,6 +202,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       { at: now.getTime(), local, kind: 'info', channel: 'Ajustes', detail: settingsInfo },
       ...(caps ? [{ at: now.getTime(), local, kind: 'info', channel: 'Formatos del reproductor', detail: caps }] : []),
       ...(imgDiag ? [{ at: now.getTime(), local, kind: 'info', channel: 'Carátulas / CDN', detail: imgDiag }] : []),
+      { at: now.getTime(), local, kind: 'info', channel: 'Caché de carátulas', detail: coverStatsLine() },
       ...(speed ? [{
         at: now.getTime(), local, kind: 'info', channel: 'Velocidad de internet',
         detail: `${formatSpeed(speed.mbps)}${speed.latencyMs !== null ? ` · latencia ${speed.latencyMs} ms` : ''}`
