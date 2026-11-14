@@ -346,8 +346,9 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     });
   }, [lines]);
 
-  // Page offset
-  const pageOffset = contentFocus.line === 0 ? 0 : Math.max(0, layout[contentFocus.line] ? layout[contentFocus.line].top - 10 : 0);
+  // Page offset: the list starts at the top (live now, then today) while the categories have the focus, and follows
+  // the focused line inside the list
+  const pageOffset = focusArea !== 'content' || contentFocus.line === 0 ? 0 : Math.max(0, layout[contentFocus.line] ? layout[contentFocus.line].top - 10 : 0);
   useEffect(() => {
     if (trackRef.current) setTrackOffset(trackRef.current, 'y', pageOffset);
   }, [pageOffset]);
