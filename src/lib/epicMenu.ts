@@ -64,6 +64,8 @@ export function epicOptionLabel(rawName: string, n: number): string {
   let name = String(rawName || '').trim();
   const hd = /\(\s*hd\s*\)|\bhd\b/i.test(name);
   name = name.replace(/\(\s*hd\s*\)/ig, '').replace(/\s+/g, ' ').trim();
+  // Source names put before the channel ("Bix Sportv BR", "sportsonline · BR1")
+  name = name.replace(/^(bix|sportsonline|sportzonline)\b\s*[·:-]?\s*/i, '').trim();
   let channel = NOT_A_CHANNEL.test(name) ? '' : name;
   while (channel && PLACE_WORDS.test(channel)) channel = channel.replace(PLACE_WORDS, '').trim();
   const parts = [`Opción ${n}`];
@@ -93,7 +95,7 @@ export function epicOptions(e: any): SportsStream[] {
   const out: Option[] = [];
   const seen = new Set<string>();
   const byChannel = new Map<string, Option>();
-  const add = (ch: any, family = '') => {
+  const add = (ch: any, family = '', fuente = '') => {
     const url = String((ch && ch.url) || '').trim();
     if (!/^https?:\/\//.test(url) || seen.has(url) || /youtube\.com|youtu\.be/.test(url)) return;
     seen.add(url);
@@ -101,17 +103,23 @@ export function epicOptions(e: any): SportsStream[] {
     const key = epicChannelKey(url);
     const twin = key ? byChannel.get(key) : undefined;
     if (twin) {
-      // Keep the place of the first one; take the direct manifest if this is it
+      // One option per channel in the first one's place: the direct manifest first, the other address as its
+      // alternate route (the player tries it before the next option)
+      const other = direct && twin.tokenApi
+        ? { url: twin.url, tokenApi: twin.tokenApi }
+        : { url, tokenApi: direct ? undefined : EPIC_RESOLVE };
       if (direct && twin.tokenApi) {
         twin.url = url;
         twin.tokenApi = undefined;
       }
+      twin.alternates = (twin.alternates || []).concat(other);
       if (!twin.family) twin.family = family;
       return;
     }
     const option: Option = {
       channel: String((ch && (ch.publico || ch.name)) || '').trim(),
       family,
+      source: family || fuente || undefined,
       name: '',
       url,
       scheme: 0,
@@ -123,7 +131,7 @@ export function epicOptions(e: any): SportsStream[] {
   };
   for (const cocina of (e && e.cocinas) || []) {
     const family = String((cocina && cocina.familia) || '');
-    for (const ch of (cocina && cocina.canales) || []) add(ch, family);
+    for (const ch of (cocina && cocina.canales) || []) add(ch, family, String((cocina && cocina.fuente) || ''));
   }
   for (const k of ['channels', 'channels_alt', 'channels_sky']) for (const ch of (e && e[k]) || []) add(ch);
   const ranked = out.filter(o => o.family === RECOMMENDED_FAMILY).concat(out.filter(o => o.family !== RECOMMENDED_FAMILY));
