@@ -242,6 +242,21 @@ function fastScrollList(container: HTMLElement, targetIndex: number, itemPitch: 
   }
 }
 
+/**
+ * Keeps a row of a list whose rows are all in the DOM inside the visible area, by its real place and height: the
+ * category rows are not all the same height (the Beta ones are taller) and the list has its own padding, so a
+ * fixed pitch drifted and the last categories ended outside the panel. The list is the rows' offsetParent.
+ */
+function scrollRowIntoView(container: HTMLElement, row: HTMLElement | undefined, pad = 12) {
+  if (!row) return;
+  const top = row.offsetTop;
+  const bottom = top + row.offsetHeight;
+  const cTop = container.scrollTop;
+  const cHeight = container.clientHeight || 700;
+  if (top < cTop + pad) container.scrollTop = Math.max(0, top - pad);
+  else if (bottom > cTop + cHeight - pad) container.scrollTop = bottom - cHeight + pad;
+}
+
 const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   focus,
   isActiveTab = true,
@@ -390,7 +405,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         container.scrollTop = container.scrollHeight;
         return;
       }
-      fastScrollList(container, focus.catIndex, 48, 12);
+      scrollRowIntoView(container, container.children[focus.catIndex] as HTMLElement | undefined, 12);
     }
   }, [isFullscreen, isFocusActive, focus.area, focus.catIndex, categories.length]);
 
