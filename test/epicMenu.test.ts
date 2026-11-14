@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EPIC_RESOLVE, deviceTimeZone, epicMenuPath, epicOptionLabel, epicOptions, epicResolved, epicSport, epicStartMillis, epicTeams, parseEpicMenu } from '../src/lib/epicMenu.ts';
+import { EPIC_RESOLVE, deviceTimeZone, epicMenuPath, epicOptionLabel, epicOptions, epicResolved, epicStartMillis, epicTeams, parseEpicMenu } from '../src/lib/epicMenu.ts';
 
 // Shape of one event of /menu (13-nov-2026), trimmed
 const match = {
@@ -19,11 +19,7 @@ const match = {
   ]
 };
 
-test('epicSport and epicTeams read the agenda fields', () => {
-  assert.deepEqual(epicSport({ clave: 'futbol', nombre: 'Fútbol' }), { sport: 'football', label: 'Fútbol' });
-  assert.equal(epicSport({ clave: 'futbol-americano' }).sport, 'american_football');
-  assert.equal(epicSport({ clave: 'baloncesto' }).sport, 'basketball');
-  assert.equal(epicSport({ clave: 'curling', nombre: 'Curling' }).label, 'Curling');
+test('epicTeams reads the teams of a title', () => {
   assert.deepEqual(epicTeams('UEFA Nations League: Moldavia vs Kazajistán'), { home: 'Moldavia', away: 'Kazajistán' });
   assert.deepEqual(epicTeams('Gran Premio de Brasil'), { home: 'Gran Premio de Brasil', away: '' });
 });
@@ -44,6 +40,8 @@ test('parseEpicMenu: events with teams, logos, status and their options path', (
   const [ev] = parseEpicMenu({ events: [match, { ...match, id: 'x', oculto: true }] }, Date.parse('2026-11-13T18:00:00Z'));
   assert.equal(ev.id, 'epic-api_1528968');
   assert.equal(ev.home, 'Moldavia');
+  assert.equal(ev.sport, 'football_plus');
+  assert.equal(ev.sportLabel, 'Fútbol+');
   assert.equal(ev.status, 'finished');
   assert.equal(ev.linksPath, 'epic:api_1528968');
   assert.equal(ev.linkNames.length, 2);
