@@ -67,7 +67,7 @@ function untilLabel(ms: number, now: number): string {
 
 /** Badge of a Fútbol+ (EPIC+) match, so it is told apart from the same match in the main list */
 const PlusBadge: React.FC<{ ev: SportsEvent }> = ({ ev }) =>
-  ev.sport === 'football_plus' ? <span className="spb-plus">F+</span> : null;
+  ev.sport === 'football_plus' ? <span className="spb-plus">D+</span> : null;
 
 const isVersus = (e: SportsEvent) => !!e.away && e.away.trim().toLowerCase() !== e.home.trim().toLowerCase();
 const leagueOf = (e: SportsEvent) => (e.league.trim().toLowerCase() === e.home.trim().toLowerCase() ? e.sportLabel : e.league);
