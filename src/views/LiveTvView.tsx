@@ -11,6 +11,7 @@ import { channelKey, isSameChannel, normalizeChannels, realText } from '../lib/c
 import { ChannelRow, CategoryRow, categoryBadge, isEpicChannel } from '../components/live/LiveRows';
 import { OnScreenKeyboard, KbState, KB_INITIAL } from '../components/live/OnScreenKeyboard';
 import { CatchupModal } from '../components/live/CatchupModal';
+import { SHOW_REPLAY } from '../lib/liveFeatures';
 import { normalizeText } from '../utils/normalizeText';
 import { getChannelEntry, setChannelEntry } from '../lib/channelCache';
 import { pk } from '../lib/localProfiles';
@@ -256,6 +257,43 @@ function scrollRowIntoView(container: HTMLElement, row: HTMLElement | undefined,
   if (top < cTop + pad) container.scrollTop = Math.max(0, top - pad);
   else if (bottom > cTop + cHeight - pad) container.scrollTop = bottom - cHeight + pad;
 }
+
+const SIGNAL_ICONS: Record<'signal' | 'region' | 'isp', React.ReactNode> = {
+  // Signal bars crossed out
+  signal: (
+    <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M4 20v-3M9 20v-6M14 20v-9M19 20V5" />
+      <path d="M3 4l18 16" />
+    </svg>
+  ),
+  // A globe with a lock
+  region: (
+    <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <circle cx="11" cy="11" r="8" />
+      <path d="M3 11h16M11 3c2.5 2.6 2.5 13.4 0 16M11 3c-2.5 2.6-2.5 13.4 0 16" />
+      <rect x="15" y="15" width="7" height="6" rx="1.2" fill="#0b0f17" />
+      <path d="M16.6 15v-1.4a1.9 1.9 0 0 1 3.8 0V15" />
+    </svg>
+  ),
+  // A router with a cross
+  isp: (
+    <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <rect x="3" y="13" width="18" height="7" rx="2" />
+      <path d="M7 16.5h.01M11 16.5h.01M8 9.5a6 6 0 0 1 8 0M10.3 11.6a2.6 2.6 0 0 1 3.4 0" />
+      <path d="M17 3l4 4M21 3l-4 4" />
+    </svg>
+  )
+};
+
+/** Why the tuned channel does not play: an icon, a short title, one sentence, and what to do (hint) */
+const SignalError: React.FC<{ icon: keyof typeof SIGNAL_ICONS; title: string; text: string; hint?: string }> = ({ icon, title, text, hint }) => (
+  <div className="live-signal-error">
+    <div className={`live-signal-error-icon is-${icon}`}>{SIGNAL_ICONS[icon]}</div>
+    <div className="live-signal-error-title">{title}</div>
+    <div className="live-signal-error-desc">{text}</div>
+    {hint && <div className="live-signal-error-hint">{hint}</div>}
+  </div>
+);
 
 const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   focus,
@@ -1123,31 +1161,28 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           {/* The tuned channel does not answer: say so instead of a black box */}
           {tunedIsDown && (
             liveStatus.reason === 'region' ? (
-              <div className="live-signal-error">
-                <div className="live-signal-error-title">{REGION_BLOCKED_TITLE}</div>
-                <div className="live-signal-error-desc">{REGION_BLOCKED_TEXT}</div>
-              </div>
+              <SignalError icon="region" title={REGION_BLOCKED_TITLE} text={REGION_BLOCKED_TEXT} hint="Prueba con otro canal" />
             ) : liveStatus.reason === 'isp' ? (
-              <div className="live-signal-error">
-                <div className="live-signal-error-title">Tu proveedor de internet bloquea este canal</div>
-                <div className="live-signal-error-desc">
-                  En la TV ve a Configuración › General › Red › Estado de la red › Configuración de IP y fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8). Si sigue igual, prueba con otra red.
-                </div>
-              </div>
+              <SignalError
+                icon="isp"
+                title="Tu proveedor de internet bloquea este canal"
+                text="Fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8). Si sigue igual, prueba con otra red."
+                hint="Configuración › General › Red › Estado de la red › Configuración de IP"
+              />
             ) : (/espn/i.test(tunedChannel?.name || '') || /deportes/i.test(activeCategory.name)) ? (
-              <div className="live-signal-error">
-                <div className="live-signal-error-title">Señal no disponible (Transmisión Experimental)</div>
-                <div className="live-signal-error-desc">
-                  Las señales deportivas son experimentales y su estabilidad depende de servidores externos. Prueba con otra señal en la lista.
-                </div>
-              </div>
+              <SignalError
+                icon="signal"
+                title="Señal no disponible"
+                text="Las señales deportivas dependen de servidores externos y a veces dejan de transmitir."
+                hint="Prueba con otra señal de la lista"
+              />
             ) : (
-              <div className="live-signal-error">
-                <div className="live-signal-error-title">Señal no disponible</div>
-                <div className="live-signal-error-desc">
-                  Este canal no responde en este momento. Prueba con otro canal o, si no abre ninguno, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en la red de la TV.
-                </div>
-              </div>
+              <SignalError
+                icon="signal"
+                title="Señal no disponible"
+                text="Este canal no responde en este momento. Si no abre ninguno, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en la red de la TV."
+                hint="Prueba con otro canal"
+              />
             )
           )}
           
@@ -1434,7 +1469,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                       <span className="epg-time-badge">{displayChannel.time}</span>
                     )}
                     <div className="epg-top-right">
-                      <button
+                      {SHOW_REPLAY && <button
                         className={`epg-replay-badge-btn ${
                           isFocusActive && focus.area === 'preview_btns' && focus.btnIndex === 2 ? 'is-focused' : ''
                         }`}
@@ -1444,7 +1479,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                       >
                         <span className="catchup-replay-icon">↺</span>
                         <span>Replay</span>
-                      </button>
+                      </button>}
                       <button
                         className={`epg-fav-icon ${
                           isFocusActive && focus.area === 'preview_btns' && focus.btnIndex === 1 ? 'is-focused' : ''
