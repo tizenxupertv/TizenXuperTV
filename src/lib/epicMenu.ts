@@ -81,15 +81,19 @@ export function epicChannelKey(url: string): string {
   return m ? `daddylive:${m[1]}` : '';
 }
 
+/** EPIC+ source family the team wants first (`cocinas[].familia`): its option 1 reads "Recomendada" */
+export const RECOMMENDED_FAMILY = 'tiktok';
+
 /**
- * Options of a match, in the agenda's order: direct HLS links play as they are, the rest go through /resolve.
- * A channel listed twice keeps one option, its direct manifest when it has one.
+ * Options of a match: the recommended family first, the rest in the agenda's order. Direct HLS links play as they
+ * are, the rest go through /resolve. A channel listed twice keeps one option, its direct manifest when it has one.
  */
 export function epicOptions(e: any): SportsStream[] {
-  const out: Array<SportsStream & { channel: string }> = [];
+  type Option = SportsStream & { channel: string; family: string };
+  const out: Option[] = [];
   const seen = new Set<string>();
-  const byChannel = new Map<string, SportsStream & { channel: string }>();
-  const add = (ch: any) => {
+  const byChannel = new Map<string, Option>();
+  const add = (ch: any, family = '') => {
     const url = String((ch && ch.url) || '').trim();
     if (!/^https?:\/\//.test(url) || seen.has(url) || /youtube\.com|youtu\.be/.test(url)) return;
     seen.add(url);
@@ -102,10 +106,12 @@ export function epicOptions(e: any): SportsStream[] {
         twin.url = url;
         twin.tokenApi = undefined;
       }
+      if (!twin.family) twin.family = family;
       return;
     }
-    const option = {
+    const option: Option = {
       channel: String((ch && (ch.publico || ch.name)) || '').trim(),
+      family,
       name: '',
       url,
       scheme: 0,
@@ -115,9 +121,16 @@ export function epicOptions(e: any): SportsStream[] {
     if (key) byChannel.set(key, option);
     out.push(option);
   };
-  for (const cocina of (e && e.cocinas) || []) for (const ch of (cocina && cocina.canales) || []) add(ch);
+  for (const cocina of (e && e.cocinas) || []) {
+    const family = String((cocina && cocina.familia) || '');
+    for (const ch of (cocina && cocina.canales) || []) add(ch, family);
+  }
   for (const k of ['channels', 'channels_alt', 'channels_sky']) for (const ch of (e && e[k]) || []) add(ch);
-  return out.slice(0, MAX_OPTIONS).map(({ channel, ...o }, i) => ({ ...o, name: epicOptionLabel(channel, i + 1) }));
+  const ranked = out.filter(o => o.family === RECOMMENDED_FAMILY).concat(out.filter(o => o.family !== RECOMMENDED_FAMILY));
+  return ranked.slice(0, MAX_OPTIONS).map(({ channel, family, ...o }, i) => {
+    const label = epicOptionLabel(channel, i + 1);
+    return { ...o, name: i === 0 && family === RECOMMENDED_FAMILY ? `${label} · Recomendada` : label };
+  });
 }
 
 /** The agenda as the app's events (hidden ones left out) */
