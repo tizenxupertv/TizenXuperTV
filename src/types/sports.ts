@@ -2,6 +2,8 @@ export type SportCategory =
   | 'all'
   | 'live'
   | 'football'
+  /** EPIC+'s own football agenda (services/epicAgendaService.ts), apart from the main list */
+  | 'football_plus'
   | 'basketball'
   | 'american_football'
   | 'baseball'
@@ -50,6 +52,10 @@ export interface SportsStream {
   drmApi?: string;
   headers: Record<string, string>;
   tokenApi?: string;
+  /** Other addresses of the same channel (EPIC+: a manifest and its page), tried before the next signal */
+  alternates?: Array<{ url: string; tokenApi?: string }>;
+  /** Where the signal comes from (EPIC+ family or source), for the playback log */
+  source?: string;
 }
 
 

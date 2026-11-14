@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildVodPlaylist, canPlayVodWithMse, cdnHeaders, fileAudioLanguages, indexDuration, mseHlsConfig, mseUnsupportedReason, MSE_PLAYLIST_URL, playlistLoader, wantedAudioIndex, VOD_ENGINE_KEY } from '../src/lib/vodMseEngine.ts';
+import { buildVodPlaylist, canPlayVodWithMse, cdnHeaders, fileAudioLanguages, indexDuration, mseHlsConfig, mseNetworkAction, MSE_RETRY_WINDOW_MS, mseSourceAt, mseSourceCount, mseUnsupportedReason, MSE_PLAYLIST_URL, playlistLoader, wantedAudioIndex, VOD_ENGINE_KEY } from '../src/lib/vodMseEngine.ts';
 import { makeIdxg } from './helpers/idxg.ts';
 
 /** A TV window: MSE plays the given types, hls.js and the bridge factory are there */
@@ -137,4 +137,62 @@ test('resume goes in the hls.js start position; a short offset starts from the b
   assert.equal(mseHlsConfig(Hls, '', 1234).startPosition, 1234);
   assert.equal(mseHlsConfig(Hls, '', 3).startPosition, -1);
   assert.equal(mseHlsConfig(Hls, '', 0).backBufferLength, 20);
+});
+
+const withBackups = {
+  ...tsTitle,
+  url: 'https://a.cdn/vod/x_media.ts',
+  idxUrl: 'https://a.cdn/vod/x_idx.idxg',
+  headers: { 'Content-Auth': 'auth-a' },
+  backupUrls: [
+    { url: 'https://b.cdn/vod/x_media.ts', idxUrl: 'https://b.cdn/vod/x_idx.idxg', headers: { 'Content-Auth': 'auth-b' } },
+    { url: 'https://c.cdn/vod/x_media.ts', idxUrl: 'https://c.cdn/vod/x_idx.idxg', headers: { 'Content-Auth': 'auth-c' } }
+  ]
+};
+
+test('mseSourceAt: the title moved to its n-th CDN, the later ones left as its backups', () => {
+  assert.equal(mseSourceAt(withBackups, 0), withBackups);
+  const b: any = mseSourceAt(withBackups, 1);
+  assert.equal(b.url, 'https://b.cdn/vod/x_media.ts');
+  assert.equal(b.idxUrl, 'https://b.cdn/vod/x_idx.idxg');
+  assert.deepEqual(b.headers, { 'Content-Auth': 'auth-b' });
+  assert.equal(b.backupUrls.length, 1);
+  assert.equal(b.mime, tsTitle.mime);
+  assert.equal(mseSourceAt(withBackups, 3), null);
+  // A backup without its own headers keeps the title's
+  const plain: any = mseSourceAt({ ...withBackups, backupUrls: [{ url: 'https://d.cdn/m.ts', idxUrl: 'https://d.cdn/i.idxg' }] }, 1);
+  assert.deepEqual(plain.headers, { 'Content-Auth': 'auth-a' });
+  assert.equal(mseSourceCount(withBackups), 3);
+  assert.equal(mseSourceCount(tsTitle), 1);
+});
+
+test('an index the main CDN does not have is read from a backup, whose media and headers the playlist then uses', async () => {
+  const entries = Array.from({ length: 12 }, (_, i) => ({ off: i * 188000, ts: i * 1000 }));
+  const index = makeIdxg(entries, { total: 12 * 188000, durationMs: 12000 });
+  const asked: Array<{ url: string; auth: string }> = [];
+  const fetchFn: any = async (url: string, init: any) => {
+    asked.push({ url, auth: init.headers['Content-Auth'] });
+    if (url.startsWith('https://a.cdn')) return { ok: false, status: 404, headers: { get: () => null } };
+    if (url.startsWith('https://b.cdn')) return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array(300).buffer, headers: { get: () => null } };
+    return { ok: true, status: 200, arrayBuffer: async () => index.buffer, headers: { get: () => null } };
+  };
+  const res = await buildVodPlaylist(withBackups, fetchFn);
+  assert.equal(res.skipped, 2);
+  assert.match(res.playlist, /https:\/\/c\.cdn\/vod\/x_media\.ts/);
+  assert.deepEqual(asked.map(a => a.auth), ['auth-a', 'auth-b', 'auth-c']);
+});
+
+test('when no CDN has the index, the error says what the main one answered and how many were tried', async () => {
+  const fetchFn: any = async () => ({ ok: false, status: 404, headers: { get: () => null } });
+  await assert.rejects(buildVodPlaylist(withBackups, fetchFn), /índice HTTP 404 \(3 CDN\)/);
+});
+
+test('mseNetworkAction: next CDN first, then one retry of the same CDN, then AVPlay', () => {
+  const now = 1_000_000;
+  assert.equal(mseNetworkAction({ cdnsLeft: 2, lastRetryAt: 0, now }), 'next-cdn');
+  assert.equal(mseNetworkAction({ cdnsLeft: 0, lastRetryAt: 0, now }), 'retry');
+  // Failed again right after its retry: the CDN is down, AVPlay is the last resort
+  assert.equal(mseNetworkAction({ cdnsLeft: 0, lastRetryAt: now - 30_000, now }), 'avplay');
+  // A drop long after the last retry (the title played meanwhile) gets its own retry
+  assert.equal(mseNetworkAction({ cdnsLeft: 0, lastRetryAt: now - MSE_RETRY_WINDOW_MS - 1, now }), 'retry');
 });

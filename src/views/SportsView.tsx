@@ -7,6 +7,7 @@ import '../styles/sports.css';
 import { MatchHeader } from '../components/sports/MatchHeader';
 import { MatchDetailModal } from '../components/sports/MatchDetailModal';
 import { setTrackOffset } from '../utils/scrollHelper';
+import { isPlus, plusFirst, withoutPlusDuplicates } from '../lib/sportsPlus';
 
 /**
  * Deportes tab: vertical sport categories sidebar on left, live row with scores and schedule grid by day on right.
@@ -63,6 +64,10 @@ function untilLabel(ms: number, now: number): string {
   return '';
 }
 
+/** Badge of a Fútbol+ (EPIC+) match, so it is told apart from the same match in the main list */
+const PlusBadge: React.FC<{ ev: SportsEvent }> = ({ ev }) =>
+  ev.sport === 'football_plus' ? <span className="spb-plus">D+</span> : null;
+
 const isVersus = (e: SportsEvent) => !!e.away && e.away.trim().toLowerCase() !== e.home.trim().toLowerCase();
 const leagueOf = (e: SportsEvent) => (e.league.trim().toLowerCase() === e.home.trim().toLowerCase() ? e.sportLabel : e.league);
 
@@ -88,6 +93,7 @@ const LiveCard = React.memo<CardProps>(({ ev, focused, score: s, onOpen }) => {
     <div className={`spb-live-card ${focused ? 'spb-focus' : ''}`} onClick={() => onOpen(ev)}>
       <div className="spb-live-top">
         <span className="spb-league">{leagueOf(ev)}</span>
+        <PlusBadge ev={ev} />
         <span className="spb-live-tag"><span className="spb-dot" />{s && s.state === 'live' && s.periodDetail ? s.periodDetail : 'EN VIVO'}</span>
       </div>
       {vs ? (
@@ -114,7 +120,7 @@ const GridCard = React.memo<CardProps & { now: number }>(({ ev, focused, score: 
         <span className={`spb-when ${done ? 'is-done' : ''}`}>{done ? 'Final' : until}</span>
       </div>
       <div className="spb-card-body">
-        <div className="spb-league is-small">{leagueOf(ev)}</div>
+        <div className="spb-league-row"><span className="spb-league is-small">{leagueOf(ev)}</span><PlusBadge ev={ev} /></div>
         {vs ? (
           <>
             <div className="spb-team-line is-small">
@@ -155,11 +161,22 @@ interface Props {
   paused?: boolean;
   onFocusHeader: () => void;
   onPlayEventStream: (event: SportsEvent, streamIndex: number, streams: SportsStream[]) => void;
+  /** Where the agenda and the options come from: Deportes (default) or the EPIC+ trial tab */
+  source?: SportsSource;
 }
 
-export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onFocusHeader, onPlayEventStream }) => {
-  const [events, setEvents] = useState<SportsEvent[]>(() => sportsService.peekEvents());
-  const [loading, setLoading] = useState(() => sportsService.peekEvents().length === 0);
+/** What the view reads from a sports source */
+export interface SportsSource {
+  peekEvents(): SportsEvent[];
+  getEvents(force?: boolean): Promise<SportsEvent[]>;
+  getStreams(linksPath: string): Promise<SportsStream[]>;
+}
+
+export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onFocusHeader, onPlayEventStream, source = sportsService }) => {
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
+  const [events, setEvents] = useState<SportsEvent[]>(() => source.peekEvents());
+  const [loading, setLoading] = useState(() => source.peekEvents().length === 0);
   const [error, setError] = useState(false);
   const [sport, setSport] = useState<SportCategory>('all');
   const [focusArea, setFocusArea] = useState<'sidebar' | 'content'>('sidebar');
@@ -182,11 +199,11 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
   const lastKeyAtRef = useRef(0);
 
   const load = useCallback(async (force = false) => {
-    const shown = force ? [] : sportsService.peekEvents();
+    const shown = force ? [] : sourceRef.current.peekEvents();
     setError(false);
     if (!shown.length) setLoading(true);
     try {
-      setEvents(await sportsService.getEvents(force));
+      setEvents(await sourceRef.current.getEvents(force));
       loadedAtRef.current = Date.now();
     } catch (e) {
       if (!shown.length) setError(true);
@@ -207,7 +224,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
       if (document.hidden || pausedRef.current) return;
       if (nowMs - loadedAtRef.current < RELOAD_EVERY_MS || nowMs - lastKeyAtRef.current < RELOAD_IDLE_MS) return;
       loadedAtRef.current = nowMs;
-      sportsService.getEvents(true).then(list => { if (list.length) setEvents(list); }, () => {});
+      sourceRef.current.getEvents(true).then(list => { if (list.length) setEvents(list); }, () => {});
     }, RELOAD_CHECK_MS);
     return () => clearInterval(t);
   }, []);
@@ -253,21 +270,28 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     return status === e.status ? e : { ...e, status };
   }), [events, scores, now]);
 
+  // EPIC+ matches (D+) live in Fútbol and go first: a match in both agendas keeps only its D+ copy
+  const shown = useMemo(() => withoutPlusDuplicates(liveEvents), [liveEvents]);
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: liveEvents.length };
-    liveEvents.forEach(e => { c[e.sport] = (c[e.sport] || 0) + 1; });
+    const c: Record<string, number> = { all: shown.length };
+    shown.forEach(e => {
+      c[e.sport] = (c[e.sport] || 0) + 1;
+      if (isPlus(e)) c.football = (c.football || 0) + 1;
+    });
     return c;
-  }, [liveEvents]);
+  }, [shown]);
   const chips = useMemo(() => SPORTS.filter(s => s.id === 'all' || counts[s.id]), [counts]);
 
-  const filtered = useMemo(() => (sport === 'all' ? liveEvents : liveEvents.filter(e => e.sport === sport)), [liveEvents, sport]);
+  const filtered = useMemo(() => (sport === 'all' ? shown
+    : sport === 'football' ? shown.filter(e => e.sport === 'football' || isPlus(e))
+    : shown.filter(e => e.sport === sport)), [shown, sport]);
 
   const lines: Line[] = useMemo(() => {
-    const live = filtered.filter(e => e.status === 'live');
+    const live = filtered.filter(e => e.status === 'live').sort(plusFirst);
     const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
     const rest = filtered.filter(e => e.status === 'scheduled' || (e.status === 'finished' && e.startMillis >= todayStart))
       .sort((a, b) => (dayLabel(a.startMillis) === dayLabel(b.startMillis)
-        ? (a.status === 'finished' ? 1 : 0) - (b.status === 'finished' ? 1 : 0) || a.startMillis - b.startMillis
+        ? (a.status === 'finished' ? 1 : 0) - (b.status === 'finished' ? 1 : 0) || plusFirst(a, b)
         : a.startMillis - b.startMillis));
     const out: Line[] = [];
     if (live.length) out.push({ kind: 'live', events: live });
@@ -335,8 +359,9 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     });
   }, [lines]);
 
-  // Page offset
-  const pageOffset = contentFocus.line === 0 ? 0 : Math.max(0, layout[contentFocus.line] ? layout[contentFocus.line].top - 10 : 0);
+  // Page offset: the list starts at the top (live now, then today) while the categories have the focus, and follows
+  // the focused line inside the list
+  const pageOffset = focusArea !== 'content' || contentFocus.line === 0 ? 0 : Math.max(0, layout[contentFocus.line] ? layout[contentFocus.line].top - 10 : 0);
   useEffect(() => {
     if (trackRef.current) setTrackOffset(trackRef.current, 'y', pageOffset);
   }, [pageOffset]);
@@ -352,7 +377,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     setStreamFocus(0);
     setStreamsLoading(true);
     try {
-      const list = (await sportsService.getStreams(ev.linksPath)).filter(isPlayableStream);
+      const list = (await sourceRef.current.getStreams(ev.linksPath)).filter(isPlayableStream);
       if (list.length === 1) {
         setSelected(null);
         onPlayEventStream(ev, 0, list);
@@ -496,7 +521,6 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
               <span className="live-header-title">Categorías</span>
               <span className="live-header-sub">{chips.length} categorías</span>
             </div>
-            <span className="beta-pill">Beta</span>
           </div>
           <div className="live-cat-vlist" ref={sidebarRef}>
             {chips.map((c, i) => {
