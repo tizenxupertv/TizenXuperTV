@@ -273,3 +273,69 @@ test('subtitleList prefers srt/vtt over other formats, falls back to play.subtit
     { lang: 'en', url: 'https://sub.example.invalid/en.srt', format: 'srt' }
   ]);
 });
+
+test('vodCdns filters out sign_type cs (Android Ranger) and selects goog and cfl CDNs', () => {
+  const { client } = loadPortalClient(() => {});
+  const slbMock = {
+    cdn_list: [
+      {
+        tag: 'vod',
+        main_addr: 'xauf.z4tkqzx5z0.com',
+        url_list: [{ tag: 'free', sign_type: 'cs', url: '?sign_type=cs&token=cs_token' }]
+      },
+      {
+        tag: 'vod',
+        main_addr: 'schh.g65q0w35v.com',
+        url_list: [{ tag: 'free', sign_type: 'cs', url: '?sign_type=cs&token=cs_token2' }]
+      },
+      {
+        tag: 'vod',
+        main_addr: 'ptccloud.lsdwedsfsc.site',
+        spared_addr: 'ptccloud-bk.lsdwedsfsc.site',
+        url_list: [{ tag: 'free', sign_type: 'goog', url: '?sign_type=goog&token=goog_token' }]
+      },
+      {
+        tag: 'vod',
+        main_addr: 'cflcdn.example.com',
+        url_list: [{ tag: 'free', sign_type: 'cfl', url: '?sign_type=cfl&token=cfl_token' }]
+      }
+    ]
+  };
+
+  const picked = client.vodCdns(slbMock);
+  assert.equal(picked.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(picked[0].bases)), ['http://ptccloud.lsdwedsfsc.site', 'http://ptccloud-bk.lsdwedsfsc.site']);
+  assert.equal(picked[0].auth, '?sign_type=goog&token=goog_token');
+  assert.deepEqual(JSON.parse(JSON.stringify(picked[1].bases)), ['http://cflcdn.example.com']);
+  assert.equal(picked[1].auth, '?sign_type=cfl&token=cfl_token');
+});
+
+test('client identity and startPlayVOD payload send masmobile profile with 60291 and loginType 3', () => {
+  const { client, startPlayPayloads, pump } = createMockPortal(() => ({
+    name: 'Spider-Man: Un nuevo día',
+    episodeList: [{
+      contentId: '808605510',
+      totalMovieList: [{
+        quality: '1080P',
+        movieList: [{ contentId: '808605510_1080', encodeFormat: 'H265', videoFormat: 'ts', audioInfo: 'SPA', licenseList: [{ license: 'lic_1' }] }]
+      }]
+    }]
+  }));
+
+  let result: any = null;
+  client.resolve('808605510', null, { trackIndex: 0 }, (_err: any, res: any) => {
+    result = res;
+  });
+  pump();
+
+  assert.ok(result);
+  assert.equal(startPlayPayloads.length, 1);
+  const p = startPlayPayloads[0];
+  assert.equal(p.portalCode, 'masmobile');
+  assert.equal(p.appId, 'com.msandroid.mobile');
+  assert.equal(p.apkVersion, '60291');
+  assert.equal(p.sysVersion, '15');
+  assert.equal(p.loginType, '3');
+  assert.equal(p.model, 'SM-G998B');
+  assert.equal(p.hardwareInfo, 'exynos2100');
+});
