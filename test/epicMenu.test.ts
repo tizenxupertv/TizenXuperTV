@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EPIC_RESOLVE, epicOptions, epicResolved, epicSport, epicStartMillis, epicTeams, parseEpicMenu } from '../src/lib/epicMenu.ts';
+import { EPIC_RESOLVE, deviceTimeZone, epicMenuPath, epicOptions, epicResolved, epicSport, epicStartMillis, epicTeams, parseEpicMenu } from '../src/lib/epicMenu.ts';
 
 // Shape of one event of /menu (13-nov-2026), trimmed
 const match = {
@@ -65,4 +65,13 @@ test('epicOptions: repeated names get a number', () => {
     { name: 'ESPN 2', url: 'https://a.example/1' }, { name: 'ESPN 2', url: 'https://a.example/2' }, { name: 'ESPN 2', url: 'https://a.example/3' }
   ] }] }).map(o => o.name);
   assert.deepEqual(names, ['ESPN 2 · tvlibre', 'ESPN 2 · tvlibre (2)', 'ESPN 2 · tvlibre (3)']);
+});
+
+test('epicMenuPath asks the agenda in the TV zone, Bogotá when the TV does not say', () => {
+  assert.match(epicMenuPath('America/Mexico_City'), /tz=America%2FMexico_City&/);
+  assert.match(epicMenuPath(''), /tz=America%2FBogota&/);
+  assert.match(epicMenuPath('Europe/Madrid'), /^\/menu\?all=1&recetas=aparte&agenda=propia&v=9999&/);
+  assert.equal(deviceTimeZone({ DateTimeFormat: () => ({ resolvedOptions: () => ({ timeZone: 'America/Lima' }) }) }), 'America/Lima');
+  assert.equal(deviceTimeZone({ DateTimeFormat: () => ({ resolvedOptions: () => ({}) }) }), '');
+  assert.equal(deviceTimeZone(null), '');
 });
