@@ -7,6 +7,7 @@ import '../styles/sports.css';
 import { MatchHeader } from '../components/sports/MatchHeader';
 import { MatchDetailModal } from '../components/sports/MatchDetailModal';
 import { setTrackOffset } from '../utils/scrollHelper';
+import { isPlus, plusFirst, withoutPlusDuplicates } from '../lib/sportsPlus';
 
 /**
  * Deportes tab: vertical sport categories sidebar on left, live row with scores and schedule grid by day on right.
@@ -17,8 +18,8 @@ interface Score { homeScore: string; awayScore: string; state: string; periodDet
 
 const SPORTS: Array<{ id: SportCategory; label: string }> = [
   { id: 'all', label: 'Todos' },
-  { id: 'football', label: 'Fútbol' },
   { id: 'football_plus', label: 'Fútbol+' },
+  { id: 'football', label: 'Fútbol' },
   { id: 'basketball', label: 'Básquet' },
   { id: 'american_football', label: 'Fútbol americano' },
   { id: 'baseball', label: 'Béisbol' },
@@ -64,6 +65,10 @@ function untilLabel(ms: number, now: number): string {
   return '';
 }
 
+/** Badge of a Fútbol+ (EPIC+) match, so it is told apart from the same match in the main list */
+const PlusBadge: React.FC<{ ev: SportsEvent }> = ({ ev }) =>
+  ev.sport === 'football_plus' ? <span className="spb-plus">F+</span> : null;
+
 const isVersus = (e: SportsEvent) => !!e.away && e.away.trim().toLowerCase() !== e.home.trim().toLowerCase();
 const leagueOf = (e: SportsEvent) => (e.league.trim().toLowerCase() === e.home.trim().toLowerCase() ? e.sportLabel : e.league);
 
@@ -88,7 +93,7 @@ const LiveCard = React.memo<CardProps>(({ ev, focused, score: s, onOpen }) => {
   return (
     <div className={`spb-live-card ${focused ? 'spb-focus' : ''}`} onClick={() => onOpen(ev)}>
       <div className="spb-live-top">
-        <span className="spb-league">{leagueOf(ev)}</span>
+        <span className="spb-league"><PlusBadge ev={ev} />{leagueOf(ev)}</span>
         <span className="spb-live-tag"><span className="spb-dot" />{s && s.state === 'live' && s.periodDetail ? s.periodDetail : 'EN VIVO'}</span>
       </div>
       {vs ? (
@@ -115,7 +120,7 @@ const GridCard = React.memo<CardProps & { now: number }>(({ ev, focused, score: 
         <span className={`spb-when ${done ? 'is-done' : ''}`}>{done ? 'Final' : until}</span>
       </div>
       <div className="spb-card-body">
-        <div className="spb-league is-small">{leagueOf(ev)}</div>
+        <div className="spb-league is-small"><PlusBadge ev={ev} />{leagueOf(ev)}</div>
         {vs ? (
           <>
             <div className="spb-team-line is-small">
@@ -265,22 +270,28 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     return status === e.status ? e : { ...e, status };
   }), [events, scores, now]);
 
+  // Fútbol+ (EPIC+) goes first: a match in both agendas keeps only its Fútbol+ copy, which also counts in Fútbol
+  const shown = useMemo(() => withoutPlusDuplicates(liveEvents), [liveEvents]);
   const counts = useMemo(() => {
-    // Fútbol+ (EPIC+) repeats matches of the main list: only in its own category, not in Todos
-    const c: Record<string, number> = { all: liveEvents.filter(e => e.sport !== 'football_plus').length };
-    liveEvents.forEach(e => { c[e.sport] = (c[e.sport] || 0) + 1; });
+    const c: Record<string, number> = { all: shown.length };
+    shown.forEach(e => {
+      c[e.sport] = (c[e.sport] || 0) + 1;
+      if (isPlus(e)) c.football = (c.football || 0) + 1;
+    });
     return c;
-  }, [liveEvents]);
+  }, [shown]);
   const chips = useMemo(() => SPORTS.filter(s => s.id === 'all' || counts[s.id]), [counts]);
 
-  const filtered = useMemo(() => (sport === 'all' ? liveEvents.filter(e => e.sport !== 'football_plus') : liveEvents.filter(e => e.sport === sport)), [liveEvents, sport]);
+  const filtered = useMemo(() => (sport === 'all' ? shown
+    : sport === 'football' ? shown.filter(e => e.sport === 'football' || isPlus(e))
+    : shown.filter(e => e.sport === sport)), [shown, sport]);
 
   const lines: Line[] = useMemo(() => {
-    const live = filtered.filter(e => e.status === 'live');
+    const live = filtered.filter(e => e.status === 'live').sort(plusFirst);
     const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
     const rest = filtered.filter(e => e.status === 'scheduled' || (e.status === 'finished' && e.startMillis >= todayStart))
       .sort((a, b) => (dayLabel(a.startMillis) === dayLabel(b.startMillis)
-        ? (a.status === 'finished' ? 1 : 0) - (b.status === 'finished' ? 1 : 0) || a.startMillis - b.startMillis
+        ? (a.status === 'finished' ? 1 : 0) - (b.status === 'finished' ? 1 : 0) || plusFirst(a, b)
         : a.startMillis - b.startMillis));
     const out: Line[] = [];
     if (live.length) out.push({ kind: 'live', events: live });
