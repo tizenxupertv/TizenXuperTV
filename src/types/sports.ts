@@ -2,6 +2,8 @@ export type SportCategory =
   | 'all'
   | 'live'
   | 'football'
+  /** EPIC+'s own football agenda (services/epicAgendaService.ts), apart from the main list */
+  | 'football_plus'
   | 'basketball'
   | 'american_football'
   | 'baseball'
