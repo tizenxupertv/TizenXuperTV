@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyCopy, buildCopy, hasUserData, readCopy } from '../src/lib/cloudBackup.ts';
+import { SAVE_EVERY_MS, applyCopy, buildCopy, copyFingerprint, hasUserData, readCopy, shouldSave } from '../src/lib/cloudBackup.ts';
 
 function store(init: Record<string, string> = {}) {
   const data: Record<string, string> = { ...init };
@@ -47,4 +47,18 @@ test('readCopy keeps only known keys of the copy\'s profiles', () => {
   assert.deepEqual(Object.keys(copy!.keys), ['xuper_local_profile_v1']);
   assert.equal(readCopy({ v: 2, keys: {} }), null);
   assert.equal(readCopy(null), null);
+});
+
+test('shouldSave: only a changed copy, once a day, or at once before a new version', () => {
+  const now = 10 * SAVE_EVERY_MS;
+  assert.equal(shouldSave({ changed: false, savedAt: 0, now, newVersion: true }), false);
+  assert.equal(shouldSave({ changed: true, savedAt: 0, now, newVersion: false }), true);
+  assert.equal(shouldSave({ changed: true, savedAt: now - 3600_000, now, newVersion: false }), false);
+  assert.equal(shouldSave({ changed: true, savedAt: now - 3600_000, now, newVersion: true }), true);
+  assert.equal(shouldSave({ changed: true, savedAt: now - SAVE_EVERY_MS, now, newVersion: false }), true);
+});
+
+test('copyFingerprint tells copies apart', () => {
+  assert.equal(copyFingerprint('{"a":1}'), copyFingerprint('{"a":1}'));
+  assert.notEqual(copyFingerprint('{"a":1}'), copyFingerprint('{"a":2}'));
 });
