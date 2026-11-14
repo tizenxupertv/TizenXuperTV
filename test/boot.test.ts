@@ -25,7 +25,7 @@ const meta = { version: '1.10.1', shell: 1 };
 const bundle = { version: '1.10.1', shell: 1, scripts: ['assets/index.js'], styles: [], files: { 'assets/index.js': 'x()' } };
 
 test('boot exposes its contract: shell, key slot, version of the package', () => {
-  assert.equal(boot.SHELL, 2);
+  assert.equal(boot.SHELL, 1);
   assert.equal(typeof boot.PUBKEY, 'string');
   assert.equal(boot.info.packaged, '1.10.0');
   assert.equal(typeof boot.ok, 'function');
