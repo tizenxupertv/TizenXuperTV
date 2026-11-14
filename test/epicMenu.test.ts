@@ -35,7 +35,7 @@ test('epicStartMillis: the agenda hour is Bogotá time', () => {
 
 test('epicOptions: same link once, direct HLS plays as is, pages go through /resolve, no YouTube', () => {
   const opts = epicOptions(match);
-  assert.deepEqual(opts.map(o => o.name), ['ESPN 2 · tvlibre', 'DAZN CA · daddylive·stream']);
+  assert.deepEqual(opts.map(o => o.name), ['ESPN 2 · Opción 1', 'DAZN CA · Opción 1']);
   assert.equal(opts[0].tokenApi, EPIC_RESOLVE);
   assert.equal(opts[1].tokenApi, undefined);
 });
@@ -60,13 +60,13 @@ test('epicResolved: the address /resolve gives, with its Referer and Origin', ()
   assert.equal(epicResolved(opt, { stream: '' }), null);
 });
 
-test('epicOptions: repeated names get a number', () => {
-  const names = epicOptions({ cocinas: [{ fuente: 'tvlibre', canales: [
-    { name: 'ESPN 2', url: 'https://a.example/1' }, { name: 'ESPN 2', url: 'https://a.example/2' }, { name: 'ESPN 2', url: 'https://a.example/3' }
-  ] }] }).map(o => o.name);
-  assert.deepEqual(names, ['ESPN 2 · tvlibre', 'ESPN 2 · tvlibre (2)', 'ESPN 2 · tvlibre (3)']);
+test('epicOptions: each channel numbers its own options, unnamed ones are just options', () => {
+  const names = epicOptions({ cocinas: [
+    { fuente: 'tvlibre', canales: [{ name: 'TUDN', url: 'https://a.example/1' }, { name: 'FOX Sports 2', url: 'https://a.example/2' }] },
+    { fuente: 'perelman', canales: [{ publico: 'TUDN', name: 'x', url: 'https://b.example/1' }, { name: '', url: 'https://b.example/2' }] }
+  ] }).map(o => o.name);
+  assert.deepEqual(names, ['TUDN · Opción 1', 'FOX Sports 2 · Opción 1', 'TUDN · Opción 2', 'Opción 1']);
 });
-
 test('epicMenuPath asks the agenda in the TV zone, Bogotá when the TV does not say', () => {
   assert.match(epicMenuPath('America/Mexico_City'), /tz=America%2FMexico_City&/);
   assert.match(epicMenuPath(''), /tz=America%2FBogota&/);
