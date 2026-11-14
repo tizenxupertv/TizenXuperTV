@@ -18,7 +18,6 @@ interface Score { homeScore: string; awayScore: string; state: string; periodDet
 
 const SPORTS: Array<{ id: SportCategory; label: string }> = [
   { id: 'all', label: 'Todos' },
-  { id: 'football_plus', label: 'Fútbol+' },
   { id: 'football', label: 'Fútbol' },
   { id: 'basketball', label: 'Básquet' },
   { id: 'american_football', label: 'Fútbol americano' },
@@ -271,7 +270,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     return status === e.status ? e : { ...e, status };
   }), [events, scores, now]);
 
-  // Fútbol+ (EPIC+) goes first: a match in both agendas keeps only its Fútbol+ copy, which also counts in Fútbol
+  // EPIC+ matches (D+) live in Fútbol and go first: a match in both agendas keeps only its D+ copy
   const shown = useMemo(() => withoutPlusDuplicates(liveEvents), [liveEvents]);
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: shown.length };
