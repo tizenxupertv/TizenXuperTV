@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EPIC_RESOLVE, deviceTimeZone, epicMenuPath, epicOptionLabel, epicOptions, epicResolved, epicStartMillis, epicTeams, parseEpicMenu } from '../src/lib/epicMenu.ts';
+import { EPIC_RESOLVE, deviceTimeZone, epicChannelKey, epicMenuPath, epicOptionLabel, epicOptions, epicResolved, epicStartMillis, epicTeams, parseEpicMenu } from '../src/lib/epicMenu.ts';
 
 // Shape of one event of /menu (13-nov-2026), trimmed
 const match = {
@@ -74,4 +74,19 @@ test('epicMenuPath asks the agenda in the TV zone, Bogotá when the TV does not 
   assert.equal(deviceTimeZone({ DateTimeFormat: () => ({ resolvedOptions: () => ({ timeZone: 'America/Lima' }) }) }), 'America/Lima');
   assert.equal(deviceTimeZone({ DateTimeFormat: () => ({ resolvedOptions: () => ({}) }) }), '');
   assert.equal(deviceTimeZone(null), '');
+});
+
+test('epicOptions: a DaddyLive channel listed as page and as manifest is one option, the manifest', () => {
+  assert.equal(epicChannelKey('https://dlive.example/stream/stream-756.php'), 'daddylive:756');
+  assert.equal(epicChannelKey('https://edge.example/premium756/index.m3u8'), 'daddylive:756');
+  assert.equal(epicChannelKey('https://other.example/live.m3u8'), '');
+  const opts = epicOptions({ cocinas: [
+    { fuente: 'daddylive', canales: [{ publico: 'Fox Soccer Plus', url: 'https://dlive.example/stream/stream-756.php' }] },
+    { fuente: 'tvlibre', canales: [{ publico: 'ESPN', url: 'https://pelota.example/e?r=1' }] },
+    { fuente: 'daddylive·stream', canales: [{ publico: 'Fox Soccer Plus', url: 'https://edge.example/premium756/index.m3u8' }] }
+  ] });
+  assert.deepEqual(opts.map(o => [o.name, o.url, o.tokenApi]), [
+    ['Opción 1 · Fox Soccer Plus', 'https://edge.example/premium756/index.m3u8', undefined],
+    ['Opción 2 · ESPN', 'https://pelota.example/e?r=1', EPIC_RESOLVE]
+  ]);
 });
