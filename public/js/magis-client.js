@@ -1062,43 +1062,14 @@
         if (list[i].lang && subs.indexOf(list[i].lang) === -1) subs.push(list[i].lang);
       }
 
+      // Only what the tracks really have. The catalog also declares qualities ("1080p,720p,480p"), but the portal
+      // delivers the tracks of the account's tier (720p for a free one): offering the declared ones promised a
+      // 1080p that no track had, and choosing it changed nothing
       var qOrder = ['4k', '2160p', '1080p', '720p', '480p', '360p'];
-      function sortQualities(arr) {
-        arr.sort(function (x, y) {
-          var ix = qOrder.indexOf(x.toLowerCase());
-          var iy = qOrder.indexOf(y.toLowerCase());
-          if (ix === -1) ix = 99;
-          if (iy === -1) iy = 99;
-          return ix - iy;
-        });
-      }
-
-      var cid = trim(contentId);
-      var cachedItem = itemCache[cid] || (seriesContentId && itemCache[trim(seriesContentId)]);
-      var declared = (cachedItem && cachedItem.qualities) || [];
-      if (!declared.length && cachedItem && cachedItem.quality) {
-        declared = String(cachedItem.quality).split(',');
-      }
-
-      if ((!declared || !declared.length) && cid) {
-        detail(cid, function (dErr, dData) {
-          if (!dErr && dData && dData.item && dData.item.qualities) {
-            for (var k = 0; k < dData.item.qualities.length; k++) {
-              var qk = trim(dData.item.qualities[k]).toLowerCase();
-              if (qk && qualities.indexOf(qk) === -1) qualities.push(qk);
-            }
-            sortQualities(qualities);
-          }
-          callback(null, { audios: audios, qualities: qualities, subtitles: subs });
-        });
-        return;
-      }
-
-      for (var d = 0; d < declared.length; d++) {
-        var dq = trim(declared[d]).toLowerCase();
-        if (dq && qualities.indexOf(dq) === -1) qualities.push(dq);
-      }
-      sortQualities(qualities);
+      qualities.sort(function (x, y) {
+        var ix = qOrder.indexOf(x), iy = qOrder.indexOf(y);
+        return (ix === -1 ? 99 : ix) - (iy === -1 ? 99 : iy);
+      });
       callback(null, { audios: audios, qualities: qualities, subtitles: subs });
     });
   }
