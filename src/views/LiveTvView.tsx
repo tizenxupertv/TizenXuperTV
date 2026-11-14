@@ -12,6 +12,7 @@ import { ChannelRow, CategoryRow, categoryBadge, isEpicChannel } from '../compon
 import { OnScreenKeyboard, KbState, KB_INITIAL } from '../components/live/OnScreenKeyboard';
 import { CatchupModal } from '../components/live/CatchupModal';
 import { SHOW_REPLAY } from '../lib/liveFeatures';
+import { liveCategoryName, liveProgramLine } from '../lib/liveLabels';
 import { normalizeText } from '../utils/normalizeText';
 import { getChannelEntry, setChannelEntry } from '../lib/channelCache';
 import { pk } from '../lib/localProfiles';
@@ -523,7 +524,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         if (!err && Array.isArray(cats) && cats.length) {
           const adultOn = parentalService.isAdultEnabled();
           const formatted: LiveCategory[] = cats
-            .map(c => ({ id: c.id || c.columnId, name: c.name || c.title }))
+            .map(c => ({ id: c.id || c.columnId, name: liveCategoryName(c.name || c.title) }))
             // The adult category ("18+") exists only while the +18 section is on
             .filter(c => adultOn || !parentalService.isAdultCategory(c.name));
           // Find position of "Deportes" or insert after Favorites/Todos
@@ -1427,7 +1428,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                           <div className="nm">
                             {ch.name} {isFav && <span style={{ color: '#FFD60A', marginLeft: 8 }}>★</span>}
                           </div>
-                          {ch.now && <div className="epg">{ch.now}</div>}
+                          {liveProgramLine(ch.now) && <div className="epg">{liveProgramLine(ch.now)}</div>}
                         </div>
                         {isEpicChannel(ch) && <span className="live-dplus">D+</span>}
                       </div>
