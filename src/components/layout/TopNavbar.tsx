@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type TabId = 'tv' | 'deportes' | 'destacados' | 'peliculas' | 'series' | 'kids' | 'anime' | 'explorar' | 'adultos';
+export type TabId = 'tv' | 'deportes' | 'deportes-epic' | 'destacados' | 'peliculas' | 'series' | 'kids' | 'anime' | 'explorar' | 'adultos';
 
 export interface TabItem {
   id: TabId;
@@ -23,6 +23,18 @@ export const TABS: TabItem[] = [
   {
     id: 'deportes',
     label: 'DEPORTES',
+    badge: 'BETA',
+    icon: (
+      <svg viewBox="0 0 33 33" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2">
+        <path d="M9 7h15v7a7.5 7.5 0 0 1-15 0V7z" />
+        <path d="M9 10H5a3 3 0 0 0 3 3h1M24 10h4a3 3 0 0 1-3 3h-1" />
+        <path d="M16.5 21.5v5M11.5 26.5h10" />
+      </svg>
+    )
+  },
+  {
+    id: 'deportes-epic',
+    label: 'EPIC+',
     badge: 'BETA',
     icon: (
       <svg viewBox="0 0 33 33" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -125,6 +137,11 @@ export const ADULT_TAB: TabItem = {
 };
 
 /** The header's tabs: without the ones hidden in Perfil › Pestañas, plus "+18" when enabled */
+/** Tabs that show a sports agenda (Deportes and the EPIC+ trial) instead of catalog rows */
+export function isSportsTab(tab: TabId): boolean {
+  return tab === 'deportes' || tab === 'deportes-epic';
+}
+
 export function getTabs(adultEnabled: boolean, hidden: TabId[] = []): TabItem[] {
   const shown = TABS.filter(t => hidden.indexOf(t.id) < 0);
   return adultEnabled ? [...shown, ADULT_TAB] : shown;

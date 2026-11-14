@@ -4,6 +4,7 @@ import { pk } from '../lib/localProfiles';
 /** Tabs the user can show or hide in Perfil › Pestañas */
 export const HIDEABLE_TABS: Array<{ id: TabId; name: string }> = [
   { id: 'deportes', name: 'Deportes' },
+  { id: 'deportes-epic', name: 'EPIC+ (prueba)' },
   { id: 'kids', name: 'Kids' },
   { id: 'anime', name: 'Anime' }
 ];

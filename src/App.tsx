@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { TabId, getTabs } from './components/layout/TopNavbar';
+import { TabId, getTabs, isSportsTab } from './components/layout/TopNavbar';
+import { epicAgendaService } from './services/epicAgendaService';
 import { tabPrefs } from './services/tabPrefs';
 import { parentalService } from './services/parentalService';
 import { Header } from './components/layout/Header';
@@ -336,7 +337,7 @@ export const App: React.FC = () => {
 
   // Auto-rotate Hero showcase only when hero is visible at top (paused while browsing rows below to prevent background re-renders)
   useEffect(() => {
-    if (selectedTab === 'tv' || selectedTab === 'deportes' || activeVodPlayer || activeSportsPlayer || isFullscreenLive || isSearchOpen || activeDetailItem || stack.length > 0) return;
+    if (selectedTab === 'tv' || isSportsTab(selectedTab) || activeVodPlayer || activeSportsPlayer || isFullscreenLive || isSearchOpen || activeDetailItem || stack.length > 0) return;
     if (focusDomain === 'content' && destacadosFocus.area === 'row') return;
     const heroCount = Math.min(10, currentHeroItems.length);
     if (heroCount <= 1) return;
@@ -640,7 +641,7 @@ export const App: React.FC = () => {
       return handleLiveTvKeys(key, { ...live, guardLiveCat, returnToHeader });
     }
 
-    if (selectedTab === 'deportes') {
+    if (isSportsTab(selectedTab)) {
       return true;
     }
 
@@ -819,7 +820,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-root theme-apple-dark">
-      {catalog.catalogError && selectedTab !== 'tv' && selectedTab !== 'deportes' && (
+      {catalog.catalogError && selectedTab !== 'tv' && !isSportsTab(selectedTab) && (
         <div role="alert" className="network-status-toast is-offline">
           No se pudo cargar el catálogo. Vuelve a abrir la aplicación para reintentar.
         </div>
@@ -887,7 +888,8 @@ export const App: React.FC = () => {
       </div>
 
       {/* View: DEPORTES (Cartelera deportiva en vivo y transmisiones) */}
-      {selectedTab === 'deportes' && (
+      {/* EPIC+ is a trial of the same view with EPIC+'s own agenda (services/epicAgendaService.ts) */}
+      {isSportsTab(selectedTab) && (
         <div
           className="tab-pane-sports"
           style={{
@@ -896,6 +898,8 @@ export const App: React.FC = () => {
           }}
         >
           <SportsView
+            key={selectedTab}
+            source={selectedTab === 'deportes-epic' ? epicAgendaService : undefined}
             isFocusActive={focusDomain === 'content' && !activeSportsPlayer && !activeDetailItem && !activeVodPlayer}
             paused={!!activeSportsPlayer || !!activeDetailItem || !!activeVodPlayer}
             onFocusHeader={returnToHeader}
@@ -909,7 +913,7 @@ export const App: React.FC = () => {
 
       {/* View: VOD TABS (Destacados, Películas, Series, Kids, Anime, Explorar) */}
       {/* Stays mounted under the detail / player (hidden) so Back returns to the same row, card and scroll */}
-      {selectedTab !== 'tv' && selectedTab !== 'deportes' && (
+      {selectedTab !== 'tv' && !isSportsTab(selectedTab) && (
         <div
           className="tab-pane-vod"
           style={{ display: 'contents', visibility: activeDetailItem || activeVodPlayer ? 'hidden' : 'visible' }}
