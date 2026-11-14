@@ -92,3 +92,21 @@ export function applyCopy(store: KeyStore, copy: UserDataCopy): number {
   return written;
 }
 
+/** Copies go to the account at most this often, unless a new version is about to run */
+export const SAVE_EVERY_MS = 24 * 3600 * 1000;
+
+/** Short fingerprint of a copy, kept on the TV to know whether it changed since the last save */
+export function copyFingerprint(text: string): string {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  return `${text.length}:${(h >>> 0).toString(36)}`;
+}
+
+/**
+ * Whether to send the copy now: only when it changed since the last save, and then once a day at most, or at once
+ * when a new version is ready (`newVersion`), so the copy is up to date before the app restarts or is reinstalled
+ */
+export function shouldSave(o: { changed: boolean; savedAt: number; now: number; newVersion: boolean }): boolean {
+  if (!o.changed) return false;
+  return o.newVersion || o.now - o.savedAt >= SAVE_EVERY_MS;
+}

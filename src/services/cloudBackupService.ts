@@ -1,41 +1,62 @@
-import { applyCopy, buildCopy, hasUserData, readCopy } from '../lib/cloudBackup';
+import { applyCopy, buildCopy, copyFingerprint, hasUserData, readCopy, shouldSave } from '../lib/cloudBackup';
 import { accountService } from './accountService';
-import { historyService } from './historyService';
-import { favoritesService } from './favoritesService';
+import { updateService } from './updateService';
 
-/** A change is sent this long after the last one (several titles watched in a row make one save) */
-const SAVE_DELAY_MS = 60_000;
-/** Live favourites and settings change without an event: the copy is compared this often */
-const CHECK_EVERY_MS = 5 * 60_000;
-/** The first save waits for the app to settle after start */
-const FIRST_SAVE_MS = 30_000;
+/** Whether to save is decided this often, on the TV only (no request unless lib/cloudBackup shouldSave says so) */
+const CHECK_EVERY_MS = 15 * 60_000;
+/** The first check waits for the app to settle after start */
+const FIRST_CHECK_MS = 60_000;
 /** Set for the reload that follows a restore, so a restore that wrote nothing new cannot loop */
 const RESTORED_FLAG = 'xuper_cloud_restored';
+/** When the last copy was saved and its fingerprint, kept on the TV */
+const SAVED_KEY = 'xuper_cloud_saved_v1';
 
 let started = false;
-let lastSent = '';
-let timer: ReturnType<typeof setTimeout> | null = null;
+let saving = false;
 
-function save(): void {
-  timer = null;
-  if (!accountService.isSignedIn()) return;
-  let copy;
-  try { copy = buildCopy(localStorage); } catch (e) { return; }
-  // A TV with nothing yet never replaces the account's copy with an empty one
-  if (!hasUserData(localStorage)) return;
-  const text = JSON.stringify(copy);
-  if (text === lastSent) return;
-  accountService.saveUserData(copy).then(ok => { if (ok) lastSent = text; });
+function savedInfo(): { at: number; fp: string } {
+  try {
+    const v = JSON.parse(localStorage.getItem(SAVED_KEY) || 'null');
+    if (v && typeof v.at === 'number' && typeof v.fp === 'string') return v;
+  } catch (e) {}
+  return { at: 0, fp: '' };
 }
 
-function schedule(delay = SAVE_DELAY_MS): void {
-  if (timer) clearTimeout(timer);
-  timer = setTimeout(save, delay);
+function newVersionReady(): boolean {
+  const st = updateService.status();
+  return !!st.downloaded || !!st.needsReinstall;
+}
+
+/** Sends the copy when lib/cloudBackup shouldSave allows it: changed, and once a day or before a new version */
+function check(): void {
+  if (saving || !accountService.isSignedIn()) return;
+  let text = '';
+  let copy;
+  try {
+    // A TV with nothing yet never replaces the account's copy with an empty one
+    if (!hasUserData(localStorage)) return;
+    copy = buildCopy(localStorage);
+    text = JSON.stringify(copy);
+  } catch (e) {
+    return;
+  }
+  const fp = copyFingerprint(text);
+  const last = savedInfo();
+  if (!shouldSave({ changed: fp !== last.fp, savedAt: last.at, now: Date.now(), newVersion: newVersionReady() })) return;
+  saving = true;
+  accountService.saveUserData(copy).then(ok => {
+    saving = false;
+    if (ok) {
+      try { localStorage.setItem(SAVED_KEY, JSON.stringify({ at: Date.now(), fp })); } catch (e) {}
+    }
+  });
 }
 
 /**
  * Keeps the user's lists, history, profiles and live favourites in their Telegram account (bot /tv/data), and
- * puts them back on a TV that has none after signing in (a reinstall, a new TV). Called once the TV is signed in.
+ * puts them back on a TV that has none after signing in (a reinstall, a new TV). Light on the server: a copy is
+ * sent only when it changed, once a day at most, and at once when a new version is ready (before the restart
+ * or the reinstall it needs). Called once the TV is signed in.
  */
 export const cloudBackupService = {
   start(): void {
@@ -64,9 +85,9 @@ export const cloudBackupService = {
   },
 
   watch(): void {
-    historyService.subscribe(() => schedule());
-    favoritesService.subscribe(() => schedule());
-    setInterval(() => schedule(1000), CHECK_EVERY_MS);
-    schedule(FIRST_SAVE_MS);
+    // A new version found by the update check: save right away if the copy changed
+    updateService.subscribe(() => { if (newVersionReady()) check(); });
+    setInterval(check, CHECK_EVERY_MS);
+    setTimeout(check, FIRST_CHECK_MS);
   }
 };
