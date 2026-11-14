@@ -1130,6 +1130,8 @@ html, body {
 }
 
 .live-cat-vlist {
+  /* The rows' offsetParent: the category list scrolls by each row's real place (LiveTvView scrollRowIntoView) */
+  position: relative;
   flex: 1;
   overflow-y: auto;
   scrollbar-width: none;
