@@ -71,10 +71,28 @@ export function epicStartMillis(date: string, hour: string): number {
   return Number.isFinite(t) ? t : 0;
 }
 
+/** Country or region words EPIC+ adds after a channel name ("Caracol Colombia", "TUDN USA", "RDS CA") */
+const PLACE_WORDS = /\s+(colombia|m[eé]xico|mexico|usa|us|argentina|per[uú]|chile|ecuador|espa[nñ]a|latam|latinoam[eé]rica|ca|canada|uk|israel)$/i;
+/** Names of a source or of the match, not of a channel ("PirloTV Col-Chi 5", "Canal 2", "Opción 3", "Puente ip01") */
+const NOT_A_CHANNEL = /pirlo|opci[oó]n|^canal\s*\d|\b[a-z]{3}-[a-z]{3}\b|stream|servidor|server|puente|^\d+$/i;
+
 /**
- * Options of a match, in the agenda's order: direct HLS links play as they are, the rest go through /resolve.
- * Shown as "Channel · Opción n" (numbered per channel); EPIC+'s source names (perelman, daddylive...) stay out.
+ * Label of the n-th option: "Opción n", then the channel when the name is a real one (place words dropped, so
+ * "Caracol Colombia" reads "Caracol"), and HD when the name said so. Source and match names never show.
  */
+export function epicOptionLabel(rawName: string, n: number): string {
+  let name = String(rawName || '').trim();
+  const hd = /\(\s*hd\s*\)|\bhd\b/i.test(name);
+  name = name.replace(/\(\s*hd\s*\)/ig, '').replace(/\s+/g, ' ').trim();
+  let channel = NOT_A_CHANNEL.test(name) ? '' : name;
+  while (channel && PLACE_WORDS.test(channel)) channel = channel.replace(PLACE_WORDS, '').trim();
+  const parts = [`Opción ${n}`];
+  if (channel) parts.push(hd && !/\bhd\b/i.test(channel) ? `${channel} HD` : channel);
+  else if (hd) parts.push('HD');
+  return parts.join(' · ');
+}
+
+/** Options of a match, in the agenda's order: direct HLS links play as they are, the rest go through /resolve */
 export function epicOptions(e: any): SportsStream[] {
   const out: Array<SportsStream & { channel: string }> = [];
   const seen = new Set<string>();
@@ -94,13 +112,7 @@ export function epicOptions(e: any): SportsStream[] {
   };
   for (const cocina of (e && e.cocinas) || []) for (const ch of (cocina && cocina.canales) || []) add(ch);
   for (const k of ['channels', 'channels_alt', 'channels_sky']) for (const ch of (e && e[k]) || []) add(ch);
-  const counts = new Map<string, number>();
-  return out.slice(0, MAX_OPTIONS).map(({ channel, ...o }) => {
-    const key = channel.toLowerCase();
-    const n = (counts.get(key) || 0) + 1;
-    counts.set(key, n);
-    return { ...o, name: channel ? `${channel} · Opción ${n}` : `Opción ${n}` };
-  });
+  return out.slice(0, MAX_OPTIONS).map(({ channel, ...o }, i) => ({ ...o, name: epicOptionLabel(channel, i + 1) }));
 }
 
 /** The agenda as the app's events (hidden ones left out) */
