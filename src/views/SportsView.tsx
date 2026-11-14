@@ -521,7 +521,6 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
               <span className="live-header-title">Categorías</span>
               <span className="live-header-sub">{chips.length} categorías</span>
             </div>
-            <span className="beta-pill">Beta</span>
           </div>
           <div className="live-cat-vlist" ref={sidebarRef}>
             {chips.map((c, i) => {
