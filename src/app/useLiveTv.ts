@@ -6,6 +6,7 @@ import { DrawerArea, LiveLocation } from './types';
 import { getChannelEntry } from '../lib/channelCache';
 import { channelKey, cleanFavMap, isSameChannel, normalizeChannel, normalizeChannels } from '../lib/channelKey';
 import { pk } from '../lib/localProfiles';
+import { resumeLiveAtStart } from '../lib/resumeAfterUpdate';
 
 /** Live TV state: categories, channels, tuned channel, favorites and the fullscreen player/drawer */
 export function useLiveTv() {
@@ -78,7 +79,7 @@ export function useLiveTv() {
 
   // Fullscreen Live Player Mode
   const [isFullscreenLive, setIsFullscreenLive] = useState<boolean>(() => {
-    return new URLSearchParams(window.location.search).get('fullscreen') === '1';
+    return resumeLiveAtStart || new URLSearchParams(window.location.search).get('fullscreen') === '1';
   });
   const [showFullscreenGuide, setShowFullscreenGuide] = useState<boolean>(() => {
     return new URLSearchParams(window.location.search).get('drawer') === '1';

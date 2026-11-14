@@ -47,6 +47,7 @@ import { handleLiveTvKeys } from './app/keys/liveTvKeys';
 import { handleVodTabsKeys } from './app/keys/vodTabsKeys';
 import { getTrackOffset, setTrackOffset } from './utils/scrollHelper';
 import { updateService } from './services/updateService';
+import { markResumeLive, resumeLiveAtStart, wakeAction } from './lib/resumeAfterUpdate';
 import { UpdateReady } from './components/common/UpdateReady';
 import { pk } from './lib/localProfiles';
 import { ProfileMenu, type ProfileMenuAction } from './components/layout/ProfileMenu';
@@ -60,7 +61,8 @@ const HERO_IDLE_MS = 2 * 60 * 1000;
 
 export const App: React.FC = () => {
   // Read initial tab from URL if present (useful for deep-links & testing)
-  const initialTabParam = (new URLSearchParams(window.location.search).get('tab') as TabId) || 'destacados';
+  // After an update applied on a live channel (lib/resumeAfterUpdate.ts), the start goes back to TV en vivo
+  const initialTabParam = resumeLiveAtStart ? 'tv' : (new URLSearchParams(window.location.search).get('tab') as TabId) || 'destacados';
   const initialTabs = getTabs(false, tabPrefs.hidden());
   const validInitialTab = initialTabs.some(t => t.id === initialTabParam) ? initialTabParam : 'destacados';
   const initialTabIdx = initialTabs.findIndex(t => t.id === validInitialTab);
@@ -190,10 +192,23 @@ export const App: React.FC = () => {
   const isPlaying = !!activeVodPlayer || isFullscreenLive;
   const playingRef = useRef(isPlaying);
   playingRef.current = isPlaying;
-  // Back from another app or with the screen on again: apply it right away, unless a video is playing
+  const liveOnlyRef = useRef(false);
+  liveOnlyRef.current = isFullscreenLive && !activeVodPlayer;
+  // Back from another app or with the screen on again: apply it right away, unless a video is playing. A live channel
+  // left open while the TV was off for a long time is reopened after the reload (lib/resumeAfterUpdate.ts)
   useEffect(() => {
+    let hiddenAt = 0;
     const onVisible = () => {
-      if (!document.hidden && !playingRef.current && updateService.status().downloaded) window.location.reload();
+      if (document.hidden) { hiddenAt = Date.now(); return; }
+      const action = wakeAction({
+        downloaded: !!updateService.status().downloaded,
+        playing: playingRef.current,
+        liveOnly: liveOnlyRef.current,
+        awayMs: hiddenAt ? Date.now() - hiddenAt : 0
+      });
+      if (action === 'none') return;
+      if (action === 'reload_live') markResumeLive();
+      window.location.reload();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
