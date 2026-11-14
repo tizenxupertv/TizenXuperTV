@@ -9,8 +9,29 @@ import type { SportCategory, SportsEvent, SportsStream } from '../types/sports.t
 export const EPIC_RESOLVE = 'epic-resolve';
 /** linksPath prefix of an EPIC+ event: its options come from the agenda already downloaded */
 export const EPIC_LINKS_PREFIX = 'epic:';
-/** The agenda is asked in Bogotá time (UTC-5 all year) */
+/**
+ * Match hours always come in Lima / Bogotá time (UTC-5 all year, the server's `dia_lima`), whatever zone is asked:
+ * checked on 13-nov with Bogotá, Mexico City, Lima, New York and GMT-6 (same hours). The zone only picks which day is
+ * "today" and the country used to order the agenda (`pais_hora`). The app shows each start in the TV's own time.
+ */
 const AGENDA_OFFSET = '-05:00';
+const FALLBACK_ZONE = 'America/Bogota';
+
+/** IANA time zone of this TV ('' when the engine does not say) */
+export function deviceTimeZone(intl: any = typeof Intl !== 'undefined' ? Intl : undefined): string {
+  try {
+    const tz = intl && intl.DateTimeFormat ? intl.DateTimeFormat().resolvedOptions().timeZone : '';
+    return typeof tz === 'string' && /^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)*$/.test(tz) ? tz : '';
+  } catch {
+    return '';
+  }
+}
+
+/** The agenda request: full agenda, every option a current client can open, the TV's day and language */
+export function epicMenuPath(timeZone: string): string {
+  const tz = timeZone || FALLBACK_ZONE;
+  return `/menu?all=1&recetas=aparte&agenda=propia&v=9999&tz=${encodeURIComponent(tz)}&idioma=es`;
+}
 const MATCH_MS = 150 * 60 * 1000;
 const MAX_OPTIONS = 12;
 
