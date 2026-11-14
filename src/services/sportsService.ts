@@ -22,6 +22,12 @@ export class SportsService {
   private lastFetchTime: number = 0;
   private fetchPromise: Promise<SportsEvent[]> | null = null;
   private streamsCache: Map<string, { streams: SportsStream[]; time: number }> = new Map();
+  /** Other sources whose signals are worked out when picked (the EPIC+ tab), by their tokenApi */
+  private resolvers = new Map<string, (stream: SportsStream) => Promise<SportsStream>>();
+
+  public registerResolver(tokenApi: string, resolve: (stream: SportsStream) => Promise<SportsStream>): void {
+    this.resolvers.set(tokenApi, resolve);
+  }
 
   public setBaseUrl(url: string) {
     this.baseUrl = url.endsWith('/') ? url : `${url}/`;
@@ -209,6 +215,8 @@ export class SportsService {
   public async resolveStream(stream: SportsStream): Promise<SportsStream> {
     if (!this.needsResolving(stream)) return stream;
     try {
+      const other = this.resolvers.get(stream.tokenApi || '');
+      if (other) return await other(stream);
       return await this.resolveDynamicStream(stream);
     } catch {
       return stream;
