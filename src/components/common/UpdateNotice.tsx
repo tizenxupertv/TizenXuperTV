@@ -153,14 +153,14 @@ export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; cleanIn
           <h1 className="upd-notice-title">Ya salió TizenXuper TV {info.version}</h1>
           <p className="upd-notice-lead">
             {cleanInstall
-              ? `Tienes la ${current}. Esta versión cambia archivos base de la app y no puede instalarse sola: hace falta una instalación nueva y limpia.`
+              ? `Tienes la ${current}. Esta versión cambia archivos base de la app y no puede instalarse sola: instálala encima de la que tienes.`
               : `Tienes la ${current}. Actualízala para tener las últimas mejoras y correcciones.`}
           </p>
           {cleanInstall ? (
             <div className="upd-notice-steps">
-              <div className="upd-notice-step"><span className="tg-login-num">1</span><span><b>Desinstala</b> TizenXuper TV de tu televisor</span></div>
-              <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Haz una <b>instalación nueva y limpia</b> con la app TizenXuper TV para Android o con el paquete .wgt (la guía con capturas, en el QR, lo explica)</span></div>
-              <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Se borran la sesión, los perfiles y los favoritos de esta TV: inicia sesión de nuevo con Telegram</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">1</span><span>Descarga <b>TizenXuperTV.wgt</b> de esta versión del bot de Telegram (<b>Última versión</b>)</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Instálalo <b>encima</b> de la que tienes, con la app TizenXuper TV para Android o con Apps2Samsung. <b>No la desinstales</b>: desinstalar borra tu lista, tu historial y tus perfiles</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Tu lista, tus canales favoritos, tus perfiles y tu sesión se conservan</span></div>
             </div>
           ) : (
             <div className="upd-notice-steps">
