@@ -273,6 +273,32 @@ export function createAccountService(deps: AccountDeps) {
       }
     },
 
+    /** The copy of this user's app data kept in their account (lib/cloudBackup); null when none or unreachable */
+    async getUserData(): Promise<unknown | null> {
+      const s = session();
+      if (!s) return null;
+      try {
+        const res = await post('/tv/data/get', {}, s.token);
+        if (!res.ok) return null;
+        const body = await res.json();
+        return body && body.data ? body.data : null;
+      } catch (e) {
+        return null;
+      }
+    },
+
+    /** Saves this TV's copy of the user's app data in their account; false when it could not */
+    async saveUserData(data: object): Promise<boolean> {
+      const s = session();
+      if (!s) return false;
+      try {
+        const res = await post('/tv/data/save', { data }, s.token);
+        return res.ok;
+      } catch (e) {
+        return false;
+      }
+    },
+
     /** Forgets the session on this TV and asks the server to unlink it */
     async logout(): Promise<void> {
       const s = session();
