@@ -5,6 +5,7 @@ import { normalizeChannel } from '../lib/channelKey';
 import { hostOf, isIspBlockPage, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSequenceFixer } from '../lib/mediaSequence';
 import { shouldMoveLiveToAvPlay, videoCodecRejected } from '../lib/liveVideoFallback';
+import { unwrapPngTs } from '../lib/pngWrappedTs';
 import { isStaleLinkStatus } from '../lib/liveLink';
 import { epicSportsService } from './epicSportsService';
 
@@ -148,7 +149,7 @@ function liveOptimizedLoader(Hls: any): any {
   };
 }
 
-/** HLS.js fragment loader that strips the 67-byte fake PNG prefix from Epic Sports / Perelman segments */
+/** HLS.js fragment loader that takes the TS out of PNG-wrapped segments (Epic Sports / Perelman, lib/pngWrappedTs) */
 function epicFragmentLoader(Hls: any): any {
   const Base = Hls.DefaultConfig.loader;
   return class extends Base {
@@ -158,11 +159,8 @@ function epicFragmentLoader(Hls: any): any {
         ...callbacks,
         onSuccess: (response: any, stats: any, ctx: any, networkDetails: any) => {
           if (response && response.data instanceof ArrayBuffer) {
-            const bytes = new Uint8Array(response.data);
-            // Check PNG magic: 0x89 0x50 0x4E 0x47 and sync byte 0x47 at offset 67
-            if (bytes.length > 67 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[67] === 0x47) {
-              response.data = bytes.slice(67).buffer;
-            }
+            const unwrapped = unwrapPngTs(new Uint8Array(response.data));
+            if (unwrapped) response.data = unwrapped.slice().buffer;
           }
           onSuccess(response, stats, ctx, networkDetails);
         }

@@ -1711,7 +1711,33 @@
     });
   }
 
-  // Universal fragment loader that strips fake image/PNG prefixes (TikTok CDN / Perelman)
+  // The TS inside a PNG-wrapped segment (src/lib/pngWrappedTs.ts, same rules): the chunk that holds TS packets, else
+  // the first run of them; null when the bytes are not a PNG. A fixed 67-byte cut broke when the wrapper changed (14-nov)
+  function unwrapPngTs(b) {
+    var magic = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    if (b.length < 16) return null;
+    for (var m = 0; m < 8; m++) if (b[m] !== magic[m]) return null;
+    function looksLikeTs(at, len) {
+      if (len < 188 || b[at] !== 0x47) return false;
+      var checks = Math.min(5, Math.floor(len / 188));
+      for (var k = 1; k < checks; k++) if (b[at + k * 188] !== 0x47) return false;
+      return true;
+    }
+    var i = 8;
+    while (i + 12 <= b.length) {
+      var len = ((b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]) >>> 0;
+      var data = i + 8;
+      if (data + len > b.length) break;
+      if (looksLikeTs(data, len)) return b.subarray(data, data + len - (len % 188));
+      i = data + len + 4;
+    }
+    for (var at = 8; at + 376 < b.length; at++) {
+      if (looksLikeTs(at, b.length - at)) return b.subarray(at, at + Math.floor((b.length - at) / 188) * 188);
+    }
+    return null;
+  }
+
+  // Universal fragment loader that takes the TS out of PNG-wrapped segments (TikTok CDN / Perelman)
   function createUniversalFragmentLoader(HlsClass) {
     var Base = HlsClass.DefaultConfig.loader;
     return class extends Base {
@@ -1720,11 +1746,8 @@
         super.load(context, config, Object.assign({}, callbacks, {
           onSuccess: function (response, stats, ctx, networkDetails) {
             if (response && response.data instanceof ArrayBuffer) {
-              var bytes = new Uint8Array(response.data);
-              // Check PNG magic: 0x89 0x50 0x4E 0x47 and sync byte 0x47 at offset 67
-              if (bytes.length > 67 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[67] === 0x47) {
-                response.data = bytes.slice(67).buffer;
-              }
+              var unwrapped = unwrapPngTs(new Uint8Array(response.data));
+              if (unwrapped) response.data = unwrapped.slice().buffer;
             }
             onSuccess(response, stats, ctx, networkDetails);
           }
@@ -1769,7 +1792,10 @@
               if (h['Content-License']) xhr.setRequestHeader('Content-License', h['Content-License']);
               if (h['App']) xhr.setRequestHeader('App', h['App']);
               if (h['App-Version']) xhr.setRequestHeader('App-Version', h['App-Version']);
-              if (h['X-Pulsera']) xhr.setRequestHeader('X-Pulsera', h['X-Pulsera']);
+              // EPIC+'s session goes only to EPIC+'s own hosts, never to the image CDNs that carry its segments
+              if (h['X-Pulsera'] && /^https?:\/\/([^\/]*\.)?(playlatam\.site|epictvparaiphone\.top|epicplustv\.com)(:\d+)?(\/|$)/i.test(uStr)) {
+                xhr.setRequestHeader('X-Pulsera', h['X-Pulsera']);
+              }
             } catch (e) {
               console.error('[HLS xhrSetup error]', e);
             }
