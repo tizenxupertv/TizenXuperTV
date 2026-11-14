@@ -62,6 +62,10 @@ function next(): void {
 
 /** Call once the app is mounted: starts the progress and the safety timer */
 export function startSplash(): void {
+  // index.html (part of the installed package, never replaced by a self-update) wrote the installed version:
+  // the version running now is this code's own
+  const ver = document.querySelector('#xuper-splash .xs-version');
+  if (ver) ver.textContent = `v${__APP_VERSION__}`;
   fill(SCRIPTS_SHARE);
   next();
   setTimeout(hideSplash, Math.max(0, MAX_VISIBLE_MS - performance.now()));
