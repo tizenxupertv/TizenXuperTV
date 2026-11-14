@@ -1,5 +1,6 @@
 import React from 'react';
 import { LiveChannel, LiveCategory } from '../../types/channel';
+import { liveProgramLine } from '../../lib/liveLabels';
 
 /** A channel that comes from EPIC+ (services/epicSportsService.ts): it carries the D+ badge, like its matches in Deportes */
 export const isEpicChannel = (ch: LiveChannel) => String(ch.id || '').indexOf('epic-') === 0;
@@ -17,7 +18,7 @@ interface ChannelRowProps {
 /** One channel of the live list. Memoized: a key press only re-renders the rows whose state changed */
 export const ChannelRow = React.memo<ChannelRowProps>(({ ch, idx, focused, tuned, fav, onTune, onFullscreen }) => {
   const initials = String(ch.name || 'TV').trim().slice(0, 2).toUpperCase();
-  const subtitle = ch.now;
+  const subtitle = liveProgramLine(ch.now);
   return (
     <div
       className={`live-channel-card ${focused ? 'is-focused' : ''} ${tuned ? 'is-active-channel' : ''}`}
