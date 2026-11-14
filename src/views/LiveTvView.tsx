@@ -8,7 +8,7 @@ import { parentalService } from '../services/parentalService';
 import { useRenderCount } from '../debug/renderCount';
 import { useViewProfiler } from '../lib/perfMonitor';
 import { channelKey, isSameChannel, normalizeChannels, realText } from '../lib/channelKey';
-import { ChannelRow, CategoryRow, categoryBadge } from '../components/live/LiveRows';
+import { ChannelRow, CategoryRow, categoryBadge, isEpicChannel } from '../components/live/LiveRows';
 import { OnScreenKeyboard, KbState, KB_INITIAL } from '../components/live/OnScreenKeyboard';
 import { CatchupModal } from '../components/live/CatchupModal';
 import { normalizeText } from '../utils/normalizeText';
@@ -1381,6 +1381,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                           </div>
                           {ch.now && <div className="epg">{ch.now}</div>}
                         </div>
+                        {isEpicChannel(ch) && <span className="live-dplus">D+</span>}
                       </div>
                     );
                   })}
