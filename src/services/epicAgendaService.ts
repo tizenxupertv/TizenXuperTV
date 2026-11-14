@@ -1,10 +1,11 @@
 import type { SportsEvent, SportsStream } from '../types/sports.ts';
 import { fetchWithTimeout } from '../lib/fetchTimeout';
-import { EPIC_LINKS_PREFIX, EPIC_RESOLVE, epicOptions, epicResolved, parseEpicMenu } from '../lib/epicMenu';
+import { EPIC_LINKS_PREFIX, EPIC_RESOLVE, deviceTimeZone, epicMenuPath, epicOptions, epicResolved, parseEpicMenu } from '../lib/epicMenu';
 import { EPIC_API_BASE, epicSportsService } from './epicSportsService';
 import { sportsService } from './sportsService';
 
-const MENU_URL = `${EPIC_API_BASE}/menu?all=1&recetas=aparte&agenda=propia&v=9999&tz=America%2FBogota&idioma=es`;
+/** Asked once per start: the TV's zone (each country gets its own day), Bogotá when the TV does not say */
+const MENU_URL = `${EPIC_API_BASE}${epicMenuPath(deviceTimeZone())}`;
 const CACHE_TTL_MS = 120_000;
 /** /resolve can take seconds while EPIC+ reads the source page (their PWA waits up to 15 s) */
 const RESOLVE_TIMEOUT_MS = 15_000;
