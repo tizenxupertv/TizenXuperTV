@@ -53,10 +53,13 @@
 .spb-live-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px; }
 .spb-league { font-size: 14px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .spb-league.is-small { font-size: 12px; margin-bottom: 8px; }
-/* Fútbol+ (EPIC+) match: a small cyan badge before the league */
+/* Fútbol+ (EPIC+) match: a small cyan badge at the right of the league line (beside EN VIVO on live cards) */
+.spb-league-row { display: flex; align-items: flex-start; }
+.spb-league-row .spb-league { flex: 1 1 auto; min-width: 0; }
 .spb-plus {
+  flex-shrink: 0;
   display: inline-block;
-  margin-right: 8px;
+  margin-left: auto;
   padding: 1px 7px;
   border-radius: 6px;
   background: rgba(0, 229, 255, 0.16);
@@ -65,8 +68,9 @@
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.04em;
-  vertical-align: 1px;
 }
+.spb-league-row .spb-plus { margin-left: 10px; }
+.spb-live-top .spb-plus { margin-right: -4px; }
 .spb-live-tag {
   display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 8px; flex-shrink: 0;
   background: rgba(239, 68, 68, 0.14); color: #f87171; font-size: 14px; font-weight: 800;
