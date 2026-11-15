@@ -380,8 +380,8 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
         <div className="filter-types ms-bar">
           {tabButtons.map((btn, i) => {
             const focused = area === 'tabs' && tabBtnIdx === i;
-            // Lists and actions share the app's pill: selected = dimmed white, focused = solid white
-            const className = `filter-type ${btn.selected ? 'is-selected' : ''} ${focused ? 'is-focused' : ''}`;
+            // Lists use the app's pill; actions are the lighter outline version (focused = solid white for both)
+            const className = `filter-type ${btn.kind === 'tab' ? '' : 'ms-action'} ${btn.selected ? 'is-selected' : ''} ${focused ? 'is-focused' : ''}`;
             return (
               <React.Fragment key={btn.id}>
                 {i === firstActionIdx && <div className="ms-bar-gap" />}

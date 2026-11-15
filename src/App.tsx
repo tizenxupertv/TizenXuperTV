@@ -457,7 +457,7 @@ export const App: React.FC = () => {
     });
   }, [selectedTab]);
 
-  // The header bookmark opens Mis cosas; avatar opens its menu (switch/manage profile, Mi lista e historial, Ajustes)
+  // The header bookmark opens Mis cosas; avatar opens its menu (switch/manage profile, Ajustes)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [profilesView, setProfilesView] = useState<null | 'pick' | 'manage'>(null);
   const openMyStuff = useCallback((tab: 'favs' | 'history' = 'favs') => {
@@ -471,14 +471,10 @@ export const App: React.FC = () => {
       setProfilesView(action === 'manage' ? 'manage' : 'pick');
       return;
     }
-    if (action === 'list') {
-      openMyStuff('favs');
-      return;
-    }
     playerService.stop();
     // Ajustes: section 1 Configuración global
     push({ id: 'profile', section: 1 });
-  }, [push, openMyStuff]);
+  }, [push]);
 
   // "+18" tab: shown only when enabled in Perfil › Bloqueo; opens the adult section after the PIN
   const [adultEnabled, setAdultEnabled] = useState<boolean>(() => parentalService.isAdultEnabled());
