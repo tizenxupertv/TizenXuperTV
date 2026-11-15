@@ -113,12 +113,11 @@
   position: absolute;
   inset: 4px;
   border-radius: 50%;
-  background: rgba(4, 6, 10, 0.65);
+  background: rgba(4, 6, 10, 0.8); /* flat: no backdrop blur on the TV */
   display: flex;
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  backdrop-filter: blur(4px);
 }
 .lp-picker-tag {
   min-height: 18px;
