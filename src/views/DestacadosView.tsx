@@ -154,16 +154,32 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
   return (
     <div className="page-container" ref={containerRef}>
       <div className="page-track" ref={trackRef}>
-      <HeroShowcase
-        item={currentHero}
-        totalItems={heroItems.length}
-        activeIndex={activeHeroIndex}
-        focusedButton={isFocusActive && focus.area === 'hero' ? (focus.heroBtn || 'play') : null}
-        isFavorite={isFavorite}
-        isDimmed={isFocusActive && focus.area === 'row'}
-        onPlay={onPlayHero}
-        onToggleFav={onToggleFavHero}
-      />
+      {currentHero ? (
+        <HeroShowcase
+          item={currentHero}
+          totalItems={heroItems.length}
+          activeIndex={activeHeroIndex}
+          focusedButton={isFocusActive && focus.area === 'hero' ? (focus.heroBtn || 'play') : null}
+          isFavorite={isFavorite}
+          isDimmed={isFocusActive && focus.area === 'row'}
+          onPlay={onPlayHero}
+          onToggleFav={onToggleFavHero}
+        />
+      ) : catalogLoading ? (
+        <div className="home-showcase apple-showcase hero-skeleton" role="status" aria-label="Cargando destacado">
+          <div className="showcase-gradient" />
+          <div className="showcase-content">
+            <div className="hero-skeleton-title" />
+            <div className="hero-skeleton-meta" />
+            <div className="hero-skeleton-line" />
+            <div className="hero-skeleton-line is-short" />
+            <div className="showcase-actions hero-skeleton-actions">
+              <div className="hero-skeleton-btn" />
+              <div className="hero-skeleton-btn-circle" />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {visibleRows.map((row, rowIdx) => {
         const isFocusedRow = isFocusActive && focus.area === 'row' && focus.rowIndex === rowIdx;

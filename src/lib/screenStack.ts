@@ -11,6 +11,7 @@ export type Screen =
   | { id: 'home' }
   | { id: 'browse'; root: BrowseRoot; title: string; tag?: string; year?: string; items?: VodItem[]; category?: string; column?: string }
   | { id: 'filter'; root: FilterRoot }
+  | { id: 'mystuff'; tab?: 'favs' | 'history' }
   | { id: 'profile'; section?: number }
   | { id: 'pin'; mode: PinMode; onSuccess?: () => void; onCancel?: () => void };
 

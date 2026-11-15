@@ -893,6 +893,68 @@ html, body {
 .catalog-skeleton .poster-card.apple-poster-card {
   background: #252932;
   cursor: default;
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
+}
+
+.home-showcase.hero-skeleton {
+  background: linear-gradient(120deg, #161a24 0%, #1c2230 55%, #11141d 100%);
+  pointer-events: none;
+}
+
+.hero-skeleton-title {
+  width: 460px;
+  max-width: 75%;
+  height: 46px;
+  border-radius: 10px;
+  background: #252932;
+  margin-bottom: 14px;
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
+}
+
+.hero-skeleton-meta {
+  width: 280px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #252932;
+  margin-bottom: 14px;
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
+}
+
+.hero-skeleton-line {
+  width: 620px;
+  max-width: 90%;
+  height: 14px;
+  border-radius: 9999px;
+  background: rgba(37, 41, 50, 0.9);
+  margin-bottom: 8px;
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
+}
+
+.hero-skeleton-line.is-short {
+  width: 420px;
+  margin-bottom: 22px;
+}
+
+.hero-skeleton-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hero-skeleton-btn {
+  width: 190px;
+  height: 48px;
+  border-radius: 9999px;
+  background: #252932;
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
+}
+
+.hero-skeleton-btn-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #252932;
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
 }
 
 .poster-card.apple-poster-card.is-wide-card {
@@ -9595,4 +9657,103 @@ html.legacy-video .maintenance-card { box-shadow: none; }
   font-weight: 900;
   letter-spacing: 0.04em;
   line-height: 1.5;
+}
+
+
+/* ==========================================================================
+   Mis cosas: "Mi lista" and "Continuar viendo". Built from the app's own pieces (screen header, .filter-type
+   pills, .pf-btn actions, PosterCard, ContinueWatchingCard); only the layout lives here.
+   ========================================================================== */
+.ms-screen {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 900;
+  background: var(--bg-main);
+  color: var(--text-main);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.ms-body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 84px; /* under the screen header, as in the filter screen */
+  bottom: 0;
+  padding: 0 48px 60px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  box-sizing: border-box;
+}
+
+.ms-body::-webkit-scrollbar {
+  display: none;
+}
+
+.ms-bar.filter-types {
+  align-items: center;
+  padding: 6px 0 22px;
+}
+
+.ms-bar .ms-bar-gap {
+  flex: 1;
+}
+
+.ms-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px 18px;
+}
+
+/* The removal mark sits on the cell, so the shared cards stay untouched */
+.ms-cell {
+  position: relative;
+}
+
+.ms-cell.is-removing::after {
+  content: '✕';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: rgba(8, 10, 16, 0.78);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.ms-body .pf-edit-hint {
+  color: #cbd5e1;
+}
+
+.ms-section {
+  margin-top: 44px;
+}
+
+.ms-section .section-title {
+  margin-bottom: 12px;
+}
+
+.ms-row {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 4px 0 16px;
+}
+
+.ms-row::-webkit-scrollbar {
+  display: none;
 }
