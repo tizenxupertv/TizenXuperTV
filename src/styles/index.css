@@ -4545,16 +4545,14 @@ html, body {
   z-index: 4;
   padding: 2.5px 7px;
   border-radius: 4px;
-  background: rgba(15, 23, 42, 0.82);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* Flat on purpose: one tag per poster, so no blur and no shadow (both are costly on the TV) */
+  background: rgba(15, 23, 42, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.28);
   color: #ffffff;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.5px;
   line-height: 1.2;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
 }
 
 .svc-poster-wrap .poster-quality-badge {
