@@ -709,7 +709,8 @@ class PlayerService {
     if (isBrowserEnv && url.startsWith('http') && !url.includes('/stream-proxy')) {
       const auth = streamMeta?.headers?.['Content-Auth'] || '';
       const license = streamMeta?.headers?.['Content-License'] || '';
-      effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}`;
+      const pulsera = streamMeta?.headers?.['X-Pulsera'] || '';
+      effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}&pulsera=${encodeURIComponent(pulsera)}`;
     }
 
     if (window.__xuperCreateHls || (window.Hls && window.Hls.isSupported())) {

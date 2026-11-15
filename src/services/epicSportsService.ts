@@ -4,7 +4,12 @@ import { placeExtraChannels } from '../lib/extraChannels';
 
 const DOMAINS = ['https://playlatam.site', 'https://epictvparaiphone.top', 'https://epicplustv.com'];
 // Browser development goes through the Vite proxy: the source does not allow cross-origin requests
-export const EPIC_API_BASE = import.meta.env && import.meta.env.DEV ? '/epic-api' : 'https://playlatam.site';
+const isBrowser = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  (typeof (window as any).tizen === 'undefined' && typeof (window as any).webOS === 'undefined')
+);
+export const EPIC_API_BASE = isBrowser ? '/epic-api' : 'https://playlatam.site';
 const PULSERA_URL = `${EPIC_API_BASE}/iphone/pulsera`;
 const CANALES_URL = `${EPIC_API_BASE}/iphone/canales`;
 const LOGO_BASE = 'https://playlatam.site';
