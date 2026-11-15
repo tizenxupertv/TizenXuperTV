@@ -6,7 +6,7 @@ import { HistoryItem } from '../types/history';
 import { LiveCategory } from '../types/channel';
 import { historyService } from '../services/historyService';
 import { favoritesService } from '../services/favoritesService';
-import { settingsService } from '../services/settingsService';
+import { settingsService, SUBTITLE_MODES, subtitleModeIndex, applySubtitleMode } from '../services/settingsService';
 import { parentalService } from '../services/parentalService';
 import { diagnosticService, DiagReport } from '../services/diagnosticService';
 import { getTvCapabilities } from '../lib/tvCapabilities';
@@ -422,7 +422,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       radio('textSize', TEXT_SIZE_OPTS, 'textSize');
       radio('display', DISPLAY_OPTS, 'display');
       radio('audio', AUDIO_OPTS, 'audio');
-      r.push([{ id: 'subtitle', onActivate: () => settingsService.set({ subtitle: !settings.subtitle }) }]);
+      r.push(SUBTITLE_MODES.map((_, i) => ({ id: `subMode-${i}`, onActivate: () => applySubtitleMode(i) })));
       radio('subLang', AUDIO_OPTS, 'subLang');
       radio('size', SIZE_OPTS, 'size');
       radio('style', STYLE_OPTS, 'style');
@@ -654,12 +654,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           {radioRow('Audio preferido', 'audio', AUDIO_OPTS, settings.audio)}
           <div className="pf-hr" />
           <h3 className="pf-subtitle">Subtítulos</h3>
-          <div className="pf-row">
-            <div className="pf-row-label">Activar subtítulos</div>
-            <div className={`pf-switch ${settings.subtitle ? 'on' : 'off'} ${isF('subtitle') ? 'is-focused' : ''}`} onClick={tap('subtitle')}>
-              <span className="pf-switch-knob" />
-            </div>
-          </div>
+          {radioRow('Mostrar', 'subMode', SUBTITLE_MODES, subtitleModeIndex(settings))}
           {radioRow('Idioma', 'subLang', AUDIO_OPTS, settings.subLang)}
           {radioRow('Tamaño', 'size', SIZE_OPTS, settings.size)}
           {radioRow('Estilo', 'style', STYLE_OPTS, settings.style)}

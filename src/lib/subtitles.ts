@@ -123,6 +123,12 @@ export function audioCoversSubtitles(
   return sameLanguage(titleAudio, pref);
 }
 
+/** Whether a title starts with subtitles: off, always, or only when the audio that plays is in another language */
+export function subtitlesWanted(st: { subtitle: boolean; subAlways?: boolean }, audioInSubtitleLanguage: boolean): boolean {
+  if (!st.subtitle) return false;
+  return !!st.subAlways || !audioInSubtitleLanguage;
+}
+
 /**
  * Formats a list of raw audio language codes (e.g. ['SPA', 'SPA', 'ENG'] or ['SPA,SPA,ENG'])
  * into user-friendly distinct labels (e.g. ['Español (Latino)', 'Español (España)', 'Inglés']).
