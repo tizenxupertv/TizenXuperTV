@@ -221,15 +221,15 @@ html, body {
 }
 
 /* ==========================================================================
-   Full Width Page Container (Starts at 68px)
+   Full Width Page Container (full screen; the hero runs behind the 68 px header)
    ========================================================================== */
 
 .page-container {
   position: absolute;
   left: 0;
-  top: 68px;
+  top: 0;
   width: 100%;
-  height: calc(100vh - 68px);
+  height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
@@ -239,6 +239,29 @@ html, body {
 
 .page-container::-webkit-scrollbar {
   display: none;
+}
+
+/* Once the page has moved to a row, the strip behind the header is solid: rows must not show through it */
+.page-container::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 68px;
+  background: var(--bg-main);
+  z-index: 5;
+  display: none;
+}
+
+.page-container.is-scrolled::before {
+  display: block;
+}
+
+/* Same block as the detail page: the picture starts at the top of the screen, behind the header */
+.page-container .home-showcase {
+  height: 658px;
+  height: calc(min(590px, 58vh) + 68px);
 }
 
 /* ==========================================================================
