@@ -24,15 +24,13 @@
     'oogoy.f30c96w8.com'
   ];
 
-  var PORTAL_CODE = 'masmobile';
-  var APP_ID = 'com.msandroid.mobile';
-  var APK_VERSION = '60291';
-  var SYS_VERSION = '15';
+  var PORTAL_CODE = 'masnew';
+  var APP_ID = 'com.android.msandroid';
+  var APK_VERSION = '49902';
   // Kept in sync with the working authorized backup. The portal rejects retired client builds.
   var SPKG_VER = '2025-08-07 05:40:11_36_16_';
-  // The authorized client keeps the portal payload at 60291 (masmobile) but identifies the
-  // transport itself as build 43404 / com.android.msandroid. Both values are required by the provider.
-  var APK_TRANSPORT_APP_ID = 'com.android.msandroid';
+  // The authorized client keeps the portal payload at 49902 but identifies the
+  // transport itself as build 43404. Both values are required by the provider.
   var APK_VER_HEADER = '43404';
   var USER_AGENT = 'okhttp/3.12.12';
   var CONTENT_TYPE = 'application/json;charset=utf-8';
@@ -64,13 +62,13 @@
   var LIVE_RESOLVE_CACHE_MS = 120000;
 
   var ROOT_CODES = {
-    featured: 'masmobile_featured',
-    movies: 'masmobile_movies',
-    series: 'masmobile_series',
-    anime: 'masmobile_anime',
-    kids: 'masmobile_kids',
-    free: 'masmobile_free',
-    explorar: 'masmobile_explorar'
+    featured: 'masnew_featured',
+    movies: 'masnew_movies',
+    series: 'masnew_series',
+    anime: 'masnew_anime',
+    kids: 'masnew_kids',
+    free: 'masnew_free',
+    explorar: 'masnew_explorar'
   };
 
   var ROOT_CATEGORY = {
@@ -84,30 +82,30 @@
   };
 
   var DEVICE_FIXED = {
-    loginType: '3',
+    loginType: '2',
     appLanguage: 'en',
-    hardwareInfo: 'exynos2100',
-    model: 'SM-G998B',
-    product: 'p3sxxx',
+    hardwareInfo: 'ranchu',
+    model: 'sdk_gphone64_arm64',
+    product: 'sdk_gphone64_arm64',
     cpu: 'arm64-v8a',
     B29: '',
-    reserve1: '000000000000',
+    reserve1: '',
     deviceToken: '',
     drmId: '',
-    sdkVer: 33
+    sdkVer: 36
   };
 
   var FINGERPRINT_FIXED = {
-    board: 'exynos2100',
-    brand: 'samsung',
+    board: 'goldfish_arm64',
+    brand: 'google',
     cpuAbi: 'arm64-v8a',
-    device: 'p3s',
+    device: 'emu64a',
     diskInfo: '8GB',
-    display: 'SM-G998B',
-    fingerprint: 'samsung/p3sxxx/p3s:13/TQ2B.230505.005.A1/jenkins08312143:user/release-keys',
-    hardware: 'exynos2100',
-    host: '211-12',
-    manufacturer: 'samsung',
+    display: 'sdk_gphone64_arm64',
+    fingerprint: 'google/sdk_gphone64_arm64/emu64a:14/UE1A.230829.036/11228894:user/release-keys',
+    hardware: 'ranchu',
+    host: 'abfarm',
+    manufacturer: 'Google',
     ramSize: '4GB',
     romSize: '8GB',
     tags: 'release-keys',
@@ -461,7 +459,7 @@
       }
     }
     dict.apkVersion = APK_VERSION;
-    dict.sysVersion = SYS_VERSION;
+    dict.sysVersion = SPKG_VER;
     dict.appId = APP_ID;
     dict.sn = session.sn;
     return dict;
@@ -550,7 +548,7 @@
       arm();
       xhr.onprogress = arm;
       xhr.onreadystatechange = function () { if (xhr.readyState >= 2) arm(); };
-      try { xhr.setRequestHeader('apk', APK_TRANSPORT_APP_ID); } catch (e) {}
+      try { xhr.setRequestHeader('apk', APP_ID); } catch (e) {}
       try { xhr.setRequestHeader('apkVer', APK_VER_HEADER); } catch (e) {}
       try { xhr.setRequestHeader('spkgVer', SPKG_VER); } catch (e) {}
       // Browsers forbid this header. The local development proxy supplies it instead.
@@ -829,33 +827,19 @@
       appVer: APK_VERSION,
       lang: 'es',
       encMediaSupported: 1,
-      liveCodeList: ['masmobile_live', 'masnew_live'],
+      liveCodeList: ['masnew_live'],
       appParams: '',
-      reserve1: DEVICE_FIXED.reserve1 || FIXED_RESERVE1,
+      reserve1: FIXED_RESERVE1,
       pipFlag: '0'
     };
   }
 
   function isCfl(url) {
-    var qs = (url || '').slice((url || '').lastIndexOf('?') + 1).split('&');
+    var qs = url.slice(url.lastIndexOf('?') + 1).split('&');
     for (var i = 0; i < qs.length; i++) {
       if (trim(qs[i]) === 'sign_type=cfl') return true;
     }
     return false;
-  }
-
-  function getCdnSignType(u) {
-    if (!u) return '';
-    if (u.sign_type) return trim(u.sign_type).toLowerCase();
-    var m = ((u && u.url) || '').match(/[?&]sign_type=([^&]+)/i);
-    return m ? trim(m[1]).toLowerCase() : '';
-  }
-
-  function isVodStreamSupported(u) {
-    var st = getCdnSignType(u);
-    // 'cs' requires Android Ranger native daemon (libnative-lib.so); unsupported on Tizen
-    if (st === 'cs') return false;
-    return st === 'cfl' || st === 'goog' || st === 'fast' || isCfl((u && u.url) || '');
   }
 
   function withScheme(addr) {
@@ -868,8 +852,6 @@
     var result = [];
     var list = slb && slb.cdn_list;
     if (!list || !list.length) return result;
-
-    // 1st priority: supported sign_type (goog, cfl, fast) with tag 'free'
     for (var i = 0; i < list.length; i++) {
       var cdn = list[i];
       if (cdn && trim(cdn.tag) === 'vod') {
@@ -877,7 +859,7 @@
         for (var j = 0; j < uList.length; j++) {
           var u = uList[j];
           var authUrl = trim(u && u.url);
-          if (isVodStreamSupported(u) && trim(u && u.tag) === 'free') {
+          if ((isCfl(authUrl) || trim(u && u.sign_type) === 'cfl') && trim(u && u.tag) === 'free') {
             var bases = [withScheme(cdn.main_addr)];
             var sp = trim(cdn.spared_addr);
             if (sp && bases.indexOf(withScheme(sp)) === -1) bases.push(withScheme(sp));
@@ -887,8 +869,6 @@
         }
       }
     }
-
-    // 2nd priority: any non-cs CDN with tag 'free'
     if (!result.length) {
       for (var d = 0; d < list.length; d++) {
         var c = list[d];
@@ -897,7 +877,7 @@
           for (var p = 0; p < mList.length; p++) {
             var m = mList[p];
             var aUrl = trim(m && m.url);
-            if (getCdnSignType(m) !== 'cs' && aUrl && (trim(m && m.tag) === 'free' || aUrl.indexOf('tag=free') !== -1)) {
+            if (aUrl && (trim(m && m.tag) === 'free' || aUrl.indexOf('tag=free') !== -1)) {
               var b = [withScheme(c.main_addr)];
               var s2 = trim(c.spared_addr);
               if (s2 && b.indexOf(withScheme(s2)) === -1) b.push(withScheme(s2));
@@ -908,8 +888,7 @@
         }
       }
     }
-
-    // 3rd priority: any supported sign_type regardless of free tag
+    // v15 fallback: accept any signed VOD CDN
     if (!result.length) {
       for (var f = 0; f < list.length; f++) {
         var c3 = list[f];
@@ -918,7 +897,7 @@
           for (var q = 0; q < list3.length; q++) {
             var u3 = list3[q];
             var url3 = trim(u3 && u3.url);
-            if (isVodStreamSupported(u3)) {
+            if (isCfl(url3) || trim(u3 && u3.sign_type) === 'cfl') {
               var b3 = [withScheme(c3.main_addr)];
               var sp3 = trim(c3.spared_addr);
               if (sp3 && b3.indexOf(withScheme(sp3)) === -1) b3.push(withScheme(sp3));
@@ -929,27 +908,6 @@
         }
       }
     }
-
-    // 4th priority: any non-cs CDN
-    if (!result.length) {
-      for (var k = 0; k < list.length; k++) {
-        var c4 = list[k];
-        if (c4 && trim(c4.tag) === 'vod') {
-          var list4 = c4.url_list || [];
-          for (var r = 0; r < list4.length; r++) {
-            var u4 = list4[r];
-            if (getCdnSignType(u4) !== 'cs') {
-              var b4 = [withScheme(c4.main_addr)];
-              var sp4 = trim(c4.spared_addr);
-              if (sp4 && b4.indexOf(withScheme(sp4)) === -1) b4.push(withScheme(sp4));
-              result.push({ bases: b4, auth: trim(u4 && u4.url) });
-              break;
-            }
-          }
-        }
-      }
-    }
-
     return result;
   }
 
@@ -1538,8 +1496,14 @@
     } catch (e) {}
     ensureSession(function (err) {
       if (err) return callback(null, FALLBACK_39_CATEGORIES);
-
-      function parseCols(recList) {
+      call('getNextColumns', {
+        columnCode: 'masnew_live',
+        pageNum: 1,
+        pageSize: 50,
+        version: ''
+      }, function (cErr, cRes) {
+        if (cErr) return callback(null, FALLBACK_39_CATEGORIES);
+        var recList = cRes && cRes.recommendList || [];
         var cats = [];
         for (var i = 0; i < recList.length; i++) {
           var col = recList[i];
@@ -1560,27 +1524,6 @@
           } catch (e) {}
         }
         callback(null, cats.length ? cats : FALLBACK_39_CATEGORIES);
-      }
-
-      call('getNextColumns', {
-        columnCode: 'masmobile_live',
-        pageNum: 1,
-        pageSize: 50,
-        version: ''
-      }, function (cErr, cRes) {
-        var recList = cRes && cRes.recommendList || [];
-        if (!cErr && recList.length) return parseCols(recList);
-        // Fallback to masnew_live
-        call('getNextColumns', {
-          columnCode: 'masnew_live',
-          pageNum: 1,
-          pageSize: 50,
-          version: ''
-        }, function (cErr2, cRes2) {
-          if (cErr2) return callback(null, FALLBACK_39_CATEGORIES);
-          var recList2 = cRes2 && cRes2.recommendList || [];
-          parseCols(recList2);
-        });
       });
     });
   }
@@ -2043,8 +1986,6 @@
       updateCount: (asset.updateCount === undefined || asset.updateCount === null) ? 0 : (parseInt(asset.updateCount, 10) || 0),
       moreAudio: asset.moreAudio !== undefined ? asset.moreAudio : 0,
       moreSubtitle: asset.moreSubtitle !== undefined ? asset.moreSubtitle : 0,
-      quality: text(asset.definition || asset.quality),
-      qualities: asset.qualities ? asset.qualities : (asset.definition || asset.quality ? [text(asset.definition || asset.quality)] : []),
       row: '',
       streamUrl: '',
       portal: true
@@ -2673,7 +2614,6 @@
       });
     },
     getLastStartPlayDiag: function () { return lastStartPlayDiag; },
-    vodCdns: vodCdns,
     call: call
   };
 
