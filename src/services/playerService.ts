@@ -607,6 +607,11 @@ class PlayerService {
         if (err || !streamMeta || !streamMeta.url) {
           console.error('[PlayerService] Failed to resolve channel:', err);
           this.lastHlsError = `portal ${(err && (err.portalCode || err.message)) || 'sin enlace'}`.slice(0, 80);
+          if (err && (err.portalCode === 'portal100004' || /portal100004|频道不存在/i.test(err.message || ''))) {
+            try {
+              window.dispatchEvent(new CustomEvent('xuper-channel-code-expired', { detail: { channelCode: code, channelName: channel.name } }));
+            } catch (e) {}
+          }
           if (!(err && /aaa10002/i.test(err.portalCode || err.message || ''))) {
             // The portal refuses this channel for the viewer's region or provider: say so, not "no signal"
             this.failChannel(code, 'resolve', isRegionBlocked(err) ? 'region' : undefined);
@@ -704,7 +709,8 @@ class PlayerService {
     if (isBrowserEnv && url.startsWith('http') && !url.includes('/stream-proxy')) {
       const auth = streamMeta?.headers?.['Content-Auth'] || '';
       const license = streamMeta?.headers?.['Content-License'] || '';
-      effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}`;
+      const pulsera = streamMeta?.headers?.['X-Pulsera'] || '';
+      effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}&pulsera=${encodeURIComponent(pulsera)}`;
     }
 
     if (window.__xuperCreateHls || (window.Hls && window.Hls.isSupported())) {

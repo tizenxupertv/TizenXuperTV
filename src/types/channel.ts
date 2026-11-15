@@ -17,6 +17,7 @@ export interface LiveCategory {
   id: string | number;
   name: string;
   isFav?: boolean;
+  isRecents?: boolean;
   isEspn?: boolean;
   isEpicSports?: boolean;
   isM3u?: boolean;

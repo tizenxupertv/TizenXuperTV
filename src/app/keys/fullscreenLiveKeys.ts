@@ -4,6 +4,7 @@ import { pressKey, moveCursor, keyAt } from '../../components/live/OnScreenKeybo
 import { LiveTvState } from '../useLiveTv';
 import { pk } from '../../lib/localProfiles';
 import { createSeekHold } from '../../lib/seekAccel';
+import { recentChannelsService } from '../../services/recentChannelsService';
 
 /** Holding ◄ ► in a replay makes the jumps grow, as in movies (lib/seekAccel.ts) */
 const replayHold = createSeekHold();
@@ -221,6 +222,15 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
     ctx.triggerOsd();
     return true;
   }
+  if (key === 'colorGreen') {
+    const prevCh = recentChannelsService.getPreviousChannel(ctx.tunedLiveChannel?.id);
+    if (prevCh) {
+      ctx.setTunedLiveChannel(prevCh);
+      recentChannelsService.addRecentChannel(prevCh);
+      ctx.triggerOsd();
+      return true;
+    }
+  }
 
   // Direct channel number keys (0-9)
   if (key === 'digit' && ev) {
@@ -254,10 +264,10 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
     return true;
   }
 
-  // When focused on InfoBar Action Buttons ([☰ Lista de canales] / [★ Favoritos] / [Pantalla negra])
+  // When focused on InfoBar Action Buttons ([☰ Lista de canales] / [★ Favoritos])
   if (fullscreenFocusBtn !== 'none') {
-    const buttons = ['channels', 'fav', 'screen'] as const;
-    const at = Math.max(0, buttons.indexOf(fullscreenFocusBtn));
+    const buttons = ['channels', 'fav'] as const;
+    const at = Math.max(0, buttons.indexOf(fullscreenFocusBtn as any));
     if (key === 'left') {
       setFullscreenFocusBtn(buttons[Math.max(0, at - 1)]);
       triggerOsd();

@@ -38,6 +38,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
   onClose,
   onPlay
 }) => {
+  const isGameTime = event.status === 'live' || (event.startMillis > 0 && Date.now() >= event.startMillis && event.status !== 'finished');
   const [details, setDetails] = useState<FullMatchDetails | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<TabType>('events');
@@ -106,7 +107,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
           setNavTabIndex(next);
           setActiveTab(TABS[next]);
           setContentIndex(0);
-        } else {
+        } else if (isGameTime) {
           setFocusArea('play');
         }
       } else if (key === 'down') {
@@ -265,13 +266,15 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             Estadísticas
           </button>
 
-          <button
-            className={`match-nav-play-btn ${focusArea === 'play' ? 'is-focused' : ''}`}
-            onClick={() => onPlay(event)}
-          >
-            <span>▶</span>
-            <span>Ver Partido</span>
-          </button>
+          {isGameTime && (
+            <button
+              className={`match-nav-play-btn ${focusArea === 'play' ? 'is-focused' : ''}`}
+              onClick={() => onPlay(event)}
+            >
+              <span>▶</span>
+              <span>Ver Partido</span>
+            </button>
+          )}
         </div>
 
         {/* Tab Body */}
@@ -497,7 +500,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             Cambiar pestaña
           </span>
           <span><b>▲ ▼</b> Desplazar contenido</span>
-          <span><b>OK</b> Ver transmisión</span>
+          {isGameTime && <span><b>OK</b> Ver transmisión</span>}
           <span><b>Atrás</b> Cerrar</span>
         </div>
       </div>

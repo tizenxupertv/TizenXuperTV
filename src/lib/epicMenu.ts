@@ -97,7 +97,7 @@ export function epicOptions(e: any): SportsStream[] {
   const byChannel = new Map<string, Option>();
   const add = (ch: any, family = '', fuente = '') => {
     const url = String((ch && ch.url) || '').trim();
-    if (!/^https?:\/\//.test(url) || seen.has(url) || /youtube\.com|youtu\.be/.test(url)) return;
+    if (!/^https?:\/\//.test(url) || seen.has(url) || /youtube\.com|youtu\.be|dlive\.sx|193\.47\.62\.59/.test(url)) return;
     seen.add(url);
     const direct = /\.m3u8(\?|$)/.test(url);
     const key = epicChannelKey(url);

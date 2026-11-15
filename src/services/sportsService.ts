@@ -13,7 +13,47 @@ const STREAMS_CACHE_TTL_MS = 300_000; // 5 minutes
  * Signals the app plays: any stream resolved to an active HTTP/HTTPS playback URL.
  */
 export function isPlayableStream(s: SportsStream): boolean {
-  return !!s && !!s.url && s.url.startsWith('http');
+  if (!s) return false;
+  // Exclude known permanently dead host (193.47.62.59 returns 403/404) and defunct domains
+  if (s.url && (s.url.includes('193.47.62.59') || s.url.includes('dlive.sx'))) return false;
+  if (s.url && s.url.startsWith('http')) return true;
+  // If no direct URL but has a resolvable tokenApi
+  if (!s.url && s.tokenApi) {
+    try {
+      const desc = JSON.parse(s.tokenApi);
+      if (desc.type === 'ls' || desc.default_string) return true;
+      if (desc.api && desc.api.startsWith('http') && !desc.api.includes('taifood-blog.asia') && !desc.api.includes('dlive.sx')) {
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+function streamReliabilityScore(s: SportsStream): number {
+  const u = (s.url || '').toLowerCase();
+  if (u.includes('193.47.62.59') || u.includes('dlive.sx')) return -100;
+  if (!s.url && s.tokenApi && s.tokenApi.includes('taifood-blog.asia')) return -90;
+
+  // Tier 1: Verified reliable global CDNs
+  if (u.includes('aiv-cdn.net') || u.includes('pv-cdn.net') || u.includes('rutube.ru') || u.includes('antik.sk')) {
+    return 100;
+  }
+  // Tier 2: Direct HTTPS streams (.m3u8 or .mpd)
+  if (u.startsWith('https://') && (u.includes('.m3u8') || u.includes('.mpd'))) {
+    return 80;
+  }
+  // Tier 3: Other direct HTTP streams
+  if (u.startsWith('http')) {
+    return 60;
+  }
+  // Tier 4: Streams needing dynamic token resolution
+  if (s.tokenApi) {
+    return 40;
+  }
+  return 0;
 }
 
 export class SportsService {
@@ -377,16 +417,21 @@ export class SportsService {
       const { url, headers } = this.parseLinkHeaders(rawLink);
 
       if (url || tokenApi) {
-        streams.push({
+        const streamItem: SportsStream = {
           name,
           url,
           scheme,
           drmApi: drmApi || undefined,
           headers,
           tokenApi: tokenApi || undefined
-        });
+        };
+        if (streamReliabilityScore(streamItem) > -50) {
+          streams.push(streamItem);
+        }
       }
     }
+
+    streams.sort((a, b) => streamReliabilityScore(b) - streamReliabilityScore(a));
     return streams;
   }
 

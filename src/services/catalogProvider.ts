@@ -21,6 +21,7 @@ interface LegacyCatalogClient {
   rootIds?: Record<string, number>;
   home?: (root: string, pageNum: number, callback: (error: unknown, value?: CatalogHome) => void, options?: { low?: boolean }) => void;
   getHome?: (callback: (error: unknown, value?: unknown) => void) => void;
+  getTabRecommends?: (root: string, callback: (error: unknown, value?: any[]) => void) => void;
   columns?: (columnId: number, callback: (error: unknown, value?: CatalogColumn[]) => void, options?: { special?: boolean }) => void;
   columnPage?: (columnId: number, pageNum: number, pageSize: number, callback: (error: unknown, value?: CatalogPage) => void, options?: { restricted?: boolean }) => void;
 }
@@ -36,6 +37,7 @@ export interface CatalogProvider {
   rootId(root: string): number | undefined;
   home(root: string, pageNum: number, options?: { low?: boolean }): Promise<CatalogHome>;
   compositeHome(): Promise<unknown>;
+  recommends?(root: string): Promise<any[]>;
   columns(columnId: number, options?: { special?: boolean }): Promise<CatalogColumn[]>;
   columnPage(columnId: number, pageNum: number, pageSize: number, options?: { restricted?: boolean }): Promise<CatalogPage>;
 }
@@ -67,6 +69,17 @@ export const catalogProvider: CatalogProvider = {
       const client = legacyClient();
       if (!client?.getHome) return reject(unavailable());
       client.getHome((error, value) => error ? reject(error) : resolve(value || {}));
+    });
+  },
+
+  recommends(root) {
+    return new Promise((resolve) => {
+      const client = legacyClient();
+      if (!client?.getTabRecommends) return resolve([]);
+      client.getTabRecommends(root, (error, value) => {
+        if (error || !Array.isArray(value)) resolve([]);
+        else resolve(value);
+      });
     });
   },
 

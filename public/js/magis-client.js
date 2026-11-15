@@ -24,14 +24,97 @@
     'oogoy.f30c96w8.com'
   ];
 
-  var PORTAL_CODE = 'masnew';
-  var APP_ID = 'com.android.msandroid';
-  var APK_VERSION = '49902';
+  var CLIENT_PROFILES = {
+    // masnew: Perfil estándar para catálogo completo, categorías, sección adultos (+18) y TV en vivo.
+    masnew: {
+      name: 'masnew',
+      portalCode: 'masnew',
+      appId: 'com.android.msandroid',
+      apkVersion: '49902',
+      sysVersion: '2025-08-07 05:40:11_36_16_',
+      transportAppId: 'com.android.msandroid',
+      apkVerHeader: '43404',
+      loginType: '2',
+      hardwareInfo: 'ranchu',
+      model: 'sdk_gphone64_arm64',
+      product: 'sdk_gphone64_arm64',
+      cpu: 'arm64-v8a',
+      sdkVer: 36,
+      reserve1: '',
+      liveCodeList: ['masnew_live'],
+      fingerprint: {
+        board: 'goldfish_arm64',
+        brand: 'google',
+        cpuAbi: 'arm64-v8a',
+        device: 'emu64a',
+        diskInfo: '8GB',
+        display: 'sdk_gphone64_arm64',
+        fingerprint: 'google/sdk_gphone64_arm64/emu64a:14/UE1A.230829.036/11228894:user/release-keys',
+        hardware: 'ranchu',
+        host: 'abfarm',
+        manufacturer: 'Google',
+        ramSize: '4GB',
+        romSize: '8GB',
+        tags: 'release-keys',
+        verId: ''
+      }
+    },
+    // masmobile: Perfil móvil optimizado para obtener variantes 1080p y multiaudio en reproducción VOD.
+    masmobile: {
+      name: 'masmobile',
+      portalCode: 'masmobile',
+      appId: 'com.msandroid.mobile',
+      apkVersion: '60291',
+      sysVersion: '15',
+      transportAppId: 'com.android.msandroid',
+      apkVerHeader: '43404',
+      loginType: '3',
+      hardwareInfo: 'exynos2100',
+      model: 'SM-G998B',
+      product: 'p3sxxx',
+      cpu: 'arm64-v8a',
+      sdkVer: 33,
+      reserve1: '000000000000',
+      liveCodeList: ['masmobile_live', 'masnew_live'],
+      fingerprint: {
+        board: 'exynos2100',
+        brand: 'samsung',
+        cpuAbi: 'arm64-v8a',
+        device: 'p3s',
+        diskInfo: '8GB',
+        display: 'SM-G998B',
+        fingerprint: 'samsung/p3sxxx/p3s:13/TQ2B.230505.005.A1/jenkins08312143:user/release-keys',
+        hardware: 'exynos2100',
+        host: '211-12',
+        manufacturer: 'samsung',
+        ramSize: '4GB',
+        romSize: '8GB',
+        tags: 'release-keys',
+        verId: ''
+      }
+    }
+  };
+
+  var activeProfileName = 'masnew';
+
+  function resolveProfile(profileOpt) {
+    if (typeof profileOpt === 'string' && CLIENT_PROFILES[profileOpt]) {
+      return CLIENT_PROFILES[profileOpt];
+    }
+    if (profileOpt && typeof profileOpt === 'object' && profileOpt.portalCode) {
+      return profileOpt;
+    }
+    return CLIENT_PROFILES[activeProfileName] || CLIENT_PROFILES.masnew;
+  }
+
+  var PORTAL_CODE = CLIENT_PROFILES.masnew.portalCode;
+  var APP_ID = CLIENT_PROFILES.masnew.appId;
+  var APK_VERSION = CLIENT_PROFILES.masnew.apkVersion;
   // Kept in sync with the working authorized backup. The portal rejects retired client builds.
-  var SPKG_VER = '2025-08-07 05:40:11_36_16_';
-  // The authorized client keeps the portal payload at 49902 but identifies the
-  // transport itself as build 43404. Both values are required by the provider.
-  var APK_VER_HEADER = '43404';
+  var SPKG_VER = CLIENT_PROFILES.masnew.sysVersion;
+  var SYS_VERSION = SPKG_VER;
+  var APK_TRANSPORT_APP_ID = CLIENT_PROFILES.masnew.transportAppId;
+  var APK_VER_HEADER = CLIENT_PROFILES.masnew.apkVerHeader;
   var USER_AGENT = 'okhttp/3.12.12';
   var CONTENT_TYPE = 'application/json;charset=utf-8';
   var SNTOKEN_SALT = 'ntFT65w6itH!lHCPw7D=@qnsFC5adD28';
@@ -78,39 +161,12 @@
     anime: 'anime',
     kids: 'infantil',
     free: 'gratis',
-    explorar: 'explorar'
+    explorar: 'explorar',
+    adult: 'adult'
   };
 
-  var DEVICE_FIXED = {
-    loginType: '2',
-    appLanguage: 'en',
-    hardwareInfo: 'ranchu',
-    model: 'sdk_gphone64_arm64',
-    product: 'sdk_gphone64_arm64',
-    cpu: 'arm64-v8a',
-    B29: '',
-    reserve1: '',
-    deviceToken: '',
-    drmId: '',
-    sdkVer: 36
-  };
-
-  var FINGERPRINT_FIXED = {
-    board: 'goldfish_arm64',
-    brand: 'google',
-    cpuAbi: 'arm64-v8a',
-    device: 'emu64a',
-    diskInfo: '8GB',
-    display: 'sdk_gphone64_arm64',
-    fingerprint: 'google/sdk_gphone64_arm64/emu64a:14/UE1A.230829.036/11228894:user/release-keys',
-    hardware: 'ranchu',
-    host: 'abfarm',
-    manufacturer: 'Google',
-    ramSize: '4GB',
-    romSize: '8GB',
-    tags: 'release-keys',
-    verId: ''
-  };
+  var DEVICE_FIXED = CLIENT_PROFILES.masnew;
+  var FINGERPRINT_FIXED = CLIENT_PROFILES.masnew.fingerprint;
 
   var keyHexParsed = null;
   function getKey() {
@@ -311,8 +367,10 @@
     var list = item && item.posterList;
     if (!list || !list.length) return '';
     for (var i = 0; i < list.length; i++) {
-      if (list[i] && list[i].fileType === fileType && trim(list[i].fileUrl) !== '') {
-        return trim(list[i].fileUrl);
+      var p = list[i];
+      if (p && (p.fileType === fileType || p.type === fileType || p.posterType === fileType)) {
+        var u = trim(p.fileUrl || p.url || p.posterUrl);
+        if (u !== '') return u;
       }
     }
     return '';
@@ -451,18 +509,25 @@
     }
   }
 
-  function deviceDict() {
-    var dict = {};
-    for (var k in DEVICE_FIXED) {
-      if (Object.prototype.hasOwnProperty.call(DEVICE_FIXED, k)) {
-        dict[k] = DEVICE_FIXED[k];
-      }
-    }
-    dict.apkVersion = APK_VERSION;
-    dict.sysVersion = SPKG_VER;
-    dict.appId = APP_ID;
-    dict.sn = session.sn;
-    return dict;
+  function deviceDict(profile) {
+    var prof = profile || resolveProfile();
+    return {
+      loginType: prof.loginType,
+      appLanguage: 'en',
+      hardwareInfo: prof.hardwareInfo,
+      model: prof.model,
+      product: prof.product,
+      cpu: prof.cpu,
+      B29: '',
+      reserve1: prof.reserve1 || '',
+      deviceToken: '',
+      drmId: '',
+      sdkVer: prof.sdkVer,
+      apkVersion: prof.apkVersion,
+      sysVersion: prof.sysVersion,
+      appId: prof.appId,
+      sn: session.sn
+    };
   }
 
   var preferredHost = '';
@@ -548,7 +613,7 @@
       arm();
       xhr.onprogress = arm;
       xhr.onreadystatechange = function () { if (xhr.readyState >= 2) arm(); };
-      try { xhr.setRequestHeader('apk', APP_ID); } catch (e) {}
+      try { xhr.setRequestHeader('apk', APK_TRANSPORT_APP_ID); } catch (e) {}
       try { xhr.setRequestHeader('apkVer', APK_VER_HEADER); } catch (e) {}
       try { xhr.setRequestHeader('spkgVer', SPKG_VER); } catch (e) {}
       // Browsers forbid this header. The local development proxy supplies it instead.
@@ -644,16 +709,17 @@
       opts = {};
     }
     opts = opts || {};
+    var prof = resolveProfile(opts.profile);
 
     enqueue(function (release) {
       var fullPayload = {};
       if (opts.baseFields !== false) {
-        fullPayload.portalCode = PORTAL_CODE;
+        fullPayload.portalCode = prof.portalCode;
         fullPayload.userId = session.userId;
         fullPayload.userToken = session.userToken;
       }
       if (opts.deviceFields !== false) {
-        var dev = deviceDict();
+        var dev = deviceDict(prof);
         for (var k in dev) {
           if (Object.prototype.hasOwnProperty.call(dev, k)) fullPayload[k] = dev[k];
         }
@@ -829,17 +895,31 @@
       encMediaSupported: 1,
       liveCodeList: ['masnew_live'],
       appParams: '',
-      reserve1: FIXED_RESERVE1,
+      reserve1: DEVICE_FIXED.reserve1 || FIXED_RESERVE1,
       pipFlag: '0'
     };
   }
 
   function isCfl(url) {
-    var qs = url.slice(url.lastIndexOf('?') + 1).split('&');
+    var qs = (url || '').slice((url || '').lastIndexOf('?') + 1).split('&');
     for (var i = 0; i < qs.length; i++) {
       if (trim(qs[i]) === 'sign_type=cfl') return true;
     }
     return false;
+  }
+
+  function getCdnSignType(u) {
+    if (!u) return '';
+    if (u.sign_type) return trim(u.sign_type).toLowerCase();
+    var m = ((u && u.url) || '').match(/[?&]sign_type=([^&]+)/i);
+    return m ? trim(m[1]).toLowerCase() : '';
+  }
+
+  function isVodStreamSupported(u) {
+    var st = getCdnSignType(u);
+    // 'cs' requires Android Ranger native daemon (libnative-lib.so); unsupported on Tizen
+    if (st === 'cs') return false;
+    return st === 'cfl' || st === 'goog' || st === 'fast' || isCfl((u && u.url) || '');
   }
 
   function withScheme(addr) {
@@ -852,6 +932,8 @@
     var result = [];
     var list = slb && slb.cdn_list;
     if (!list || !list.length) return result;
+
+    // 1st priority: supported sign_type (goog, cfl, fast) with tag 'free'
     for (var i = 0; i < list.length; i++) {
       var cdn = list[i];
       if (cdn && trim(cdn.tag) === 'vod') {
@@ -859,7 +941,7 @@
         for (var j = 0; j < uList.length; j++) {
           var u = uList[j];
           var authUrl = trim(u && u.url);
-          if ((isCfl(authUrl) || trim(u && u.sign_type) === 'cfl') && trim(u && u.tag) === 'free') {
+          if (isVodStreamSupported(u) && trim(u && u.tag) === 'free') {
             var bases = [withScheme(cdn.main_addr)];
             var sp = trim(cdn.spared_addr);
             if (sp && bases.indexOf(withScheme(sp)) === -1) bases.push(withScheme(sp));
@@ -869,6 +951,8 @@
         }
       }
     }
+
+    // 2nd priority: any non-cs CDN with tag 'free'
     if (!result.length) {
       for (var d = 0; d < list.length; d++) {
         var c = list[d];
@@ -877,7 +961,7 @@
           for (var p = 0; p < mList.length; p++) {
             var m = mList[p];
             var aUrl = trim(m && m.url);
-            if (aUrl && (trim(m && m.tag) === 'free' || aUrl.indexOf('tag=free') !== -1)) {
+            if (getCdnSignType(m) !== 'cs' && aUrl && (trim(m && m.tag) === 'free' || aUrl.indexOf('tag=free') !== -1)) {
               var b = [withScheme(c.main_addr)];
               var s2 = trim(c.spared_addr);
               if (s2 && b.indexOf(withScheme(s2)) === -1) b.push(withScheme(s2));
@@ -888,7 +972,8 @@
         }
       }
     }
-    // v15 fallback: accept any signed VOD CDN
+
+    // 3rd priority: any supported sign_type regardless of free tag
     if (!result.length) {
       for (var f = 0; f < list.length; f++) {
         var c3 = list[f];
@@ -897,7 +982,7 @@
           for (var q = 0; q < list3.length; q++) {
             var u3 = list3[q];
             var url3 = trim(u3 && u3.url);
-            if (isCfl(url3) || trim(u3 && u3.sign_type) === 'cfl') {
+            if (isVodStreamSupported(u3)) {
               var b3 = [withScheme(c3.main_addr)];
               var sp3 = trim(c3.spared_addr);
               if (sp3 && b3.indexOf(withScheme(sp3)) === -1) b3.push(withScheme(sp3));
@@ -908,6 +993,27 @@
         }
       }
     }
+
+    // 4th priority: any non-cs CDN
+    if (!result.length) {
+      for (var k = 0; k < list.length; k++) {
+        var c4 = list[k];
+        if (c4 && trim(c4.tag) === 'vod') {
+          var list4 = c4.url_list || [];
+          for (var r = 0; r < list4.length; r++) {
+            var u4 = list4[r];
+            if (getCdnSignType(u4) !== 'cs') {
+              var b4 = [withScheme(c4.main_addr)];
+              var sp4 = trim(c4.spared_addr);
+              if (sp4 && b4.indexOf(withScheme(sp4)) === -1) b4.push(withScheme(sp4));
+              result.push({ bases: b4, auth: trim(u4 && u4.url) });
+              break;
+            }
+          }
+        }
+      }
+    }
+
     return result;
   }
 
@@ -944,31 +1050,86 @@
     getSlb(function () {});
   }
 
-  function collectTracks(episode) {
+  function collectTracks(episode, response) {
     var tracks = [];
-    var totalList = episode && episode.totalMovieList || [];
-    for (var i = 0; i < totalList.length; i++) {
-      var mList = totalList[i] && totalList[i].movieList || [];
-      for (var j = 0; j < mList.length; j++) {
-        if (mList[j] && trim(mList[j].contentId)) tracks.push(mList[j]);
+    var seen = Object.create(null);
+
+    function addList(list, groupQuality) {
+      if (!Array.isArray(list)) return;
+      for (var i = 0; i < list.length; i++) {
+        var track = list[i];
+        if (!track || !trim(track.contentId)) continue;
+        var quality = trim(track.quality) || trim(groupQuality);
+        var key = JSON.stringify([
+          trim(track.contentId), quality.toLowerCase(),
+          trim(track.videoFormat).toLowerCase(), trim(track.encodeFormat).toLowerCase(),
+          trim(track.audioInfo), trim(track.language || track.languageName || track.audioLanguage)
+        ]);
+        var index = seen[key];
+        var candidate = trim(track.quality) || !quality ? track : Object.assign({}, track, { quality: quality });
+        if (index === undefined) {
+          seen[key] = tracks.length;
+          tracks.push(candidate);
+        } else if (!(tracks[index].licenseList || []).length && (candidate.licenseList || []).length) {
+          tracks[index] = candidate;
+        }
       }
     }
+
+    function addTracks(node) {
+      if (!node) return;
+      var groups = node.totalMovieList || [];
+      for (var i = 0; i < groups.length; i++) {
+        if (groups[i]) addList(groups[i].movieList, groups[i].quality);
+      }
+      addList(node.movieList, node.quality);
+    }
+
+    addTracks(episode);
+    if (response !== episode) addTracks(response);
     return tracks;
   }
 
-  function subtitleList(episode) {
+  function subtitleList(episode, play) {
     var subs = [];
-    var list = episode && episode.subtitleList || [];
-    for (var i = 0; i < list.length && subs.length < 30; i++) {
-      var f = list[i] && list[i].file && list[i].file[0];
-      if (f && trim(f.url)) {
+    var seenUrls = Object.create(null);
+
+    function addFrom(node) {
+      var list = node && node.subtitleList || [];
+      for (var i = 0; i < list.length && subs.length < 30; i++) {
+        var entry = list[i];
+        var files = entry && entry.file;
+        if (!Array.isArray(files) || !files.length) continue;
+        var picked = null;
+        var firstValid = null;
+        for (var j = 0; j < files.length; j++) {
+          var f = files[j];
+          var url = trim(f && f.url);
+          if (!url) continue;
+          if (!firstValid) firstValid = f;
+          var ft = trim(f.fileType).toLowerCase();
+          var lowerUrl = url.toLowerCase();
+          if (ft === 'srt' || ft === 'vtt' || lowerUrl.indexOf('.srt') !== -1 || lowerUrl.indexOf('.vtt') !== -1) {
+            picked = f;
+            break;
+          }
+        }
+        picked = picked || firstValid;
+        var chosenUrl = picked && trim(picked.url);
+        if (!chosenUrl || seenUrls[chosenUrl]) continue;
+        seenUrls[chosenUrl] = true;
+        var chosenFmt = trim(picked.fileType).toLowerCase();
+        if (!chosenFmt) chosenFmt = chosenUrl.toLowerCase().indexOf('.vtt') !== -1 ? 'vtt' : 'srt';
         subs.push({
-          lang: trim(list[i].language),
-          url: trim(f.url),
-          format: trim(f.fileType) || 'srt'
+          lang: trim(entry.language),
+          url: chosenUrl,
+          format: chosenFmt
         });
       }
     }
+
+    addFrom(episode);
+    if (play && play !== episode) addFrom(play);
     return subs;
   }
 
@@ -984,13 +1145,112 @@
     return num > 100000 ? num / 1000 : num;
   }
 
+  var lastStartPlayDiag = null;
+  function publishStartPlayDiag(diag) {
+    lastStartPlayDiag = diag;
+    try { window.__xuperLastStartPlayDiag = diag; } catch (e) {}
+  }
+
+  function normalizeEpisodeNumber(episodeNumber) {
+    var parsed = parseInt(episodeNumber, 10);
+    return !isNaN(parsed) && parsed > 0 ? parsed : 0;
+  }
+
+  function findEpisode(list, epNum) {
+    if (!Array.isArray(list) || !list.length) return null;
+    if (epNum > 0) {
+      for (var i = 0; i < list.length; i++) {
+        var item = list[i];
+        if (!item) continue;
+        var rawNum = item.episodeNumber != null ? item.episodeNumber
+          : (item.seriesNumber != null ? item.seriesNumber : item.number);
+        var n = parseInt(rawNum, 10);
+        if (!isNaN(n) && n === epNum) return item;
+      }
+    }
+    return list[0];
+  }
+
+  function summarizeRawVariant(track, source, groupQuality) {
+    return {
+      source: source,
+      contentId: trim(track.contentId),
+      quality: trim(track.quality) || trim(groupQuality),
+      groupQuality: trim(groupQuality),
+      codec: trim(track.encodeFormat).toUpperCase(),
+      container: trim(track.videoFormat).toUpperCase(),
+      audio: trim(track.audioInfo),
+      language: trim(track.language || track.languageName || track.audioLanguage)
+    };
+  }
+
+  function summarizeRawNode(node, prefix, out) {
+    if (!node) return;
+    var groups = node.totalMovieList || [];
+    for (var i = 0; i < groups.length; i++) {
+      var grp = groups[i];
+      if (!grp || !Array.isArray(grp.movieList)) continue;
+      for (var j = 0; j < grp.movieList.length; j++) {
+        if (grp.movieList[j]) out.push(summarizeRawVariant(grp.movieList[j], prefix + '.totalMovieList', grp.quality));
+      }
+    }
+    if (Array.isArray(node.movieList)) {
+      for (var k = 0; k < node.movieList.length; k++) {
+        if (node.movieList[k]) out.push(summarizeRawVariant(node.movieList[k], prefix + '.movieList', node.quality));
+      }
+    }
+  }
+
+  function summarizeStartPlayDiag(cid, seriesContentId, epNum, pRes, matchedEp, tracks) {
+    var before = [];
+    if (matchedEp && matchedEp !== pRes) summarizeRawNode(matchedEp, 'episode', before);
+    summarizeRawNode(pRes, 'play', before);
+    var after = [];
+    for (var i = 0; i < tracks.length; i++) {
+      var t = tracks[i];
+      after.push({
+        index: i,
+        contentId: trim(t.contentId),
+        quality: trim(t.quality),
+        codec: trim(t.encodeFormat).toUpperCase(),
+        container: trim(t.videoFormat).toUpperCase(),
+        audio: trim(t.audioInfo),
+        language: trim(t.language || t.languageName || t.audioLanguage)
+      });
+    }
+    return {
+      contentId: cid,
+      seriesContentId: trim(seriesContentId) || null,
+      episodeNumber: epNum || null,
+      episodeCount: Array.isArray(pRes && pRes.episodeList) ? pRes.episodeList.length : 0,
+      beforeCollectTracks: before,
+      afterCollectTracks: after,
+      selectedIndex: null
+    };
+  }
+
   var playCache = {};
   var playWaiters = {};
-  function loadPlay(contentId, seriesContentId, callback) {
+  function loadPlay(contentId, seriesContentId, episodeNumber, callback, opts) {
+    if (typeof episodeNumber === 'function') {
+      opts = callback;
+      callback = episodeNumber;
+      episodeNumber = null;
+    }
+    if (typeof callback === 'object' && typeof opts === 'function') {
+      var _swap = callback;
+      callback = opts;
+      opts = _swap;
+    }
+    opts = opts || {};
+    var playProfile = resolveProfile(opts.profile || 'masmobile');
+
     var cid = trim(contentId);
     if (!cid) return callback(new Error('Missing contentId'));
-    var key = cid + ':' + trim(seriesContentId);
+    var epNum = normalizeEpisodeNumber(episodeNumber);
+    var key = cid + ':' + trim(seriesContentId) + ':' + (epNum || '') + ':' + playProfile.name;
     if (playCache[key] && Date.now() < playCache[key].at + PLAY_TTL) {
+      publishStartPlayDiag(playCache[key].data.diag);
       return callback(null, playCache[key].data);
     }
 
@@ -1012,33 +1272,56 @@
       if (err) return doneAll(err);
       var payload = {
         contentId: cid,
-        seriesContentId: trim(seriesContentId),
+        seriesContentId: trim(seriesContentId) || null,
         startTime: 0,
         type: '1',
-        columnId: 0,
-        authType: ''
+        columnId: -1,
+        authType: null,
+        episodeNumberList: epNum > 0 ? [epNum] : null,
+        portalCode: playProfile.portalCode,
+        appId: playProfile.appId,
+        apkVersion: playProfile.apkVersion,
+        sysVersion: playProfile.sysVersion,
+        loginType: playProfile.loginType,
+        model: playProfile.model,
+        hardwareInfo: playProfile.hardwareInfo
       };
-      call('v10/startPlayVOD', payload, function (pErr, pRes) {
+      call('v10/startPlayVOD', payload, { profile: playProfile }, function (pErr, pRes) {
         if (pErr) return doneAll(pErr);
-        var ep = pRes && pRes.episodeList && pRes.episodeList[0];
-        if (!ep) return doneAll(new Error('No video episode returned'));
-        var tracks = collectTracks(ep);
+        if (!pRes) return doneAll(new Error('No video response returned'));
+        // The Android client accepts up to three nested portal data envelopes.
+        for (var depth = 0; depth < 3; depth++) {
+          if (!pRes.data || typeof pRes.data !== 'object' || Array.isArray(pRes.data)) break;
+          pRes = pRes.data;
+        }
+        var matchedEp = findEpisode(pRes.episodeList, epNum);
+        var tracks = collectTracks(matchedEp, pRes);
+        var ep = matchedEp || pRes;
+        var diag = summarizeStartPlayDiag(cid, seriesContentId, epNum, pRes, matchedEp, tracks);
+        publishStartPlayDiag(diag);
+        if (typeof console !== 'undefined' && console.info) {
+          console.info('[MagisClient] startPlayVOD variants', diag);
+        }
         if (!tracks.length) return doneAll(new Error('No video tracks returned'));
-        var data = { play: pRes, episode: ep, tracks: tracks };
+        var data = { play: pRes, episode: ep, tracks: tracks, diag: diag };
         playCache[key] = { at: Date.now(), data: data };
         doneAll(null, data);
       });
     });
   }
 
-  function mediaInfo(contentId, seriesContentId, callback) {
-    loadPlay(contentId, seriesContentId, function (err, res) {
+  function mediaInfo(contentId, seriesContentId, episodeNumber, callback) {
+    if (typeof episodeNumber === 'function') {
+      callback = episodeNumber;
+      episodeNumber = null;
+    }
+    loadPlay(contentId, seriesContentId, episodeNumber, function (err, res) {
       if (err) return callback(err);
       var tr = res.tracks[0];
       callback(null, {
         name: text(res.play && res.play.name),
         audio: trim(tr.audioInfo),
-        subtitles: subtitleList(res.episode),
+        subtitles: subtitleList(res.episode, res.play),
         duration: durationSeconds(tr.duration || res.episode.duration || (res.play && res.play.duration))
       });
     });
@@ -1048,8 +1331,13 @@
    * What a title offers, without resolving a stream: the audio languages and qualities of its tracks and the
    * languages of its subtitles. Shares loadPlay's cache with resolve(), so the player finds it already loaded.
    */
-  function mediaOptions(contentId, seriesContentId, callback) {
-    loadPlay(contentId, seriesContentId, function (err, res) {
+  function mediaOptions(contentId, seriesContentId, episodeNumber, callback, opts) {
+    if (typeof episodeNumber === 'function') {
+      opts = callback;
+      callback = episodeNumber;
+      episodeNumber = null;
+    }
+    loadPlay(contentId, seriesContentId, episodeNumber, function (err, res) {
       if (err) return callback(err);
       var audios = [], qualities = [], subs = [], i;
       for (i = 0; i < res.tracks.length; i++) {
@@ -1057,50 +1345,21 @@
         if (a && audios.indexOf(a) === -1) audios.push(a);
         if (q && qualities.indexOf(q) === -1) qualities.push(q);
       }
-      var list = subtitleList(res.episode);
+      var list = subtitleList(res.episode, res.play);
       for (i = 0; i < list.length; i++) {
         if (list[i].lang && subs.indexOf(list[i].lang) === -1) subs.push(list[i].lang);
       }
 
+      // Only what the tracks really have. The catalog also declares qualities ("1080p,720p,480p"), but the portal
+      // delivers the tracks of the account's tier (720p for a free one): offering the declared ones promised a
+      // 1080p that no track had, and choosing it changed nothing
       var qOrder = ['4k', '2160p', '1080p', '720p', '480p', '360p'];
-      function sortQualities(arr) {
-        arr.sort(function (x, y) {
-          var ix = qOrder.indexOf(x.toLowerCase());
-          var iy = qOrder.indexOf(y.toLowerCase());
-          if (ix === -1) ix = 99;
-          if (iy === -1) iy = 99;
-          return ix - iy;
-        });
-      }
-
-      var cid = trim(contentId);
-      var cachedItem = itemCache[cid] || (seriesContentId && itemCache[trim(seriesContentId)]);
-      var declared = (cachedItem && cachedItem.qualities) || [];
-      if (!declared.length && cachedItem && cachedItem.quality) {
-        declared = String(cachedItem.quality).split(',');
-      }
-
-      if ((!declared || !declared.length) && cid) {
-        detail(cid, function (dErr, dData) {
-          if (!dErr && dData && dData.item && dData.item.qualities) {
-            for (var k = 0; k < dData.item.qualities.length; k++) {
-              var qk = trim(dData.item.qualities[k]).toLowerCase();
-              if (qk && qualities.indexOf(qk) === -1) qualities.push(qk);
-            }
-            sortQualities(qualities);
-          }
-          callback(null, { audios: audios, qualities: qualities, subtitles: subs });
-        });
-        return;
-      }
-
-      for (var d = 0; d < declared.length; d++) {
-        var dq = trim(declared[d]).toLowerCase();
-        if (dq && qualities.indexOf(dq) === -1) qualities.push(dq);
-      }
-      sortQualities(qualities);
+      qualities.sort(function (x, y) {
+        var ix = qOrder.indexOf(x), iy = qOrder.indexOf(y);
+        return (ix === -1 ? 99 : ix) - (iy === -1 ? 99 : iy);
+      });
       callback(null, { audios: audios, qualities: qualities, subtitles: subs });
-    });
+    }, opts);
   }
 
   function resolve(contentId, seriesContentId, opts, callback) {
@@ -1112,13 +1371,17 @@
 
     // The CDN token does not depend on the title: ask it now, while the title loads
     warmSlb();
-    loadPlay(contentId, seriesContentId, function (err, res) {
+    loadPlay(contentId, seriesContentId, opts.episodeNumber, function (err, res) {
       if (err) return callback(err);
       var play = res.play;
       var episode = res.episode;
       var tracks = res.tracks;
       var trackIdx = parseInt(opts.trackIndex, 10);
       if (isNaN(trackIdx) || trackIdx < 0 || trackIdx >= tracks.length) trackIdx = 0;
+      if (res.diag) {
+        res.diag.selectedIndex = trackIdx;
+        publishStartPlayDiag(res.diag);
+      }
       var chosen = tracks[trackIdx];
 
       var license = trim(chosen.licenseList && chosen.licenseList[0] && chosen.licenseList[0].license || '');
@@ -1172,7 +1435,7 @@
           audio: trim(chosen.audioInfo),
           headers: makeHeaders(mainCdn.auth),
           backupUrls: backupUrls,
-          subtitles: subtitleList(episode),
+          subtitles: subtitleList(episode, play),
           name: text(play && play.name),
           isHls: false,
           // All audio/quality variants of this title; resolve again with opts.trackIndex to switch
@@ -1182,13 +1445,15 @@
               index: i,
               audio: trim(t.audioInfo),
               quality: trim(t.quality),
+              codec: trim(t.encodeFormat).toUpperCase(),
+              format: trim(t.videoFormat).toUpperCase(),
               language: trim(t.language || t.languageName || t.audioLanguage || ''),
               raw: Object.keys(t).join(',')
             };
           })
         });
       });
-    });
+    }, opts);
   }
 
   // ---- Live TV Signing & Resolution (exact port from original magis.js) ----
@@ -1646,25 +1911,19 @@
           if (sErr) return tryStartLive(sErr);
           var addrList = sRes && sRes.liveAddressList || [];
           var validAddrs = addrList.filter(function (a) { return a && a.playCode && a.license; });
-          var chosen = null;
-          // Prefer FHD / 1080p definition if available (smart TV selection)
-          for (var i = 0; i < validAddrs.length; i++) {
-            var def = String(validAddrs[i].definition || validAddrs[i].quality || validAddrs[i].name || '').toUpperCase();
-            if (def.indexOf('FHD') !== -1 || def.indexOf('1080') !== -1) {
-              chosen = validAddrs[i];
-              break;
-            }
+          function liveQualityRank(address) {
+            var label = [address.definition, address.quality, address.name].join(' ').toUpperCase();
+            var code = trim(address.quality);
+            if (/2160|4K|UHD/.test(label) || code === '4') return 2160;
+            if (/1080|FHD/.test(label) || code === '3') return 1080;
+            if (/720|HD/.test(label) || code === '2') return 720;
+            if (/480|SD/.test(label) || code === '1') return 480;
+            return 0;
           }
-          if (!chosen) {
-            for (var j = 0; j < validAddrs.length; j++) {
-              var def2 = String(validAddrs[j].definition || validAddrs[j].quality || validAddrs[j].name || '').toUpperCase();
-              if (def2.indexOf('HD') !== -1 || def2.indexOf('720') !== -1) {
-                chosen = validAddrs[j];
-                break;
-              }
-            }
+          var chosen = validAddrs[0];
+          for (var i = 1; i < validAddrs.length; i++) {
+            if (liveQualityRank(validAddrs[i]) > liveQualityRank(chosen)) chosen = validAddrs[i];
           }
-          if (!chosen && validAddrs[0]) chosen = validAddrs[0];
           if (!chosen && addrList[0]) chosen = addrList[0];
           if (!chosen || !chosen.license) {
             return callback(new Error('Portal did not return live channel license'));
@@ -1821,8 +2080,8 @@
     var pType = trim(asset.programType) || 'movie';
     var isSeries = pType === 'teleplay' || pType === 'series' || (asset.volumnCount && parseInt(asset.volumnCount, 10) > 1);
     var posterUrl = imageOf(asset, 'icon') || imageOf(asset, 'poster') || imageOf(asset, '1') || trim(asset.picture || asset.cover || asset.posterUrl);
-    var landscapeUrl = imageOf(asset, 'poster') || imageOf(asset, 'stage') || imageOf(asset, '2') || posterUrl;
-    var backdropUrl = imageOf(asset, 'stage') || imageOf(asset, 'poster') || imageOf(asset, '4') || imageOf(asset, '3') || landscapeUrl;
+    var landscapeUrl = imageOf(asset, 'banner') || imageOf(asset, 'special_topic_banner') || imageOf(asset, 'poster') || imageOf(asset, 'stage') || imageOf(asset, '2') || posterUrl;
+    var backdropUrl = imageOf(asset, 'background') || imageOf(asset, 'stage') || imageOf(asset, 'banner') || imageOf(asset, 'poster') || imageOf(asset, '4') || imageOf(asset, '3') || landscapeUrl;
     var posterAlternates = collectAssetAlternates(asset, null);
 
     var item = {
@@ -1850,6 +2109,8 @@
       updateCount: (asset.updateCount === undefined || asset.updateCount === null) ? 0 : (parseInt(asset.updateCount, 10) || 0),
       moreAudio: asset.moreAudio !== undefined ? asset.moreAudio : 0,
       moreSubtitle: asset.moreSubtitle !== undefined ? asset.moreSubtitle : 0,
+      quality: text(asset.definition || asset.quality),
+      qualities: asset.qualities ? asset.qualities : (asset.definition || asset.quality ? [text(asset.definition || asset.quality)] : []),
       row: '',
       streamUrl: '',
       portal: true
@@ -2068,7 +2329,7 @@
             var id = parseInt(row.col && (row.col.columnId || row.col.id), 10);
             if (!want || !id || row.titles.length >= want) return;
             pending++;
-            call('v3/getShelveData', { columnId: id, columnType: '2', pageNum: 1, pageSize: Math.max(20, want) }, { low: !!opts.low }, function (sErr, sRes) {
+            call('v3/getShelveData', { columnId: id, columnType: '2', pageNum: 1, pageSize: Math.max(20, want), numDisplay: null, encryptVersion: 0 }, { low: !!opts.low }, function (sErr, sRes) {
               var full = sErr ? [] : rowTitles(sRes && sRes.assetList || [], row.name);
               if (full.length > row.titles.length) row.titles = full.slice(0, want);
               if (--pending === 0) done();
@@ -2107,23 +2368,52 @@
     if (hit && Date.now() - hit.at < TREE_TTL) return callback(null, hit.list);
     ensureSession(function (err) {
       if (err) return callback(err);
-      var body = { columnId: columnId, pageNum: 1, pageSize: 1000 };
-      if (special) body.specialFlag = '1';
-      call('v3/getColumnContents', body, { low: !!(opts && opts.low) }, function (cErr, cRes) {
-        if (cErr) return callback(cErr);
-        var raw = cRes && cRes.childColumnList || [];
+      var allRaw = [];
+      var page = 1;
+      var pageSize = 20;
+
+      function fetchPage() {
+        var body = { columnId: columnId, pageNum: page, pageSize: pageSize };
+        if (special) {
+          body.specialFlag = '1';
+          body.portalCode = 'masnew';
+          body.appId = 'com.android.msandroid';
+          body.loginType = '2';
+        }
+        call('v3/getColumnContents', body, { low: !!(opts && opts.low) }, function (cErr, cRes) {
+          if (cErr) {
+            if (allRaw.length > 0) return finish();
+            return callback(cErr);
+          }
+          var raw = cRes && cRes.childColumnList || [];
+          for (var r = 0; r < raw.length; r++) allRaw.push(raw[r]);
+          var total = parseInt(cRes && cRes.totalSize, 10) || 0;
+          if (raw.length > 0 && total > allRaw.length && page < 10) {
+            page++;
+            fetchPage();
+          } else {
+            finish();
+          }
+        });
+      }
+
+      function finish() {
         var list = [];
-        for (var i = 0; i < raw.length; i++) {
-          var c = raw[i];
+        for (var i = 0; i < allRaw.length; i++) {
+          var c = allRaw[i];
           if (!c || !c.id || (!special && String(c.restricted) === '1')) continue;
           var isColRestricted = special || String(c.restricted) === '1';
           if (isColRestricted) restrictedColumns[String(c.id)] = true;
           list.push({ id: c.id, code: text(c.code), name: text(c.name), free: String(c.free) === '1', restricted: isColRestricted, sequence: parseInt(c.sequence, 10) || 0 });
         }
         list.sort(function (a, b) { return a.sequence - b.sequence; });
-        columnCache[key] = { at: Date.now(), list: list };
+        if (list.length > 0) {
+          columnCache[key] = { at: Date.now(), list: list };
+        }
         callback(null, list);
-      });
+      }
+
+      fetchPage();
     });
   }
 
@@ -2133,14 +2423,21 @@
   function columnPage(columnId, pageNum, pageSize, callback, opts) {
     pageNum = Math.max(1, parseInt(pageNum, 10) || 1);
     pageSize = pageSize || 42;
-    var isRestrictedCol = !!(restrictedColumns[String(columnId)] || (opts && opts.restricted));
+    var isRestrictedCol = !!(restrictedColumns[String(columnId)] || (opts && opts.restricted) || String(columnId) === String(ROOT_IDS.adult));
     if (isRestrictedCol) restrictedColumns[String(columnId)] = true;
     var key = columnId + ':' + pageNum + ':' + pageSize;
     var hit = shelfCache[key];
     if (hit && Date.now() < hit.until) return callback(null, { items: hit.items, total: hit.total, cached: true });
     ensureSession(function (err) {
       if (err) return callback(err);
-      call('v3/getShelveData', { columnId: columnId, columnType: '2', pageNum: pageNum, pageSize: pageSize }, { low: !!(opts && opts.low) }, function (sErr, sRes) {
+      var body = { columnId: columnId, columnType: '2', pageNum: pageNum, pageSize: pageSize, numDisplay: null, encryptVersion: 0 };
+      if (isRestrictedCol) {
+        body.portalCode = 'masnew';
+        body.appId = 'com.android.msandroid';
+        body.loginType = '2';
+        body.specialFlag = '1';
+      }
+      call('v3/getShelveData', body, { low: !!(opts && opts.low) }, function (sErr, sRes) {
         if (sErr) return callback(sErr);
         var list = sRes && sRes.assetList || [];
         var items = [];
@@ -2162,7 +2459,9 @@
           shelfCache = {};
           shelfCount = 0;
         }
-        shelfCache[key] = { until: Date.now() + fresh * 1000, items: items, total: total };
+        if (items.length > 0) {
+          shelfCache[key] = { until: Date.now() + fresh * 1000, items: items, total: total };
+        }
         callback(null, { items: items, total: total, cached: false });
       });
     });
@@ -2173,7 +2472,14 @@
   function browse(root, filters, pageNum, pageSize, callback, opts) {
     var columnId = ROOT_IDS[root];
     if (!columnId) return callback(new Error('unknown root ' + root));
+    var isAdult = root === 'adult' || String(columnId) === String(ROOT_IDS.adult);
     var body = { columnId: columnId, pageNum: Math.max(1, pageNum || 1), pageSize: pageSize || 42 };
+    if (isAdult) {
+      body.portalCode = 'masnew';
+      body.appId = 'com.android.msandroid';
+      body.loginType = '2';
+      body.specialFlag = '1';
+    }
     filters = filters || {};
     if (filters.tags) body.tags = filters.tags;
     if (filters.year) body.year = filters.year;
@@ -2186,8 +2492,16 @@
         var list = fRes && fRes.assetList || [];
         var items = [];
         for (var i = 0; i < list.length; i++) {
-          var it = itemFromAsset(list[i], ROOT_CATEGORY[root] || '', null);
-          if (it) items.push(it);
+          var it = itemFromAsset(list[i], ROOT_CATEGORY[root] || (isAdult ? 'adult' : ''), null);
+          if (it) {
+            if (isAdult) {
+              it.restricted = true;
+              it.privateContent = true;
+              it.category = 'adult';
+              remember(it);
+            }
+            items.push(it);
+          }
         }
         callback(null, { items: items, total: parseInt(fRes && fRes.totalSize, 10) || 0 });
       });
@@ -2200,9 +2514,17 @@
     var columnId = ROOT_IDS[root];
     if (!columnId) return callback(new Error('unknown root ' + root));
     if (filterCache[root]) return callback(null, filterCache[root]);
+    var isAdult = root === 'adult' || String(columnId) === String(ROOT_IDS.adult);
+    var body = { columnId: columnId };
+    if (isAdult) {
+      body.portalCode = 'masnew';
+      body.appId = 'com.android.msandroid';
+      body.loginType = '2';
+      body.specialFlag = '1';
+    }
     ensureSession(function (err) {
       if (err) return callback(err);
-      call('v3/filterGenre', { columnId: columnId }, function (gErr, gRes) {
+      call('v3/filterGenre', body, function (gErr, gRes) {
         if (gErr) return callback(gErr);
         filterCache[root] = {
           tags: gRes && gRes.tags || [],
@@ -2360,6 +2682,64 @@
     });
   }
 
+  var TAB_RECOMMEND_CODES = {
+    featured: ['masnew_featured01', 'masnew_featured02', 'masnew_featured03', 'masnew_featured04', 'masnew_featured05'],
+    movies: ['masnew_movies01', 'masnew_movies02', 'masnew_movies03', 'masnew_movies04', 'masnew_movies05', 'masnew_movies06', 'masnew_movies07'],
+    series: ['masnew_series01', 'masnew_series02', 'masnew_series03', 'masnew_series04', 'masnew_series05', 'masnew_series06', 'masnew_series07'],
+    kids: ['masnew_kids01', 'masnew_kids02', 'masnew_kids03', 'masnew_kids04', 'masnew_kids05', 'masnew_kids06', 'masnew_kids07', 'masnew_kids08'],
+    anime: ['masnew_anime01', 'masnew_anime02', 'masnew_anime03', 'masnew_anime04', 'masnew_anime05'],
+    explorar: ['masnew_explorar01', 'masnew_explorar02', 'masnew_explorar03', 'masnew_explorar04', 'masnew_explorar05']
+  };
+
+  var recommendCache = {};
+  var RECOMMEND_TTL = 10 * 60 * 1000;
+
+  function getRecommends(codes, callback) {
+    var codeArr = Array.isArray(codes) ? codes : [codes];
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      call('v3/getRecommends', {
+        recommendCodeArr: codeArr
+      }, function (rErr, rRes) {
+        if (rErr) return callback(rErr);
+        var recList = (rRes && rRes.recommendList) || (rRes && rRes.data && rRes.data.recommendList) || (rRes && rRes.dataList) || [];
+        callback(null, recList);
+      });
+    });
+  }
+
+  function getTabRecommends(root, callback) {
+    var codes = TAB_RECOMMEND_CODES[root];
+    if (!codes || !codes.length) return callback(null, []);
+    var cacheKey = root;
+    if (recommendCache[cacheKey] && Date.now() - recommendCache[cacheKey].at < RECOMMEND_TTL) {
+      return callback(null, recommendCache[cacheKey].items);
+    }
+    var cat = ROOT_CATEGORY[root] || '';
+    getRecommends(codes, function (err, recList) {
+      if (err) return callback(err);
+      var items = [];
+      var seen = {};
+      for (var i = 0; i < recList.length; i++) {
+        var group = recList[i];
+        var contents = (group && group.contentList) || [];
+        for (var j = 0; j < contents.length; j++) {
+          var c = contents[j];
+          if (!c || !c.contentId || seen[c.contentId]) continue;
+          seen[c.contentId] = true;
+          var kind = c.type === '1' ? 'serie' : 'película';
+          var it = itemFromAsset(c, cat, kind);
+          if (it) {
+            if (c.viewPoint) it.tagline = trim(c.viewPoint);
+            items.push(it);
+          }
+        }
+      }
+      recommendCache[cacheKey] = { at: Date.now(), items: items };
+      callback(null, items);
+    });
+  }
+
   function getPerson(contentId, callback) {
     ensureSession(function (err) {
       if (err) return callback(err);
@@ -2439,6 +2819,26 @@
     });
   }
 
+  function getChannelProgram(channelCode, columnId, callback) {
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      call('v3/getProgram', {
+        channelCode: String(channelCode || ''),
+        columnId: parseInt(columnId, 10) || 0,
+        type: '2'
+      }, function (pErr, pRes) {
+        if (pErr) return callback(pErr);
+        var data = pRes && pRes.data ? pRes.data : pRes;
+        var programList = (data && data.programList) || [];
+        callback(null, {
+          channelCode: (data && data.channelCode) || channelCode,
+          name: (data && data.name) || '',
+          programList: programList
+        });
+      });
+    });
+  }
+
   // Once the app has started: old channel pages go
   setTimeout(function () { dropLivePages(LIVE_PAGE_KEEP_MS); }, 20000);
 
@@ -2453,10 +2853,14 @@
     getItemByPerson: getItemByPerson,
     getAllbackProgram: getAllbackProgram,
     startPlayBTV: startPlayBTV,
+    getChannelProgram: getChannelProgram,
+    getProgram: getChannelProgram,
     home: home,
     getHome: getHome,
     getShelveData: getShelveData,
     getShortVideo: getShortVideo,
+    getRecommends: getRecommends,
+    getTabRecommends: getTabRecommends,
     browse: browse,
     browseFilters: browseFilters,
     columns: columns,
@@ -2477,6 +2881,22 @@
         });
       });
     },
+    getLastStartPlayDiag: function () { return lastStartPlayDiag; },
+    vodCdns: vodCdns,
+    // Multi-profile manager: switch easily between profiles depending on request (catalog, 1080p, etc.)
+    profiles: CLIENT_PROFILES,
+    getProfiles: function () { return Object.keys(CLIENT_PROFILES); },
+    getActiveProfile: function () { return activeProfileName; },
+    setActiveProfile: function (name) {
+      if (CLIENT_PROFILES[name]) {
+        activeProfileName = name;
+        console.log('[MagisClient] active profile set to:', activeProfileName);
+      }
+      return activeProfileName;
+    },
+    getProfileConfig: function (name) { return CLIENT_PROFILES[name || activeProfileName]; },
+    // Nothing running or waiting: background work (title details for a focused card) starts only then
+    isIdle: function () { return !session.busy && !queue.length && !lowQueue.length; },
     call: call
   };
 

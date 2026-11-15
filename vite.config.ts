@@ -7,7 +7,83 @@ import https from 'https';
 import { URL } from 'url';
 import { tvCompatPlugin } from './vite-tv-compat';
 
+let cachedEpicToken = '';
+function getEpicToken(): Promise<string> {
+  if (cachedEpicToken) return Promise.resolve(cachedEpicToken);
+  return new Promise((resolve) => {
+    const req = https.request({
+      hostname: 'playlatam.site',
+      port: 443,
+      path: '/iphone/pulsera',
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      timeout: 5000
+    }, (res) => {
+      const cookies = res.headers['set-cookie'] || [];
+      for (const c of cookies) {
+        const m = c.match(/__Host-pulsera=([^;]+)/);
+        if (m) {
+          cachedEpicToken = m[1];
+          setTimeout(() => { cachedEpicToken = ''; }, 12 * 3600 * 1000);
+          return resolve(cachedEpicToken);
+        }
+      }
+      resolve('');
+    });
+    req.on('error', () => resolve(''));
+    req.end();
+  });
+}
+
 function streamProxyPlugin() {
+  const epicApiHandler = async (req: any, res: any) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    if (req.method === 'OPTIONS') {
+      res.statusCode = 204;
+      return res.end();
+    }
+    const token = await getEpicToken();
+    const targetPath = req.url || '';
+    if (targetPath.includes('/iphone/pulsera')) {
+      res.setHeader('Content-Type', 'application/json');
+      res.statusCode = 200;
+      return res.end(JSON.stringify({ ok: true, numero: token.split('.')[0], token }));
+    }
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
+      'Referer': 'https://playlatam.site/',
+      'Accept': 'application/json, text/plain, */*'
+    };
+    if (token) {
+      headers['X-Pulsera'] = token;
+      headers['Cookie'] = `__Host-pulsera=${token}`;
+    }
+    const upstreamReq = https.request({
+      hostname: 'playlatam.site',
+      port: 443,
+      path: targetPath,
+      method: req.method || 'GET',
+      headers,
+      timeout: 10000
+    }, (upstreamRes) => {
+      res.statusCode = upstreamRes.statusCode || 200;
+      for (const [k, v] of Object.entries(upstreamRes.headers)) {
+        if (k.toLowerCase() !== 'content-security-policy') {
+          if (v) res.setHeader(k, v);
+        }
+      }
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      upstreamRes.pipe(res);
+    });
+    upstreamReq.on('error', (err) => {
+      res.statusCode = 502;
+      res.end(err.message);
+    });
+    req.pipe(upstreamReq);
+  };
+
   const handler = async (req: any, res: any) => {
     // Handle CORS Preflight
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -28,8 +104,15 @@ function streamProxyPlugin() {
 
       const auth = reqUrl.searchParams.get('auth') || '';
       const license = reqUrl.searchParams.get('license') || '';
+      const pulsera = reqUrl.searchParams.get('pulsera') || '';
       const referer = reqUrl.searchParams.get('referer') || '';
       const ua = reqUrl.searchParams.get('ua') || '';
+
+      const isEpic = !!pulsera || targetUrl.includes('epictvparaiphone.top') || targetUrl.includes('playlatam.site') || targetUrl.includes('tiktokcdn');
+      let resolvedPulsera = pulsera;
+      if (isEpic && !resolvedPulsera) {
+        resolvedPulsera = await getEpicToken();
+      }
 
       const headers: Record<string, string> = {};
       if (auth || license) {
@@ -39,6 +122,10 @@ function streamProxyPlugin() {
         headers['X-Buffer'] = '0';
         if (auth) headers['Content-Auth'] = auth;
         if (license) headers['Content-License'] = license;
+      } else if (isEpic) {
+        headers['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)';
+        headers['Referer'] = 'https://epictvparaiphone.top/';
+        if (resolvedPulsera) headers['X-Pulsera'] = resolvedPulsera;
       } else {
         headers['User-Agent'] = ua || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
         if (referer) {
@@ -48,6 +135,9 @@ function streamProxyPlugin() {
           } catch {
             // ignore malformed referer url
           }
+        } else if (targetUrl.includes('wedd48c') || targetUrl.includes('daddylive') || targetUrl.includes('premium')) {
+          headers['Referer'] = 'https://daddylive.sx/';
+          headers['Origin'] = 'https://daddylive.sx';
         }
       }
       if (req.headers.range) headers['Range'] = req.headers.range;
@@ -87,6 +177,7 @@ function streamProxyPlugin() {
                 let proxyUri = `/stream-proxy?url=${encodeURIComponent(absoluteUrl)}`;
                 if (auth) proxyUri += `&auth=${encodeURIComponent(auth)}`;
                 if (license) proxyUri += `&license=${encodeURIComponent(license)}`;
+                if (resolvedPulsera) proxyUri += `&pulsera=${encodeURIComponent(resolvedPulsera)}`;
                 if (referer) proxyUri += `&referer=${encodeURIComponent(referer)}`;
                 if (ua) proxyUri += `&ua=${encodeURIComponent(ua)}`;
                 return proxyUri;
@@ -137,9 +228,11 @@ function streamProxyPlugin() {
   return {
     name: 'magis-stream-proxy',
     configureServer(server: any) {
+      server.middlewares.use('/epic-api', epicApiHandler);
       server.middlewares.use('/stream-proxy', handler);
     },
     configurePreviewServer(server: any) {
+      server.middlewares.use('/epic-api', epicApiHandler);
       server.middlewares.use('/stream-proxy', handler);
     }
   };
@@ -173,6 +266,28 @@ export default defineConfig({
       '/api/portalCore': {
         // Browser development needs one CORS-safe upstream. Keep it aligned with the
         // primary authorized transport used by the working backup.
+        target: 'https://osuhk.m3x8o50te.com',
+        changeOrigin: true,
+        secure: false,
+        headers: {
+          'User-Agent': 'okhttp/3.12.12',
+          'apk': 'com.android.msandroid',
+          'apkVer': '43404',
+          'spkgVer': '2025-08-07 05:40:11_36_16_'
+        }
+      }
+    }
+  },
+  preview: {
+    port: 5199,
+    host: true,
+    proxy: {
+      '/epic-api': {
+        target: 'https://playlatam.site',
+        changeOrigin: true,
+        rewrite: (p: string) => p.replace(/^\/epic-api/, '')
+      },
+      '/api/portalCore': {
         target: 'https://osuhk.m3x8o50te.com',
         changeOrigin: true,
         secure: false,

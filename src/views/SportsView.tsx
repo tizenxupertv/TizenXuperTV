@@ -6,6 +6,7 @@ import { feedPlan } from '../lib/scoreFeeds.ts';
 import '../styles/sports.css';
 import { MatchHeader } from '../components/sports/MatchHeader';
 import { MatchDetailModal } from '../components/sports/MatchDetailModal';
+import { StreamSelectModal } from '../components/sports/StreamSelectModal';
 import { setTrackOffset } from '../utils/scrollHelper';
 import { isPlus, plusFirst, withoutPlusDuplicates } from '../lib/sportsPlus';
 
@@ -194,6 +195,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
   const trackRef = useRef<HTMLDivElement>(null);
   const liveTrackRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const streamsContainerRef = useRef<HTMLDivElement>(null);
 
   const loadedAtRef = useRef(0);
   const lastKeyAtRef = useRef(0);
@@ -371,7 +373,19 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     if (liveTrackRef.current) setTrackOffset(liveTrackRef.current, 'x', liveCol <= 1 ? 0 : (liveCol - 1) * LIVE_CARD_PITCH);
   }, [liveCol]);
 
+  useEffect(() => {
+    if (selected && streamsContainerRef.current) {
+      const el = streamsContainerRef.current.querySelector('.spb-focus') as HTMLElement | null;
+      if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selected, streamFocus]);
+
   const openEvent = useCallback(async (ev: SportsEvent) => {
+    const isGameTime = ev.status === 'live' || (ev.startMillis > 0 && Date.now() >= ev.startMillis && ev.status !== 'finished');
+    if (!isGameTime) {
+      setDetailEvent(ev);
+      return;
+    }
     setSelected(ev);
     setStreams([]);
     setStreamFocus(0);
@@ -397,26 +411,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
       lastKeyAtRef.current = Date.now();
       const k = e.key;
       const isBack = k === 'Escape' || k === 'Backspace' || e.keyCode === 10009;
-      if (detailEvent) return;
-
-      if (selected) {
-        e.preventDefault();
-        if (isBack) e.stopImmediatePropagation();
-        const totalOpts = streams.length + 1; // streams + "Alineaciones y Estadísticas"
-        if (k === 'ArrowUp') setStreamFocus(i => Math.max(0, i - 1));
-        else if (k === 'ArrowDown') setStreamFocus(i => Math.min(totalOpts - 1, i + 1));
-        else if (k === 'Enter') {
-          if (streamFocus < streams.length && streams[streamFocus]) {
-            onPlayEventStream(selected, streamFocus, streams);
-            setSelected(null);
-          } else if (streamFocus === streams.length) {
-            const ev = selected;
-            setSelected(null);
-            setDetailEvent(ev);
-          }
-        } else if (isBack) setSelected(null);
-        return;
-      }
+      if (selected || detailEvent) return;
 
       if (focusArea === 'sidebar') {
         if (k === 'ArrowUp') {
@@ -599,34 +594,21 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
       </div>
 
       {selected && (
-        <div className="spb-modal">
-          <div className="spb-modal-card">
-            <MatchHeader event={{ ...selected, league: leagueOf(selected) }} />
-            {streamsLoading ? (
-              <div className="spp-loading spb-modal-status"><span className="spp-spinner" />Buscando señales…</div>
-            ) : streams.length === 0 ? (
-              <div className="spb-empty-text spb-modal-status">Este evento no tiene señales que se puedan ver en la app por ahora.</div>
-            ) : (
-              <div className="spb-streams">
-                {streams.map((st, i) => (
-                  <div key={i} className={`spb-stream ${i === streamFocus ? 'spb-focus' : ''}`} onClick={() => { onPlayEventStream(selected, i, streams); setSelected(null); }}>
-                    <span>{st.name}</span><span className="spb-stream-play">Ver ▶</span>
-                  </div>
-                ))}
-                <div
-                  className={`spb-stream spb-details-btn ${streamFocus === streams.length ? 'spb-focus' : ''}`}
-                  onClick={() => {
-                    const ev = selected;
-                    setSelected(null);
-                    setDetailEvent(ev);
-                  }}
-                >
-                  <span>📊 Alineaciones y Estadísticas</span><span className="spb-stream-play">Ver ›</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <StreamSelectModal
+          event={{ ...selected, league: leagueOf(selected) }}
+          streams={streams}
+          loading={streamsLoading}
+          onSelectStream={idx => {
+            onPlayEventStream(selected, idx, streams);
+            setSelected(null);
+          }}
+          onOpenDetails={() => {
+            const ev = selected;
+            setSelected(null);
+            setDetailEvent(ev);
+          }}
+          onClose={() => setSelected(null)}
+        />
       )}
 
       {detailEvent && (

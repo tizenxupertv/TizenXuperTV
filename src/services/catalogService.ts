@@ -2,6 +2,8 @@ import type { VodItem, VodEpisode, VodSeason, PersonDetail, PersonResult } from 
 import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../lib/catalogOrganizer.ts';
 import { formatDuration } from '../lib/vodResume.ts';
 import { collectPosterAlternates } from '../lib/searchArtwork.ts';
+import { getCachedTitleMeta, setCachedTitleMeta } from '../lib/titleMetaCache.ts';
+import { historyService } from './historyService.ts';
 import { catalogProvider } from './catalogProvider.ts';
 
 declare global {
@@ -45,7 +47,7 @@ function normalizeItem(raw: any, index: number): VodItem {
     };
   }
 
-  const id = String(raw.id || raw.vodId || raw.programId || raw.program_id || `item-${index}`);
+  const id = String(raw.id || raw.contentId || raw.vodId || raw.programId || raw.program_id || `item-${index}`);
   const title = String(raw.title || raw.name || raw.programName || raw.programTitle || 'Sin título');
   // Only what the portal sends: no made-up score, year, duration or genre when a field is missing
   const score = raw.score || raw.vote_average || raw.rating || raw.movieRate || raw.programScore || '';
@@ -59,6 +61,8 @@ function normalizeItem(raw: any, index: number): VodItem {
 
   const synopsis = raw.synopsis || raw.overview || raw.description || raw.programUpdateContent || '';
   const posterAlternates = collectPosterAlternates(
+    raw.icon,
+    raw.iconUrl,
     raw.posterUrl,
     raw.poster_url,
     raw.poster,
@@ -107,6 +111,7 @@ function normalizeItem(raw: any, index: number): VodItem {
     genres,
     director: raw.director || '—',
     actors: raw.actors || raw.actorDisplay || raw.cast || '—',
+    tagline: raw.tagline || raw.viewPoint || undefined,
     synopsis,
     poster,
     posterAlternates,
@@ -118,6 +123,12 @@ function normalizeItem(raw: any, index: number): VodItem {
     row: rowName,
     streamUrl: raw.streamUrl || raw.stream_url || '',
     trailerUrl: raw.trailerUrl || raw.trailer_url || raw.trailer || raw.previewUrl || raw.preview_url || undefined,
+    quality: raw.quality || raw.definition || undefined,
+    qualities: Array.isArray(raw.qualities) ? raw.qualities : (raw.quality ? String(raw.quality).split(',') : undefined),
+    volumeCount: raw.volumeCount !== undefined ? Number(raw.volumeCount) : (raw.volumnCount !== undefined ? Number(raw.volumnCount) : undefined),
+    updateCount: raw.updateCount !== undefined ? Number(raw.updateCount) : undefined,
+    moreAudio: raw.moreAudio !== undefined ? Number(raw.moreAudio) : undefined,
+    moreSubtitle: raw.moreSubtitle !== undefined ? Number(raw.moreSubtitle) : undefined,
     seasons: raw.seasons || [],
     episodes: raw.episodes || []
   };
@@ -177,6 +188,32 @@ function fetchLiveCatalog(): Promise<any[]> {
   return liveInFlight;
 }
 
+const TAB_RECOMMEND_MAP: { tab: string; root: string }[] = [
+  { tab: 'destacados', root: 'featured' },
+  { tab: 'peliculas', root: 'movies' },
+  { tab: 'series', root: 'series' },
+  { tab: 'kids', root: 'kids' },
+  { tab: 'anime', root: 'anime' },
+  { tab: 'explorar', root: 'explorar' }
+];
+
+async function fetchTabRecommends(): Promise<Record<string, VodItem[]>> {
+  if (!catalogProvider.recommends) return {};
+  const result: Record<string, VodItem[]> = {};
+  await Promise.all(
+    TAB_RECOMMEND_MAP.map(({ tab, root }) =>
+      catalogProvider.recommends!(root)
+        .then(rawList => {
+          if (Array.isArray(rawList) && rawList.length > 0) {
+            result[tab] = rawList.map((raw, idx) => normalizeItem(raw, idx));
+          }
+        })
+        .catch(() => {})
+    )
+  );
+  return result;
+}
+
 class CatalogService {
   private cache: {
     featured: VodItem[];
@@ -186,6 +223,7 @@ class CatalogService {
     anime: VodItem[];
     rowsByGroup: Record<string, VodItem[]>;
     portalRows: Record<string, PortalRow[]>;
+    heroByTab: Record<string, VodItem[]>;
   } | null = null;
 
   public getCachedCatalog() {
@@ -200,14 +238,18 @@ class CatalogService {
     anime: VodItem[];
     rowsByGroup: Record<string, VodItem[]>;
     portalRows: Record<string, PortalRow[]>;
+    heroByTab: Record<string, VodItem[]>;
   }> {
     if (this.cache) return this.cache;
 
-    const items = await fetchLiveCatalog();
-    return this.categorize(items.map((item, index) => normalizeItem(item, index)));
+    const [items, heroByTab] = await Promise.all([
+      fetchLiveCatalog(),
+      fetchTabRecommends()
+    ]);
+    return this.categorize(items.map((item, index) => normalizeItem(item, index)), heroByTab);
   }
 
-  private categorize(rawItems: VodItem[]) {
+  private categorize(rawItems: VodItem[], heroByTab: Record<string, VodItem[]> = {}) {
     // 1. Group series seasons and filter adult content. On the way, keep the portal's rows per root
     //    (getNextColumns): the same rows, names and order as the official app's tabs.
     const collector = new SeriesCollector();
@@ -270,7 +312,8 @@ class CatalogService {
       kids: kids.length >= 4 ? kids : items.slice(0, 30),
       anime: anime.length >= 4 ? anime : items.slice(0, 30),
       rowsByGroup,
-      portalRows
+      portalRows,
+      heroByTab
     };
 
     return this.cache;
@@ -420,6 +463,20 @@ class CatalogService {
 
           cleanedSeasons.sort((a, b) => a.number - b.number);
 
+          const hasCC = Boolean((res.item as any)?.moreSubtitle || (res.item as any)?.subtitles?.length);
+          const epQualities = episodes.flatMap(ep => ep.qualities || (ep.quality ? [ep.quality] : []));
+          const mergedQualities = detailItem.qualities && detailItem.qualities.length ? detailItem.qualities : epQualities;
+          setCachedTitleMeta(item.id, {
+            quality: detailItem.quality,
+            qualities: mergedQualities,
+            hasCC,
+            year: detailItem.year,
+            duration: detailItem.duration,
+            actors: detailItem.actors,
+            director: detailItem.director,
+            backdrop: detailItem.backdrop
+          });
+
           return {
             item: detailItem,
             episodes,
@@ -511,7 +568,20 @@ export function getFilteredPage(
     client.browse(root, filters, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
       if (err) return reject(err);
       const offset = (pageNum - 1) * pageSize;
-      resolve({ items: (res.items || []).map((raw, i) => normalizeItem(raw, offset + i)), total: res.total || 0 });
+      const isAdultRoot = root === 'adult';
+      const items = (res.items || []).map((raw, i) => {
+        const item = normalizeItem(raw, offset + i);
+        if (isAdultRoot) {
+          item.restricted = true;
+          item.privateContent = true;
+          if (!item.category) item.category = 'adult';
+        }
+        return item;
+      });
+      if (isAdultRoot && items.length) {
+        historyService.markPrivate(items);
+      }
+      resolve({ items, total: res.total || 0 });
     });
   });
 }
@@ -557,8 +627,10 @@ export async function getPortalColumnPage(
       });
       const total = res.total || 0;
       
-      // Save in cache
-      columnPageMemoryCache.set(cacheKey, { items, total, at: Date.now() });
+      // Save in cache only when items exist
+      if (items.length > 0) {
+        columnPageMemoryCache.set(cacheKey, { items, total, at: Date.now() });
+      }
 
       return { items, total };
   });
@@ -688,4 +760,134 @@ export function getCatchupStreamUrl(channelCode: string, contentId: string, colu
       resolve(res.url);
     });
   });
+}
+
+export interface EpgProgramItem {
+  contentId?: string;
+  programName: string;
+  startTime: string;
+  endTime: string;
+  desc?: string;
+  remark?: string;
+}
+
+export function getChannelProgram(channelCode: string, columnId = 0): Promise<{ channelCode: string; name: string; programList: EpgProgramItem[] }> {
+  return new Promise((resolve) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.getChannelProgram !== 'function') {
+      return resolve({ channelCode, name: '', programList: [] });
+    }
+    client.getChannelProgram(channelCode, columnId, (err: any, res: any) => {
+      if (err || !res) return resolve({ channelCode, name: '', programList: [] });
+      resolve({
+        channelCode: res.channelCode || channelCode,
+        name: res.name || '',
+        programList: res.programList || []
+      });
+    });
+  });
+}
+
+/**
+ * Title details asked for in the background (focused card, rotating hero). The portal answers one request at a
+ * time, so each of these delayed the grid pages and the detail behind it: walking a grid queued one request per
+ * card. Now only the latest wish is kept, and it starts only when the portal queue is empty.
+ */
+let backgroundWish: { item: VodItem; includeMediaOptions: boolean } | null = null;
+let backgroundPumping = false;
+const BACKGROUND_IDLE_POLL_MS = 400;
+
+function portalIdle(): boolean {
+  const client = window.MagisClient;
+  return !client || typeof client.isIdle !== 'function' || client.isIdle();
+}
+
+async function pumpBackgroundWishes(): Promise<void> {
+  backgroundPumping = true;
+  try {
+    while (backgroundWish) {
+      if (!portalIdle()) {
+        await new Promise(resolve => setTimeout(resolve, BACKGROUND_IDLE_POLL_MS));
+        continue;
+      }
+      const wish = backgroundWish;
+      backgroundWish = null;
+      await enrichTitleMeta(wish.item, wish.includeMediaOptions);
+    }
+  } finally {
+    backgroundPumping = false;
+  }
+}
+
+/** Same as enrichTitleMeta, but yields to every other portal request and drops wishes overtaken by a newer one */
+export function enrichTitleMetaInBackground(item: VodItem, includeMediaOptions = false): void {
+  if (!item?.id) return;
+  backgroundWish = { item, includeMediaOptions };
+  if (!backgroundPumping) void pumpBackgroundWishes();
+}
+
+const metaEnrichInFlight = new Map<string, Promise<void>>();
+const metaEnrichAttempted = new Set<string>();
+/** Titles whose play options were already asked for in this run: a title without subtitles or year stays without them */
+const mediaEnrichAttempted = new Set<string>();
+
+/**
+ * Fetches detail (and optionally mediaOptions) in the background for a title
+ * and persists its quality/CC metadata in titleMetaCache.
+ */
+export function enrichTitleMeta(item: VodItem, includeMediaOptions = false): Promise<void> {
+  if (!item?.id) return Promise.resolve();
+  const id = String(item.id);
+  const cached = getCachedTitleMeta(id);
+  const hasQuality = Boolean(cached?.quality || cached?.qualities?.length || item.quality || item.qualities?.length);
+  const hasCC = Boolean(cached?.hasCC || (item as any).moreSubtitle || (item as any).subtitles?.length);
+
+  const hasYear = Boolean(cached?.year || (item.year && item.year !== '—'));
+
+  if (hasQuality && (!includeMediaOptions || (hasCC && hasYear))) {
+    return Promise.resolve();
+  }
+  // Asked once per run: the hero used to ask again on every pass for a title that has no subtitles to find
+  if (metaEnrichAttempted.has(id) && (!includeMediaOptions || mediaEnrichAttempted.has(id))) {
+    return Promise.resolve();
+  }
+  const existing = metaEnrichInFlight.get(id);
+  if (existing) return existing;
+
+  metaEnrichAttempted.add(id);
+  if (includeMediaOptions) mediaEnrichAttempted.add(id);
+  const task = (async () => {
+    try {
+      const detail = await catalogService.getVodDetail(item);
+      const afterDetail = getCachedTitleMeta(id);
+      const stillNeedsMedia =
+        includeMediaOptions &&
+        (!(afterDetail?.quality || afterDetail?.qualities?.length) || !afterDetail?.hasCC);
+
+      if (stillNeedsMedia && window.MagisClient && typeof window.MagisClient.mediaOptions === 'function') {
+        const playableId = detail.item.isSeries && detail.episodes.length ? detail.episodes[0].id : detail.item.id;
+        const playableSeries = detail.item.isSeries ? (detail.seasons[0]?.id || detail.item.id) : '';
+        await new Promise<void>(resolve => {
+          window.MagisClient.mediaOptions(playableId, playableSeries, (err: any, m: any) => {
+            if (!err && m) {
+              setCachedTitleMeta(id, {
+                qualities: Array.isArray(m.qualities) ? m.qualities : undefined,
+                hasCC: Array.isArray(m.subtitles) && m.subtitles.length > 0
+              });
+            }
+            resolve();
+          });
+        });
+      }
+    } catch {
+      // Best-effort background enrichment; a failed request may be tried again later
+      metaEnrichAttempted.delete(id);
+      mediaEnrichAttempted.delete(id);
+    } finally {
+      metaEnrichInFlight.delete(id);
+    }
+  })();
+
+  metaEnrichInFlight.set(id, task);
+  return task;
 }

@@ -13,6 +13,7 @@ import { SportsPlayerFullscreen } from './views/SportsPlayerFullscreen';
 import type { SportsEvent, SportsStream } from './types/sports';
 import { SearchModal } from './components/search/SearchModal';
 import { ProfileScreen } from './screens/ProfileScreen';
+import { MyStuffScreen } from './screens/MyStuffScreen';
 import { BrowseScreen, resolveCategoryIdForRow } from './screens/BrowseScreen';
 import { FilterScreen } from './screens/FilterScreen';
 import { BrowseRoot, FilterRoot } from './lib/screenStack';
@@ -31,6 +32,7 @@ import { VodItem, VodEpisode } from './types/vod';
 import { LiveChannel, LiveCategory } from './types/channel';
 import { paneDisplay, supportsDisplayContents } from './lib/paneDisplay';
 import { historyService } from './services/historyService';
+import { recentChannelsService } from './services/recentChannelsService';
 import type { HistoryItem } from './types/history';
 import { settingsService, subtitleChoiceIndex, applySettingChoice, SETTINGS_ROW } from './services/settingsService';
 import { getResumeTarget, startAtForEpisode } from './lib/vodResume';
@@ -47,6 +49,7 @@ import { handleLiveTvKeys } from './app/keys/liveTvKeys';
 import { handleVodTabsKeys } from './app/keys/vodTabsKeys';
 import { getTrackOffset, setTrackOffset } from './utils/scrollHelper';
 import { updateService } from './services/updateService';
+import { markResumeLive, resumeLiveAtStart, wakeAction } from './lib/resumeAfterUpdate';
 import { UpdateReady } from './components/common/UpdateReady';
 import { pk } from './lib/localProfiles';
 import { ProfileMenu, type ProfileMenuAction } from './components/layout/ProfileMenu';
@@ -60,14 +63,15 @@ const HERO_IDLE_MS = 2 * 60 * 1000;
 
 export const App: React.FC = () => {
   // Read initial tab from URL if present (useful for deep-links & testing)
-  const initialTabParam = (new URLSearchParams(window.location.search).get('tab') as TabId) || 'destacados';
+  // After an update applied on a live channel (lib/resumeAfterUpdate.ts), the start goes back to TV en vivo
+  const initialTabParam = resumeLiveAtStart ? 'tv' : (new URLSearchParams(window.location.search).get('tab') as TabId) || 'destacados';
   const initialTabs = getTabs(false, tabPrefs.hidden());
   const validInitialTab = initialTabs.some(t => t.id === initialTabParam) ? initialTabParam : 'destacados';
   const initialTabIdx = initialTabs.findIndex(t => t.id === validInitialTab);
 
   // Navigation / Focus State
   // Domains: 'header' | 'content'
-  // Header focus index: 0..6 = Tabs, 7 = Search, 8 = Profile
+  // Header focus index: tabs first, then Search, Filter, Mis cosas, Profile
   const [focusDomain, setFocusDomain] = useState<FocusDomain>('header');
   const [selectedTab, setSelectedTab] = useState<TabId>(validInitialTab);
   const [headerFocusIndex, setHeaderFocusIndex] = useState<number>(initialTabIdx !== -1 ? initialTabIdx : 1);
@@ -187,13 +191,27 @@ export const App: React.FC = () => {
   // left for the next launch. Restarting = reloading the page (public/js/boot.js starts the new version).
   const [, setUpdateTick] = useState(0);
   useEffect(() => updateService.subscribe(() => setUpdateTick(t => t + 1)), []);
-  const isPlaying = !!activeVodPlayer || isFullscreenLive;
+  // A Deportes stream counts too: no restart prompt and no reload in the middle of a match
+  const isPlaying = !!activeVodPlayer || isFullscreenLive || !!activeSportsPlayer;
   const playingRef = useRef(isPlaying);
   playingRef.current = isPlaying;
-  // Back from another app or with the screen on again: apply it right away, unless a video is playing
+  const liveOnlyRef = useRef(false);
+  liveOnlyRef.current = isFullscreenLive && !activeVodPlayer && !activeSportsPlayer;
+  // Back from another app or with the screen on again: apply it right away, unless a video is playing. A live channel
+  // left open while the TV was off for a long time is reopened after the reload (lib/resumeAfterUpdate.ts)
   useEffect(() => {
+    let hiddenAt = 0;
     const onVisible = () => {
-      if (!document.hidden && !playingRef.current && updateService.status().downloaded) window.location.reload();
+      if (document.hidden) { hiddenAt = Date.now(); return; }
+      const action = wakeAction({
+        downloaded: !!updateService.status().downloaded,
+        playing: playingRef.current,
+        liveOnly: liveOnlyRef.current,
+        awayMs: hiddenAt ? Date.now() - hiddenAt : 0
+      });
+      if (action === 'none') return;
+      if (action === 'reload_live') markResumeLive();
+      window.location.reload();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
@@ -305,6 +323,11 @@ export const App: React.FC = () => {
       }
     }
 
+    const msParam = urlParams.get('mystuff');
+    if (msParam) {
+      push({ id: 'mystuff', tab: msParam === 'history' ? 'history' : 'favs' });
+    }
+
     if (urlParams.get('profile') === '1') {
       const sec = parseInt(urlParams.get('sec') || '0', 10);
       push({ id: 'profile', section: sec });
@@ -322,7 +345,7 @@ export const App: React.FC = () => {
   // Hero and rows for the active VOD tab
   const currentHeroItems = useMemo<VodItem[]>(
     () => heroItemsForTab(selectedTab, catalog),
-    [selectedTab, featuredItems, movieItems, seriesItems, kidsItems, animeItems]
+    [selectedTab, featuredItems, movieItems, seriesItems, kidsItems, animeItems, catalog.heroByTab]
   );
   // One array for the screens that search the whole catalog: a new one on every render made them redo their indexes
   const allCatalogItems = useMemo<VodItem[]>(
@@ -435,9 +458,13 @@ export const App: React.FC = () => {
     });
   }, [selectedTab]);
 
-  // The header avatar opens its menu: switch profile, manage profiles, Mi lista e historial, Ajustes
+  // The header bookmark opens Mis cosas; avatar opens its menu (switch/manage profile, Ajustes)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [profilesView, setProfilesView] = useState<null | 'pick' | 'manage'>(null);
+  const openMyStuff = useCallback((tab: 'favs' | 'history' = 'favs') => {
+    playerService.stop();
+    push({ id: 'mystuff', tab });
+  }, [push]);
   const openProfile = useCallback(() => setProfileMenuOpen(true), []);
   const runProfileMenu = useCallback((action: ProfileMenuAction) => {
     setProfileMenuOpen(false);
@@ -446,8 +473,8 @@ export const App: React.FC = () => {
       return;
     }
     playerService.stop();
-    // Ajustes: section 0 is Mi perfil (history and Mi lista), 1 Configuración global
-    push({ id: 'profile', section: action === 'list' ? 0 : 1 });
+    // Ajustes: section 1 Configuración global
+    push({ id: 'profile', section: 1 });
   }, [push]);
 
   // "+18" tab: shown only when enabled in Perfil › Bloqueo; opens the adult section after the PIN
@@ -480,7 +507,13 @@ export const App: React.FC = () => {
 
   // Filter screen, on the type of the current tab (movies elsewhere)
   const openFilter = useCallback((root?: FilterRoot) => {
-    const byTab: Partial<Record<TabId, FilterRoot>> = { peliculas: 'movies', series: 'series', kids: 'kids', anime: 'anime' };
+    const byTab: Partial<Record<TabId, FilterRoot>> = {
+      peliculas: 'movies',
+      series: 'series',
+      kids: 'kids',
+      anime: 'anime',
+      adultos: 'adult'
+    };
     playerService.stop();
     push({ id: 'filter', root: root || byTab[selectedTab] || 'movies' });
   }, [push, selectedTab]);
@@ -630,6 +663,7 @@ export const App: React.FC = () => {
         setLiveTvFocus,
         setIsSearchOpen,
         guardTab,
+        openMyStuff: () => openMyStuff('favs'),
         openProfile,
         openFilter: () => openFilter(),
         tabs,
@@ -724,11 +758,13 @@ export const App: React.FC = () => {
     onDrawerResults: (list: LiveChannel[]) => { drawerResultsRef.current = list; },
     onTuneChannel: (ch: LiveChannel) => {
       setTunedLiveChannel(ch);
+      recentChannelsService.addRecentChannel(ch);
       try { localStorage.setItem(pk('xuper_last_live_ch'), JSON.stringify(ch)); } catch {}
     },
     onEnterFullscreen: (ch: LiveChannel) => {
       if (ch) {
         setTunedLiveChannel(ch);
+        recentChannelsService.addRecentChannel(ch);
         try { localStorage.setItem(pk('xuper_last_live_ch'), JSON.stringify(ch)); } catch {}
       }
       setIsFullscreenLive(true);
@@ -822,7 +858,7 @@ export const App: React.FC = () => {
     <div className="app-root theme-apple-dark">
       {catalog.catalogError && selectedTab !== 'tv' && !isSportsTab(selectedTab) && (
         <div role="alert" className="network-status-toast is-offline">
-          No se pudo cargar el catálogo. Vuelve a abrir la aplicación para reintentar.
+          No se pudo cargar el catálogo. Reintentando automáticamente…
         </div>
       )}
       {/* Network Connectivity Toast (Tizen Resilience) */}
@@ -842,7 +878,9 @@ export const App: React.FC = () => {
           onSelectTab={selectTab}
           onSearchClick={() => setIsSearchOpen(true)}
           onFilterClick={() => openFilter()}
+          onMyStuffClick={() => openMyStuff('favs')}
           onProfileClick={openProfile}
+          myStuffActive={stack.some(s => s.id === 'mystuff')}
           profileActive={profileMenuOpen}
         />
       )}
@@ -1029,9 +1067,28 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* Stack screens: Profile / PIN dialog */}
+      {/* Stack screens: Mis cosas / Profile / PIN dialog */}
       {stack.map((screen, idx) => {
         const isTop = idx === stack.length - 1;
+        if (screen.id === 'mystuff') {
+          return (
+            <MyStuffScreen
+              key={`mystuff-${idx}`}
+              isTop={isTop}
+              hidden={!!activeDetailItem || !!activeVodPlayer}
+              isSearchOpen={isSearchOpen}
+              initialTab={screen.tab}
+              catalogItems={allCatalogItems}
+              onClose={pop}
+              onOpenSearch={() => setIsSearchOpen(true)}
+              onOpenVod={it => handleOpenDetail(it)}
+              onOpenHistory={h => {
+                const vod = findVod(h);
+                handleOpenDetail(vod);
+              }}
+            />
+          );
+        }
         if (screen.id === 'profile') {
           return (
             <ProfileScreen
@@ -1076,9 +1133,16 @@ export const App: React.FC = () => {
               onClose={pop}
               onOpenVod={it => handleOpenDetail(it)}
               onOpenSearch={() => setIsSearchOpen(true)}
-              onOpenFilter={screen.root === 'adult' ? undefined : () => {
+              onOpenFilter={() => {
                 const r = screen.root;
-                openFilter(r === 'movies' || r === 'series' || r === 'kids' || r === 'anime' ? r : 'movies');
+                const map: Partial<Record<BrowseRoot, FilterRoot>> = {
+                  movies: 'movies',
+                  series: 'series',
+                  kids: 'kids',
+                  anime: 'anime',
+                  adult: 'adult'
+                };
+                openFilter(map[r] || 'movies');
               }}
             />
           );

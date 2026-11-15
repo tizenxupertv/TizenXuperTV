@@ -9,7 +9,9 @@ html.text-lg .section-sub { font-size: 18px; }
 html.text-lg .poster-vignette-title { font-size: 19px; }
 html.text-lg .wide-vignette-title { font-size: clamp(23px, 1.7vw, 29px); }
 html.text-lg .wide-sub-text { font-size: clamp(16px, 1.15vw, 18px); }
-html.text-lg .showcase-title { font-size: 58px; }
+/* Home hero and detail hero are the same block: one size for both */
+html.text-lg .showcase-title, html.text-lg .vod-detail-title { font-size: 58px; }
+html.text-lg .showcase-synopsis, html.text-lg .vod-detail-synopsis { font-size: 19px; line-height: 27px; }
 html.text-lg .cw-info-text { font-size: 18px; }
 html.text-lg .cw-title-row { font-size: 20px; }
 html.text-lg .pc-title { font-size: 38px; }
@@ -24,8 +26,6 @@ html.text-lg .live-ch-title { font-size: 21px; }
 html.text-lg .live-ch-now { font-size: 17px; }
 html.text-lg .live-ch-num { font-size: 19px; }
 html.text-lg .live-cat-vname { font-size: 20px; }
-html.text-lg .vod-detail-title { font-size: 60px; }
-html.text-lg .vod-detail-synopsis { font-size: 25px; }
 html.text-lg .vod-genre-chip { font-size: 18px; }
 html.text-lg .vp-title { font-size: 40px; }
 html.text-lg .vp-year { font-size: 24px; }
@@ -83,7 +83,8 @@ html.text-md .section-sub { font-size: 16px; }
 html.text-md .poster-vignette-title { font-size: 17px; }
 html.text-md .wide-vignette-title { font-size: clamp(20px, 1.7vw, 25px); }
 html.text-md .wide-sub-text { font-size: clamp(14px, 1.15vw, 16px); }
-html.text-md .showcase-title { font-size: 50px; }
+html.text-md .showcase-title, html.text-md .vod-detail-title { font-size: 50px; }
+html.text-md .showcase-synopsis, html.text-md .vod-detail-synopsis { font-size: 17px; line-height: 25px; }
 html.text-md .cw-info-text { font-size: 16px; }
 html.text-md .cw-title-row { font-size: 17px; }
 html.text-md .pc-title { font-size: 33px; }
@@ -98,8 +99,6 @@ html.text-md .live-ch-title { font-size: 18px; }
 html.text-md .live-ch-now { font-size: 15px; }
 html.text-md .live-ch-num { font-size: 17px; }
 html.text-md .live-cat-vname { font-size: 17px; }
-html.text-md .vod-detail-title { font-size: 52px; }
-html.text-md .vod-detail-synopsis { font-size: 22px; }
 html.text-md .vod-genre-chip { font-size: 16px; }
 html.text-md .vp-title { font-size: 35px; }
 html.text-md .vp-year { font-size: 21px; }

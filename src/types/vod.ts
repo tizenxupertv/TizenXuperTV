@@ -30,6 +30,7 @@ export interface VodItem {
   genres?: string[];
   director?: string;
   actors?: string;
+  tagline?: string;
   synopsis?: string;
   poster?: string;
   landscape?: string;
@@ -40,6 +41,10 @@ export interface VodItem {
   trailerUrl?: string;
   quality?: string;
   qualities?: string[];
+  volumeCount?: number;
+  updateCount?: number;
+  moreAudio?: number;
+  moreSubtitle?: number;
   isSeries?: boolean;
   seasons?: VodSeason[];
   episodes?: VodEpisode[];

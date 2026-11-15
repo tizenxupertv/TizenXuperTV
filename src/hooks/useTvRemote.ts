@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { dropBack } from '../lib/backKey';
 
 export type TvKey =
   | 'up'
@@ -79,6 +80,8 @@ export function useTvRemote({ onKey, onKeyUp }: UseTvRemoteOptions) {
 
   useEffect(() => {
     let lastRepeatTime = 0;
+    let lastBackAt = -Infinity;
+    let backRepeats = false;
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.defaultPrevented) return;
@@ -97,11 +100,30 @@ export function useTvRemote({ onKey, onKeyUp }: UseTvRemoteOptions) {
       }
 
       const key = mapKeyCode(e.keyCode);
+      // One press of Back = one step (lib/backKey.ts): a held Back must not walk out of the app
+      // (not while typing: Backspace held in a text field deletes as usual)
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      if (key === 'back' && !typing) {
+        const now = performance.now();
+        const drop = dropBack({ repeat: e.repeat || backRepeats, sinceLastMs: now - lastBackAt });
+        lastBackAt = now;
+        if (drop) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+      }
       const consumed = onKeyRef.current(key, e);
       if (consumed !== false) {
         e.preventDefault();
         e.stopPropagation();
       }
+    }
+
+    // The remote's own Back event, seen before the bridge re-sends it without `repeat`
+    function noteRemoteBack(e: KeyboardEvent) {
+      if (e.keyCode === 10009) backRepeats = e.repeat;
     }
 
     function handleKeyUp(e: KeyboardEvent) {
@@ -114,9 +136,11 @@ export function useTvRemote({ onKey, onKeyUp }: UseTvRemoteOptions) {
       }
     }
 
+    window.addEventListener('keydown', noteRemoteBack, true);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
+      window.removeEventListener('keydown', noteRemoteBack, true);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };

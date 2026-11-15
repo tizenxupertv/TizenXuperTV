@@ -4,6 +4,7 @@ import { historyService } from '../services/historyService';
 import { VodItem } from '../types/vod';
 import { HistoryItem } from '../types/history';
 import { continueWatchingItems } from '../lib/vodResume';
+import { catalogRetryDelayMs } from '../lib/catalogRetry';
 
 type Catalog = Awaited<ReturnType<typeof catalogService.fetchCatalog>>;
 
@@ -18,6 +19,7 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
   const [animeItems, setAnimeItems] = useState<VodItem[]>([]);
   const [catalogRows, setCatalogRows] = useState<Record<string, VodItem[]>>({});
   const [portalRows, setPortalRows] = useState<Record<string, PortalRow[]>>({});
+  const [heroByTab, setHeroByTab] = useState<Record<string, VodItem[]>>({});
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
 
   const onLoadedRef = useRef(onLoaded);
@@ -30,18 +32,37 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
       setHistoryItems(continueWatchingItems(historyService.getHistory()));
     });
 
-    catalogService.fetchCatalog().then(catalog => {
-      setFeaturedItems(catalog.featured || []);
-      setMovieItems(catalog.movies || []);
-      setSeriesItems(catalog.series || []);
-      setKidsItems(catalog.kids || []);
-      setAnimeItems(catalog.anime || []);
-      setCatalogRows(catalog.rowsByGroup || {});
-      setPortalRows(catalog.portalRows || {});
-      if (onLoadedRef.current) onLoadedRef.current(catalog);
-    }).catch(() => setCatalogError(true)).finally(() => setCatalogLoading(false));
+    // A failed load retries by itself: the notice stays up meanwhile and goes away when the catalog arrives
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+    const load = () => {
+      catalogService.fetchCatalog().then(catalog => {
+        if (cancelled) return;
+        setFeaturedItems(catalog.featured || []);
+        setMovieItems(catalog.movies || []);
+        setSeriesItems(catalog.series || []);
+        setKidsItems(catalog.kids || []);
+        setAnimeItems(catalog.anime || []);
+        setCatalogRows(catalog.rowsByGroup || {});
+        setPortalRows(catalog.portalRows || {});
+        setHeroByTab(catalog.heroByTab || {});
+        setCatalogError(false);
+        setCatalogLoading(false);
+        if (onLoadedRef.current) onLoadedRef.current(catalog);
+      }).catch(() => {
+        if (cancelled) return;
+        setCatalogError(true);
+        setCatalogLoading(false);
+        attempt += 1;
+        retryTimer = setTimeout(load, catalogRetryDelayMs(attempt));
+      });
+    };
+    load();
 
     return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
       unsubHist();
     };
   }, []);
@@ -68,6 +89,7 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
     animeItems,
     catalogRows,
     portalRows,
+    heroByTab,
     historyItems,
     findVod
   };

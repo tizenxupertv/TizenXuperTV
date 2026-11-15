@@ -4,6 +4,10 @@ import { isImagePrecached, markImageLoaded, markImageFailed } from '../../lib/im
 import { useCardImage } from '../../lib/useCardImage';
 import { collectPosterAlternates } from '../../lib/searchArtwork';
 import { startImageTracking } from '../../lib/perfMonitor';
+import { formatQualityTag, firstQuality } from '../../lib/subtitles';
+import { useTitleMeta } from '../../lib/titleMetaCache';
+import { historyService } from '../../services/historyService';
+import { isFinished } from '../../lib/vodResume';
 
 interface PosterCardProps {
   item: VodItem;
@@ -88,6 +92,40 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
     }
   };
 
+  const cachedMeta = useTitleMeta(item.id);
+
+  const qualityTag = useMemo(() => {
+    return formatQualityTag(
+      firstQuality(item.qualities, item.quality, cachedMeta?.qualities, cachedMeta?.quality),
+      item.category
+    );
+  }, [item.quality, item.qualities, cachedMeta?.quality, cachedMeta?.qualities, item.category]);
+
+  const episodeInfo = useMemo(() => {
+    if (!item.isSeries && item.kind !== 'serie' && item.kind !== 'anime') return null;
+    const update = item.updateCount || 0;
+    const total = item.volumeCount || 0;
+
+    // Enfoque 1 + C: Series finalizadas/completas NO llevan badge (carátula 100% limpia)
+    if (total > 0 && update >= total) {
+      return null;
+    }
+
+    // Solo series en emisión activa muestran el badge superior: T{temporada} · E{episodio}
+    if (update > 0) {
+      let seasonNum = 1;
+      const seasonMatch = item.title && item.title.match(/(?:temporada|temp\.?|t)\s*(\d+)/i);
+      if (seasonMatch && seasonMatch[1]) {
+        seasonNum = parseInt(seasonMatch[1], 10) || 1;
+      } else if (item.seasons && item.seasons.length > 0 && item.seasons[0].number) {
+        seasonNum = item.seasons[0].number;
+      }
+      return { label: `T${seasonNum} · E${update}`, isComplete: false };
+    }
+
+    return null;
+  }, [item.isSeries, item.kind, item.updateCount, item.volumeCount, item.title, item.seasons]);
+
   const categoryName = item.isSeries ? 'Programa de TV' : 'Película';
   // Only what the catalog knows: score, year, genres, category
   const genresStr = item.genres && item.genres.length ? item.genres.slice(0, 2).join(' · ') : (item.category || '');
@@ -98,6 +136,27 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
 
   const metaSubtitle = [knownScore && `★ ${knownScore}`, knownYear].filter(Boolean).join(' · ')
     || (item.genres && item.genres[0]) || (item.category ? item.category.toUpperCase() : '');
+
+  const [watchProgress, setWatchProgress] = useState<number>(() => {
+    const entry = historyService.getEntry(item.id);
+    if (!entry || !(entry.duration > 0) || entry.position <= 10 || isFinished(entry.position, entry.duration)) {
+      return 0;
+    }
+    return Math.min(100, Math.max(0, Math.round((entry.position / entry.duration) * 100)));
+  });
+
+  useEffect(() => {
+    const updateProgress = () => {
+      const entry = historyService.getEntry(item.id);
+      if (!entry || !(entry.duration > 0) || entry.position <= 10 || isFinished(entry.position, entry.duration)) {
+        setWatchProgress(0);
+        return;
+      }
+      setWatchProgress(Math.min(100, Math.max(0, Math.round((entry.position / entry.duration) * 100))));
+    };
+    updateProgress();
+    return historyService.subscribe(updateProgress);
+  }, [item.id]);
 
   return (
     <div
@@ -127,7 +186,19 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
           <div className="poster-rank-badge">{rank}</div>
         )}
 
+        {/* Episode status badge for series / anime */}
+        {episodeInfo && !rank && !isWide && (
+          <div className={`poster-episode-badge ${episodeInfo.isComplete ? 'is-complete' : 'is-airing'}`}>
+            {episodeInfo.label}
+          </div>
+        )}
 
+        {/* Quality Tag (4K, FHD, HD) in top-right corner */}
+        {qualityTag && !isWide && (
+          <div className={`poster-quality-badge ${qualityTag === '4K' ? 'is-4k' : ''}`}>
+            {qualityTag}
+          </div>
+        )}
 
         {/* Wide Card top-right translucent action circle */}
         {isWide && (
@@ -154,6 +225,16 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
           <div className="poster-bottom-vignette">
             <div className="poster-vignette-title">{item.title || 'Sin título'}</div>
             <div className="poster-vignette-genre">{metaSubtitle}</div>
+          </div>
+        )}
+
+        {/* Watch Progress Bar */}
+        {watchProgress > 0 && (
+          <div className="poster-progress-track">
+            <div
+              className="poster-progress-fill"
+              style={{ width: `${watchProgress}%` }}
+            />
           </div>
         )}
       </div>

@@ -6,7 +6,7 @@ import { HistoryItem } from '../types/history';
 import { LiveCategory } from '../types/channel';
 import { historyService } from '../services/historyService';
 import { favoritesService } from '../services/favoritesService';
-import { settingsService } from '../services/settingsService';
+import { settingsService, SUBTITLE_MODES, subtitleModeIndex, applySubtitleMode } from '../services/settingsService';
 import { parentalService } from '../services/parentalService';
 import { diagnosticService, DiagReport } from '../services/diagnosticService';
 import { getTvCapabilities } from '../lib/tvCapabilities';
@@ -21,6 +21,8 @@ import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
 import { QrCode } from '../components/common/QrCode';
 import { localProfiles } from '../lib/localProfiles';
+import { PosterCard } from '../components/vod/PosterCard';
+import { ContinueWatchingCard } from '../components/vod/ContinueWatchingCard';
 
 /** Perfil › Sobre nosotros: what the self-update is doing on this TV */
 function updateLine(s: UpdateStatus): string {
@@ -70,7 +72,9 @@ const TEXT_SIZE_OPTS = ['Normal', 'Mediano', 'Grande'];
 const AUDIO_OPTS = ['Español (Latino)', 'Español (España)', 'Portugués', 'Inglés'];
 const SIZE_OPTS = ['Normal', 'Grande', 'Pequeño'];
 const STYLE_OPTS = ['Aa', 'Aa', 'Aa'];
-const GRID_COLS = 7;
+// Mi perfil draws the lists with the cards of Mis cosas: posters for Mi lista, landscape cards for Continuar viendo
+const GRID_COLS_POSTERS = 7;
+const GRID_COLS_LANDSCAPE = 4;
 const IPTV_COLUMNS = 3;
 /** Where the Ko-fi QR of the donation screen leads */
 const KOFI_URL = 'https://ko-fi.com/tizenxupertv';
@@ -123,7 +127,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [section, setSection] = useState<number>(initialSection);
   const [area, setArea] = useState<'menu' | 'panel'>('menu');
   const [focus, setFocus] = useState<{ r: number; c: number }>({ r: 0, c: 0 });
-  const [listTab, setListTab] = useState<'history' | 'favs'>('history');
+  const [listTab, setListTab] = useState<'history' | 'favs'>('favs');
   const [, setTick] = useState(0);
   const [report, setReport] = useState<DiagReport | null>(null);
   const [diagRunning, setDiagRunning] = useState(false);
@@ -339,6 +343,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         key: h.id,
         title: h.title,
         poster: h.poster,
+        history: h as HistoryItem | undefined,
+        vod: undefined as VodItem | undefined,
         subtitle: h.series
           ? `Ya miró hasta ${h.episodeNumber ? 'epis. ' + h.episodeNumber : 'un episodio'}`
           : `Ya miró hasta ${formatTime(h.position)}`,
@@ -357,6 +363,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         key: id,
         title,
         poster: vod ? (vod.poster || vod.landscape || '') : info ? info.poster : '',
+        history: undefined as HistoryItem | undefined,
+        vod: (target || ({ id, title, poster: '', isSeries: series } as VodItem)) as VodItem | undefined,
         subtitle: series ? 'Serie' : 'Película',
         open: () => { if (target) onOpenVod(target); },
         remove: () => removeFromList(id, title)
@@ -394,8 +402,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     if (id === 'account') {
       r.push([{ id: 'logout', onActivate: logout }]);
       const tabs: Cell[] = [
-        { id: 'tab-history', onActivate: () => { setListTab('history'); setFocus({ r: 1, c: 0 }); } },
-        { id: 'tab-favs', onActivate: () => { setListTab('favs'); setFocus({ r: 1, c: 1 }); } }
+        { id: 'tab-favs', onActivate: () => { setListTab('favs'); setFocus({ r: 1, c: 0 }); } },
+        { id: 'tab-history', onActivate: () => { setListTab('history'); setFocus({ r: 1, c: 1 }); } }
       ];
       if (listItems.length > 0) {
         tabs.push({ id: 'edit-list', onActivate: () => setEditMode(e => !e) });
@@ -404,8 +412,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         tabs.push({ id: 'clear-history', onActivate: () => { setClearChoice(0); setConfirmClear(true); } });
       }
       r.push(tabs);
-      for (let i = 0; i < listItems.length; i += GRID_COLS) {
-        r.push(listItems.slice(i, i + GRID_COLS).map(it => ({ id: 'card-' + it.key, onActivate: editMode ? it.remove : it.open })));
+      const cols = listTab === 'history' ? GRID_COLS_LANDSCAPE : GRID_COLS_POSTERS;
+      for (let i = 0; i < listItems.length; i += cols) {
+        r.push(listItems.slice(i, i + cols).map(it => ({ id: 'card-' + it.key, onActivate: editMode ? it.remove : it.open })));
       }
     } else if (id === 'playback') {
       const radio = (group: string, opts: string[], key: 'display' | 'audio' | 'subLang' | 'size' | 'style' | 'textSize') =>
@@ -413,7 +422,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       radio('textSize', TEXT_SIZE_OPTS, 'textSize');
       radio('display', DISPLAY_OPTS, 'display');
       radio('audio', AUDIO_OPTS, 'audio');
-      r.push([{ id: 'subtitle', onActivate: () => settingsService.set({ subtitle: !settings.subtitle }) }]);
+      r.push(SUBTITLE_MODES.map((_, i) => ({ id: `subMode-${i}`, onActivate: () => applySubtitleMode(i) })));
       radio('subLang', AUDIO_OPTS, 'subLang');
       radio('size', SIZE_OPTS, 'size');
       radio('style', STYLE_OPTS, 'style');
@@ -448,15 +457,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const st = updateService.status();
       if (st.canSelfUpdate) {
         // Restarting is reloading: the loader then starts the downloaded version (public/js/boot.js)
-        r.push([
-          { id: 'update-check', onActivate: checkUpdates },
-          ...(st.downloaded ? [{ id: 'update-restart', onActivate: () => window.location.reload() }] : [])
-        ]);
         // Beta testers: pre-releases too, checked right away. A row of its own with a switch, like the +18 one
         r.push([{ id: 'update-beta', onActivate: () => {
           updateService.setChannel(updateService.channel() === 'beta' ? 'stable' : 'beta');
           checkUpdates();
         } }]);
+        r.push([
+          { id: 'update-check', onActivate: checkUpdates },
+          ...(st.downloaded ? [{ id: 'update-restart', onActivate: () => window.location.reload() }] : [])
+        ]);
       }
     } else if (id === 'donate') {
       r.push([{ id: 'donate-qr', onActivate: () => {} }]);
@@ -581,35 +590,37 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </div>
           </div>
           <div className="pf-hr" />
-          <div className="pf-tabs">
-            <div className={`pf-tab ${listTab === 'history' ? 'is-selected' : ''} ${isF('tab-history') ? 'is-focused' : ''}`} onClick={tap('tab-history')}>Historial</div>
-            <div className={`pf-tab ${listTab === 'favs' ? 'is-selected' : ''} ${isF('tab-favs') ? 'is-focused' : ''}`} onClick={tap('tab-favs')}>Mi lista</div>
+          {/* The same lists as Mis cosas, with its pills and cards */}
+          <div className="filter-types ms-bar pf-ms-bar">
+            <div className={`filter-type ${listTab === 'favs' ? 'is-selected' : ''} ${isF('tab-favs') ? 'is-focused' : ''}`} onClick={tap('tab-favs')}>Mi lista</div>
+            <div className={`filter-type ${listTab === 'history' ? 'is-selected' : ''} ${isF('tab-history') ? 'is-focused' : ''}`} onClick={tap('tab-history')}>Continuar viendo</div>
+            <div className="pf-total">{listItems.length} {listItems.length === 1 ? 'título' : 'títulos'}</div>
+            <div className="ms-bar-gap" />
             {listItems.length > 0 && (
-              <div className={`pf-btn pf-list-action ${editMode ? 'is-on' : ''} ${isF('edit-list') ? 'is-focused' : ''}`} onClick={tap('edit-list')}>
+              <div className={`filter-type ms-action ${editMode ? 'is-selected' : ''} ${isF('edit-list') ? 'is-focused' : ''}`} onClick={tap('edit-list')}>
                 {editMode ? 'Listo' : 'Quitar títulos'}
               </div>
             )}
             {listTab === 'history' && historyCount > 0 && (
-              <div className={`pf-btn pf-btn-danger pf-list-action ${isF('clear-history') ? 'is-focused' : ''}`} onClick={tap('clear-history')}>Borrar historial</div>
+              <div className={`filter-type ms-action ${isF('clear-history') ? 'is-focused' : ''}`} onClick={tap('clear-history')}>Borrar historial</div>
             )}
-            <div className="pf-total">{listItems.length} {listItems.length === 1 ? 'título' : 'títulos'}</div>
           </div>
           {editMode && listItems.length > 0 && (
             <div className="pf-edit-hint">Elige un título y pulsa OK para quitarlo. Pulsa Atrás o «Listo» para terminar.</div>
           )}
           {listItems.length === 0 ? (
-            <div className="pf-empty">No hay títulos para mostrar todavía.</div>
+            <div className="pf-empty">
+              {listTab === 'favs'
+                ? 'Tu lista está vacía todavía. Agrega películas o series con el botón +.'
+                : 'Todavía no tienes títulos en Continuar viendo.'}
+            </div>
           ) : (
-            <div className="pf-grid">
+            <div className="ms-grid">
               {listItems.map(it => (
-                <div key={it.key} className={`pf-card-item ${editMode ? 'is-removing' : ''} ${isF('card-' + it.key) ? 'is-focused' : ''}`} onClick={tap('card-' + it.key)}>
-                  <div className="pf-poster">
-                    <img src={it.poster || 'assets/placeholder_vertical.png'} alt="" loading="lazy" />
-                    <div className="poster-bottom-vignette">
-                      <div className="poster-vignette-title">{it.title}</div>
-                      <div className="poster-vignette-genre">{it.subtitle}</div>
-                    </div>
-                  </div>
+                <div key={it.key} className={`ms-cell ${editMode ? 'is-removing' : ''}`}>
+                  {it.history
+                    ? <ContinueWatchingCard item={it.history} isFocused={isF('card-' + it.key)} onActivate={tap('card-' + it.key)} />
+                    : <PosterCard item={it.vod as VodItem} isFocused={isF('card-' + it.key)} onActivate={tap('card-' + it.key)} />}
                 </div>
               ))}
             </div>
@@ -643,12 +654,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           {radioRow('Audio preferido', 'audio', AUDIO_OPTS, settings.audio)}
           <div className="pf-hr" />
           <h3 className="pf-subtitle">Subtítulos</h3>
-          <div className="pf-row">
-            <div className="pf-row-label">Activar subtítulos</div>
-            <div className={`pf-switch ${settings.subtitle ? 'on' : 'off'} ${isF('subtitle') ? 'is-focused' : ''}`} onClick={tap('subtitle')}>
-              <span className="pf-switch-knob" />
-            </div>
-          </div>
+          {radioRow('Mostrar', 'subMode', SUBTITLE_MODES, subtitleModeIndex(settings))}
           {radioRow('Idioma', 'subLang', AUDIO_OPTS, settings.subLang)}
           {radioRow('Tamaño', 'size', SIZE_OPTS, settings.size)}
           {radioRow('Estilo', 'style', STYLE_OPTS, settings.style)}
@@ -947,48 +953,53 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </div>
           ))}
         </div>
-        {/* Version and updates as a bar at the bottom: the text at the left, the actions at the right */}
-        <div className="pf-update-bar">
-          <div className="pf-update-bar-text">
-            <div className="pf-update-bar-title">TizenXuper TV · v{accountService.deviceInfo().version}</div>
-            <div className="pf-update-bar-desc">
-              {updateChecking
-                ? 'Buscando actualizaciones…'
-                : updateResult === 'uptodate' ? 'Estás al día.'
-                : updateResult === 'downloaded' ? `Versión ${updateService.status().downloaded} descargada. Reinicia para estrenarla.`
-                : updateResult === 'reinstall' ? 'Hay una versión nueva que no puede instalarse sola: instala su archivo .wgt encima de la que tienes, sin desinstalar (desinstalar borra tu lista, tu historial y tus perfiles).'
-                : updateResult === 'error' ? 'No se pudo comprobar. Revisa la conexión e inténtalo de nuevo.'
-                : updateLine(updateService.status())}
-            </div>
-          </div>
+        {/* Versions at the bottom, one card: the beta switch, a line, then the installed version and its actions */}
+        <div className="pf-update-card">
           {updateService.status().canSelfUpdate && (
-            <div className="pf-update-bar-actions">
-              <div className={`pf-btn ${isF('update-check') ? 'is-focused' : ''}`} onClick={tap('update-check')}>
-                {updateChecking ? 'Buscando…' : 'Buscar actualizaciones'}
-              </div>
-              {updateService.status().downloaded && (
-                <div className={`pf-btn ${isF('update-restart') ? 'is-focused' : ''}`} onClick={tap('update-restart')}>
-                  Reiniciar para actualizar
+            <>
+            <div className={`pf-row pf-row-wide pf-beta-row ${isF('update-beta') ? 'is-focused' : ''}`} onClick={tap('update-beta')}>
+              <div className="pf-row-label">
+                <div className="pf-row-title">Versiones beta</div>
+                <div className="pf-row-desc">
+                  {updateService.channel() === 'beta'
+                    ? 'Activadas: recibes las versiones de prueba antes que nadie; pueden tener fallos. Cuéntalos en el grupo Beta de Telegram.'
+                    : 'Desactivadas: solo recibes las versiones estables.'}
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-        {updateService.status().canSelfUpdate && (
-          <div className={`pf-row pf-row-wide pf-beta-row ${isF('update-beta') ? 'is-focused' : ''}`} onClick={tap('update-beta')}>
-            <div className="pf-row-label">
-              <div className="pf-row-title">Versiones beta</div>
-              <div className="pf-row-desc">
-                {updateService.channel() === 'beta'
-                  ? 'Activadas: recibes las versiones de prueba antes que nadie; pueden tener fallos. Cuéntalos en el grupo Beta de Telegram.'
-                  : 'Desactivadas: solo recibes las versiones estables.'}
+              </div>
+              <div className={`pf-switch ${updateService.channel() === 'beta' ? 'on' : 'off'}`}>
+                <span className="pf-switch-knob" />
               </div>
             </div>
-            <div className={`pf-switch ${updateService.channel() === 'beta' ? 'on' : 'off'}`}>
-              <span className="pf-switch-knob" />
+            <div className="pf-update-card-hr" />
+            </>
+          )}
+          <div className="pf-update-bar">
+            <div className="pf-update-bar-text">
+              <div className="pf-update-bar-title">TizenXuper TV · v{accountService.deviceInfo().version}</div>
+              <div className="pf-update-bar-desc">
+                {updateChecking
+                  ? 'Buscando actualizaciones…'
+                  : updateResult === 'uptodate' ? 'Estás al día.'
+                  : updateResult === 'downloaded' ? `Versión ${updateService.status().downloaded} descargada. Reinicia para estrenarla.`
+                  : updateResult === 'reinstall' ? 'Hay una versión nueva que no puede instalarse sola: instala su archivo .wgt encima de la que tienes, sin desinstalar (desinstalar borra tu lista, tu historial y tus perfiles).'
+                  : updateResult === 'error' ? 'No se pudo comprobar. Revisa la conexión e inténtalo de nuevo.'
+                  : updateLine(updateService.status())}
+              </div>
             </div>
+            {updateService.status().canSelfUpdate && (
+              <div className="pf-update-bar-actions">
+                <div className={`pf-btn ${isF('update-check') ? 'is-focused' : ''}`} onClick={tap('update-check')}>
+                  {updateChecking ? 'Buscando…' : 'Buscar actualizaciones'}
+                </div>
+                {updateService.status().downloaded && (
+                  <div className={`pf-btn ${isF('update-restart') ? 'is-focused' : ''}`} onClick={tap('update-restart')}>
+                    Reiniciar para actualizar
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     );
   };

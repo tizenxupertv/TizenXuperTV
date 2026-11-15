@@ -421,9 +421,23 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
         return list;
       })
       .then(
-        // The adult section has no offline categories: an empty list rather than the general ones
-        list => { if (alive) setPortalCols(list.length || isAdultRoot ? list : 'offline'); },
-        () => { if (alive) setPortalCols(isAdultRoot ? [] : 'offline'); }
+        // The adult section has column 76300 as its main content column when no child columns exist
+        list => {
+          if (!alive) return;
+          if (isAdultRoot && (!list || !list.length)) {
+            setPortalCols([{ id: rootId, code: 'adult-all', name: 'Todos los títulos', free: false, sequence: 1 }]);
+          } else {
+            setPortalCols(list.length || isAdultRoot ? list : 'offline');
+          }
+        },
+        () => {
+          if (!alive) return;
+          if (isAdultRoot) {
+            setPortalCols([{ id: rootId, code: 'adult-all', name: 'Todos los títulos', free: false, sequence: 1 }]);
+          } else {
+            setPortalCols('offline');
+          }
+        }
       );
     return () => { alive = false; };
     // The opening row only matters for the first load of this screen
