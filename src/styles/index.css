@@ -2547,7 +2547,7 @@ html, body {
   left: 0;
   top: 0;
   width: 100%;
-  height: min(760px, 70vh);
+  height: 658px; /* 68 px header + 590 px hero */
   overflow: hidden;
   z-index: 1;
   background-color: #07090e;
@@ -2575,7 +2575,7 @@ html, body {
   left: 0;
   top: 0;
   width: 100%;
-  height: min(760px, 70vh);
+  height: 658px; /* 68 px header + 590 px hero */
   background: linear-gradient(180deg, rgba(7, 9, 14, 0.4) 0%, rgba(7, 9, 14, 0.85) 60%, #07090e 100%),
               linear-gradient(90deg, rgba(7, 9, 14, 0.95) 0%, rgba(7, 9, 14, 0.6) 50%, rgba(7, 9, 14, 0.2) 100%);
   z-index: 2;
@@ -2621,7 +2621,7 @@ html, body {
 .vod-detail-main {
   position: relative;
   z-index: 10;
-  padding: 100px 48px 60px 48px; /* under the screen header; sides as the home hero and the app header */
+  padding: 68px 48px 60px 48px; /* starts under the 68 px screen header; sides as the home hero */
   /* Fills the screen: a short page (a movie) keeps its related titles at the bottom instead of leaving it empty */
   min-height: 100vh;
   box-sizing: border-box;
@@ -2629,12 +2629,30 @@ html, body {
   flex-direction: column;
 }
 
+/* The hero of the detail page is the same block as the home hero: 590 px under the header, with the text and
+   the buttons ending 40 px above its bottom edge. What follows (episodes, similar titles) starts where the first
+   row of the home starts, instead of squeezing the hero into whatever height is left. */
+.vod-detail-hero {
+  height: 590px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding-bottom: 40px;
+  margin-bottom: 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* The buttons end the hero: the space under them is the hero's own 40 px */
+.vod-detail-hero .vod-detail-actions-row.vod-actions-main {
+  margin-bottom: 0;
+}
+
 .vod-detail-hero-row {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 40px;
-  margin-top: auto;
   width: 100%;
 }
 

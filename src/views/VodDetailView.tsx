@@ -646,6 +646,8 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
 
       {/* Main Metadata Section */}
       <main className="vod-detail-main">
+        {/* Same block as the home hero (.home-showcase): fixed height, text and buttons at its bottom */}
+        <div className="vod-detail-hero">
         <div className="vod-detail-hero-row">
           <div className="vod-detail-header-block">
             <h1 className="vod-detail-title">{currentItem.title}</h1>
@@ -869,6 +871,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
               </button>
             );
           })}
+        </div>
         </div>
 
         {/* Series Section: Seasons Selector + Episodes Slider */}
