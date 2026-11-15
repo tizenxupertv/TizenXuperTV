@@ -6635,7 +6635,6 @@ html.xuper-live-avplay .live-grand-preview-box .live-preview-video {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.88);
-  backdrop-filter: blur(12px);
   animation: fadeIn 0.25s ease-out;
 }
 
@@ -6993,8 +6992,6 @@ html.xuper-live-avplay .live-grand-preview-box .live-preview-video {
   letter-spacing: 0.2px;
   z-index: 100050;
   pointer-events: none;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   animation: netToastSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
@@ -8337,7 +8334,6 @@ html.xuper-live-avplay .live-grand-preview-box .live-preview-video {
   inset: 0;
   z-index: 100010;
   background: rgba(4, 7, 13, 0.88);
-  backdrop-filter: blur(14px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -8435,7 +8431,6 @@ html.xuper-live-avplay .live-grand-preview-box .live-preview-video {
   inset: 0;
   z-index: 100010;
   background: rgba(4, 7, 13, 0.9);
-  backdrop-filter: blur(14px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9622,16 +9617,8 @@ html.legacy-video .live-preview-overlay { display: none; }
 }
 
 /* Tizen 6.0 and older (the same html.legacy-video class): effects that cost a lot on those TVs and add little.
-   No blur behind overlays, no transition of every property at once, and flat shadows on the biggest overlays */
-html.legacy-video .network-status-toast,
-html.legacy-video .tg-login-diag-overlay,
-html.legacy-video .tg-login-help-overlay,
-html.legacy-video .welcome-modal-overlay,
-html.legacy-video .lp-picker-edit {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
+   No transition of every property at once, and flat shadows on the biggest overlays (backdrop blur is not used on
+   any TV: it is too costly) */
 html.legacy-video .browse-search-pill,
 html.legacy-video .match-nav-play-btn,
 html.legacy-video .match-nav-tab,
