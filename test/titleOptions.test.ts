@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { deliveredQualities, effectiveChoice, ownAudioName, qualityMatches, titleChoices, trackForQuality } from '../src/lib/titleOptions.ts';
 
-import { PREF_LANG_CODES, languageName, sameLanguage, audioCoversSubtitles, formatAudioTrackList, formatResolutionBadge, formatQualityTag, firstQuality } from '../src/lib/subtitles.ts';
+import { PREF_LANG_CODES, languageName, sameLanguage, audioCoversSubtitles, subtitlesWanted, formatAudioTrackList, formatResolutionBadge, formatQualityTag, firstQuality } from '../src/lib/subtitles.ts';
 
 const QUALITY = ['Auto', '1080p', '720p', '480p'];
 const lang = { matches: (label: string, i: number) => sameLanguage(label, PREF_LANG_CODES[i]), name: languageName };
@@ -125,4 +125,13 @@ test('audioCoversSubtitles: decided by the audio that plays, not by the list of 
   // Unknown playing track: the title's audio decides
   assert.equal(audioCoversSubtitles(undefined, 'ENG', 'es-es'), false);
   assert.equal(audioCoversSubtitles(undefined, 'SPA', 'es-lat'), true);
+});
+
+test('subtitlesWanted: off, only for another language (default), or always', () => {
+  assert.equal(subtitlesWanted({ subtitle: false, subAlways: true }, false), false);
+  // Default: shown for audio in another language, skipped when the audio is already in that language
+  assert.equal(subtitlesWanted({ subtitle: true }, false), true);
+  assert.equal(subtitlesWanted({ subtitle: true }, true), false);
+  // Siempre: shown even over audio in the same language
+  assert.equal(subtitlesWanted({ subtitle: true, subAlways: true }, true), true);
 });

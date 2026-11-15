@@ -8,6 +8,7 @@ export interface PlaybackSettings {
   autoNext?: boolean;// true = auto play next episode on finish
   audio: number;     // 0 = Español, 1 = Portugués, 2 = Inglés
   subtitle: boolean;
+  subAlways?: boolean; // false = only when the audio is in another language (default), true = always
   subLang: number;
   size: number;      // 0 = Normal, 1 = Grande, 2 = Pequeño
   style: number;
@@ -77,6 +78,17 @@ export function applySettingChoice(col: 'audio' | 'subs' | 'quality', index: num
 
 /** Language codes in the same order as the audio / subtitle language options of the profile */
 export const PREFERRED_LANGUAGES = ['Español (Latino)', 'Español (España)', 'Portugués', 'Inglés'];
+
+/** "Subtítulos" of Configuración global, in the order shown */
+export const SUBTITLE_MODES = ['Desactivados', 'Solo si el audio está en otro idioma', 'Siempre'];
+
+export function subtitleModeIndex(st: PlaybackSettings): number {
+  return !st.subtitle ? 0 : st.subAlways ? 2 : 1;
+}
+
+export function applySubtitleMode(idx: number): void {
+  settingsService.set(idx <= 0 ? { subtitle: false } : { subtitle: true, subAlways: idx === 2 });
+}
 
 /** Subtitle options of the detail modal: "Desactivados" followed by the languages */
 export const SUBTITLE_CHOICES = ['Desactivados', ...PREFERRED_LANGUAGES];
