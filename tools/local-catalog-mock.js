@@ -11,7 +11,9 @@
     { id: 'local-series-1', name: 'Distrito nueve', year: '2026', score: '8.4', genre: 'Drama', category: 'series', type: 'series', synopsis: 'Serie de prueba para navegación local.' },
     { id: 'local-series-2', name: 'Código frontera', year: '2025', score: '8.0', genre: 'Crime', category: 'series', type: 'series', synopsis: 'Serie de prueba para navegación local.' },
     { id: 'local-kids-1', name: 'Club de inventos', year: '2025', score: '7.8', genre: 'Family', category: 'kids', synopsis: 'Contenido infantil de prueba.' },
-    { id: 'local-anime-1', name: 'Luz de verano', year: '2026', score: '8.2', genre: 'Animation', category: 'anime', synopsis: 'Anime de prueba para navegación local.' }
+    { id: 'local-anime-1', name: 'Luz de verano', year: '2026', score: '8.2', genre: 'Animation', category: 'anime', synopsis: 'Anime de prueba para navegación local.' },
+    { id: 'local-adult-1', name: 'Título protegido 1', year: '2026', score: '7.5', genre: 'Romance', category: 'adult', restricted: true, synopsis: 'Contenido técnico de prueba para sección protegida.' },
+    { id: 'local-adult-2', name: 'Título protegido 2', year: '2025', score: '7.8', genre: 'Drama', category: 'adult', restricted: true, synopsis: 'Contenido técnico de prueba para sección protegida.' }
   ];
 
   // The startup cache accepts a complete catalog only. Repeat the small fixture into a
@@ -26,12 +28,13 @@
     });
   }
 
-  var rootIds = { featured: 100, movies: 200, series: 300, kids: 400, anime: 500, free: 600, explorar: 700, search: 800 };
+  var rootIds = { featured: 100, movies: 200, series: 300, kids: 400, anime: 500, free: 600, explorar: 700, search: 800, adult: 76300 };
   var columns = {
     200: [{ id: 201, code: 'local-movies', name: 'Películas locales', free: false, sequence: 1 }],
     300: [{ id: 301, code: 'local-series', name: 'Series locales', free: false, sequence: 1 }],
     400: [{ id: 401, code: 'local-kids', name: 'Infantil local', free: false, sequence: 1 }],
-    500: [{ id: 501, code: 'local-anime', name: 'Anime local', free: false, sequence: 1 }]
+    500: [{ id: 501, code: 'local-anime', name: 'Anime local', free: false, sequence: 1 }],
+    76300: [{ id: 76300, code: 'adult-all', name: 'Todos los títulos', free: false, sequence: 1 }]
   };
 
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
@@ -41,7 +44,7 @@
     return items.filter(function (item) { return item.category === name; });
   }
   function itemsForColumn(columnId) {
-    var lookup = { 201: 'movies', 301: 'series', 401: 'kids', 501: 'anime' };
+    var lookup = { 201: 'movies', 301: 'series', 401: 'kids', 501: 'anime', 76300: 'adult' };
     return rootItems(lookup[columnId] || 'movies');
   }
 
@@ -50,6 +53,8 @@
     ensureSession: function (callback) { async(callback, { ready: true, mode: 'local-mock' }); },
     home: function (name, _page, callback) { async(callback, { root: name, pageNum: 1, items: rootItems(name) }); },
     getHome: function (callback) { async(callback, { homeBlockList: [{ assetList: items }] }); },
+    getTabRecommends: function (name, callback) { async(callback, rootItems(name).slice(0, 5)); },
+    getRecommends: function (codes, callback) { async(callback, []); },
     columns: function (parentId, callback) { async(callback, columns[parentId] || []); },
     columnPage: function (columnId, pageNum, pageSize, callback) {
       var list = itemsForColumn(Number(columnId));

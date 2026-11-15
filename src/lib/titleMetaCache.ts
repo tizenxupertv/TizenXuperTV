@@ -8,6 +8,7 @@ export interface TitleMetaEntry {
   duration?: string;
   actors?: string;
   director?: string;
+  backdrop?: string;
   updatedAt: number;
 }
 
@@ -80,6 +81,7 @@ export function setCachedTitleMeta(
     duration?: string;
     actors?: string;
     director?: string;
+    backdrop?: string;
   }
 ): void {
   if (!id) return;
@@ -99,8 +101,9 @@ export function setCachedTitleMeta(
   const nextDuration = cleanStr(patch.duration) || existing?.duration;
   const nextActors = cleanStr(patch.actors) || existing?.actors;
   const nextDirector = cleanStr(patch.director) || existing?.director;
+  const nextBackdrop = cleanStr(patch.backdrop) || existing?.backdrop;
 
-  if (!nextQuality && (!nextQualities || !nextQualities.length) && !nextHasCC && !nextYear && !nextDuration && !nextActors && !nextDirector) {
+  if (!nextQuality && (!nextQualities || !nextQualities.length) && !nextHasCC && !nextYear && !nextDuration && !nextActors && !nextDirector && !nextBackdrop) {
     return;
   }
 
@@ -112,6 +115,7 @@ export function setCachedTitleMeta(
     existing.duration !== nextDuration ||
     existing.actors !== nextActors ||
     existing.director !== nextDirector ||
+    existing.backdrop !== nextBackdrop ||
     (nextQualities?.length || 0) !== (existing.qualities?.length || 0);
 
   if (!changed) return;
@@ -124,6 +128,7 @@ export function setCachedTitleMeta(
     duration: nextDuration,
     actors: nextActors,
     director: nextDirector,
+    backdrop: nextBackdrop,
     updatedAt: Date.now()
   });
 

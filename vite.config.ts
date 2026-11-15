@@ -185,6 +185,28 @@ export default defineConfig({
       }
     }
   },
+  preview: {
+    port: 5199,
+    host: true,
+    proxy: {
+      '/epic-api': {
+        target: 'https://playlatam.site',
+        changeOrigin: true,
+        rewrite: (p: string) => p.replace(/^\/epic-api/, '')
+      },
+      '/api/portalCore': {
+        target: 'https://osuhk.m3x8o50te.com',
+        changeOrigin: true,
+        secure: false,
+        headers: {
+          'User-Agent': 'okhttp/3.12.12',
+          'apk': 'com.android.msandroid',
+          'apkVer': '43404',
+          'spkgVer': '2025-08-07 05:40:11_36_16_'
+        }
+      }
+    }
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

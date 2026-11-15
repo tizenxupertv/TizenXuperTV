@@ -344,7 +344,7 @@ export const App: React.FC = () => {
   // Hero and rows for the active VOD tab
   const currentHeroItems = useMemo<VodItem[]>(
     () => heroItemsForTab(selectedTab, catalog),
-    [selectedTab, featuredItems, movieItems, seriesItems, kidsItems, animeItems]
+    [selectedTab, featuredItems, movieItems, seriesItems, kidsItems, animeItems, catalog.heroByTab]
   );
   // One array for the screens that search the whole catalog: a new one on every render made them redo their indexes
   const allCatalogItems = useMemo<VodItem[]>(
@@ -506,7 +506,13 @@ export const App: React.FC = () => {
 
   // Filter screen, on the type of the current tab (movies elsewhere)
   const openFilter = useCallback((root?: FilterRoot) => {
-    const byTab: Partial<Record<TabId, FilterRoot>> = { peliculas: 'movies', series: 'series', kids: 'kids', anime: 'anime' };
+    const byTab: Partial<Record<TabId, FilterRoot>> = {
+      peliculas: 'movies',
+      series: 'series',
+      kids: 'kids',
+      anime: 'anime',
+      adultos: 'adult'
+    };
     playerService.stop();
     push({ id: 'filter', root: root || byTab[selectedTab] || 'movies' });
   }, [push, selectedTab]);
@@ -1124,9 +1130,16 @@ export const App: React.FC = () => {
               onClose={pop}
               onOpenVod={it => handleOpenDetail(it)}
               onOpenSearch={() => setIsSearchOpen(true)}
-              onOpenFilter={screen.root === 'adult' ? undefined : () => {
+              onOpenFilter={() => {
                 const r = screen.root;
-                openFilter(r === 'movies' || r === 'series' || r === 'kids' || r === 'anime' ? r : 'movies');
+                const map: Partial<Record<BrowseRoot, FilterRoot>> = {
+                  movies: 'movies',
+                  series: 'series',
+                  kids: 'kids',
+                  anime: 'anime',
+                  adult: 'adult'
+                };
+                openFilter(map[r] || 'movies');
               }}
             />
           );

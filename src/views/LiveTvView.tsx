@@ -582,6 +582,48 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     if (isActiveTab) setLiveSeen(true);
   }, [isActiveTab]);
 
+  // Channel code rotation auto-recovery: when portal returns portal100004 (channel does not exist),
+  // refresh that category and update the tuned channel with the new code
+  useEffect(() => {
+    const handleExpired = (e: any) => {
+      const expiredCode = e.detail?.channelCode;
+      const chName = e.detail?.channelName;
+      if (!activeCategory || !window.MagisClient || typeof window.MagisClient.getAllLiveChannels !== 'function') return;
+      const catId = String(activeCategory.id);
+      categoryChannelsCache.delete(catId);
+      window.MagisClient.getAllLiveChannels(catId, (err: any, list: any[]) => {
+        if (err || !Array.isArray(list) || !list.length) return;
+        const chs: LiveChannel[] = list.map((c, idx) => ({
+          id: c.channelCode || c.id || idx,
+          name: c.name || c.channelName || 'Canal',
+          code: c.channelCode || String(c.id || ''),
+          url: c.streamUrl || '',
+          logo: c.logo || c.channelLogo || '',
+          now: realText(c.now || c.currentProgram),
+          next: realText(c.next || c.nextProgram),
+          time: c.time || 'EN VIVO',
+          isFav: !!favMap[channelKey(c)]
+        }));
+        chs.forEach(c => {
+          channelMasterCache.current[String(c.id || c.code)] = c;
+        });
+        categoryChannelsCache.set(catId, chs);
+        setChannelEntry(catId, chs);
+        const visible = filterLockedChannels(chs, categories, catId);
+        setChannels(visible);
+        if (chName) {
+          const replacement = chs.find(c => c.name === chName);
+          if (replacement && replacement.code !== expiredCode) {
+            console.log('[LiveTvView] Recovered rotated channel code:', chName, 'new code:', replacement.code);
+            tune(replacement);
+          }
+        }
+      }, { progressive: false });
+    };
+    window.addEventListener('xuper-channel-code-expired', handleExpired);
+    return () => window.removeEventListener('xuper-channel-code-expired', handleExpired);
+  }, [activeCategory, categories, favMap, tune]);
+
   // Background Preloader: prefetch and cache the channels of ALL categories
   useEffect(() => {
     if (!categories || categories.length <= 1) return;

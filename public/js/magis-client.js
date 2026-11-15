@@ -24,16 +24,97 @@
     'oogoy.f30c96w8.com'
   ];
 
-  var PORTAL_CODE = 'masmobile';
-  var APP_ID = 'com.msandroid.mobile';
-  var APK_VERSION = '60291';
-  var SYS_VERSION = '15';
+  var CLIENT_PROFILES = {
+    // masnew: Perfil estándar para catálogo completo, categorías, sección adultos (+18) y TV en vivo.
+    masnew: {
+      name: 'masnew',
+      portalCode: 'masnew',
+      appId: 'com.android.msandroid',
+      apkVersion: '49902',
+      sysVersion: '2025-08-07 05:40:11_36_16_',
+      transportAppId: 'com.android.msandroid',
+      apkVerHeader: '43404',
+      loginType: '2',
+      hardwareInfo: 'ranchu',
+      model: 'sdk_gphone64_arm64',
+      product: 'sdk_gphone64_arm64',
+      cpu: 'arm64-v8a',
+      sdkVer: 36,
+      reserve1: '',
+      liveCodeList: ['masnew_live'],
+      fingerprint: {
+        board: 'goldfish_arm64',
+        brand: 'google',
+        cpuAbi: 'arm64-v8a',
+        device: 'emu64a',
+        diskInfo: '8GB',
+        display: 'sdk_gphone64_arm64',
+        fingerprint: 'google/sdk_gphone64_arm64/emu64a:14/UE1A.230829.036/11228894:user/release-keys',
+        hardware: 'ranchu',
+        host: 'abfarm',
+        manufacturer: 'Google',
+        ramSize: '4GB',
+        romSize: '8GB',
+        tags: 'release-keys',
+        verId: ''
+      }
+    },
+    // masmobile: Perfil móvil optimizado para obtener variantes 1080p y multiaudio en reproducción VOD.
+    masmobile: {
+      name: 'masmobile',
+      portalCode: 'masmobile',
+      appId: 'com.msandroid.mobile',
+      apkVersion: '60291',
+      sysVersion: '15',
+      transportAppId: 'com.android.msandroid',
+      apkVerHeader: '43404',
+      loginType: '3',
+      hardwareInfo: 'exynos2100',
+      model: 'SM-G998B',
+      product: 'p3sxxx',
+      cpu: 'arm64-v8a',
+      sdkVer: 33,
+      reserve1: '000000000000',
+      liveCodeList: ['masmobile_live', 'masnew_live'],
+      fingerprint: {
+        board: 'exynos2100',
+        brand: 'samsung',
+        cpuAbi: 'arm64-v8a',
+        device: 'p3s',
+        diskInfo: '8GB',
+        display: 'SM-G998B',
+        fingerprint: 'samsung/p3sxxx/p3s:13/TQ2B.230505.005.A1/jenkins08312143:user/release-keys',
+        hardware: 'exynos2100',
+        host: '211-12',
+        manufacturer: 'samsung',
+        ramSize: '4GB',
+        romSize: '8GB',
+        tags: 'release-keys',
+        verId: ''
+      }
+    }
+  };
+
+  var activeProfileName = 'masnew';
+
+  function resolveProfile(profileOpt) {
+    if (typeof profileOpt === 'string' && CLIENT_PROFILES[profileOpt]) {
+      return CLIENT_PROFILES[profileOpt];
+    }
+    if (profileOpt && typeof profileOpt === 'object' && profileOpt.portalCode) {
+      return profileOpt;
+    }
+    return CLIENT_PROFILES[activeProfileName] || CLIENT_PROFILES.masnew;
+  }
+
+  var PORTAL_CODE = CLIENT_PROFILES.masnew.portalCode;
+  var APP_ID = CLIENT_PROFILES.masnew.appId;
+  var APK_VERSION = CLIENT_PROFILES.masnew.apkVersion;
   // Kept in sync with the working authorized backup. The portal rejects retired client builds.
-  var SPKG_VER = '2025-08-07 05:40:11_36_16_';
-  // The authorized client keeps the portal payload at 60291 (masmobile) but identifies the
-  // transport itself as build 43404 / com.android.msandroid. Both values are required by the provider.
-  var APK_TRANSPORT_APP_ID = 'com.android.msandroid';
-  var APK_VER_HEADER = '43404';
+  var SPKG_VER = CLIENT_PROFILES.masnew.sysVersion;
+  var SYS_VERSION = SPKG_VER;
+  var APK_TRANSPORT_APP_ID = CLIENT_PROFILES.masnew.transportAppId;
+  var APK_VER_HEADER = CLIENT_PROFILES.masnew.apkVerHeader;
   var USER_AGENT = 'okhttp/3.12.12';
   var CONTENT_TYPE = 'application/json;charset=utf-8';
   var SNTOKEN_SALT = 'ntFT65w6itH!lHCPw7D=@qnsFC5adD28';
@@ -80,39 +161,12 @@
     anime: 'anime',
     kids: 'infantil',
     free: 'gratis',
-    explorar: 'explorar'
+    explorar: 'explorar',
+    adult: 'adult'
   };
 
-  var DEVICE_FIXED = {
-    loginType: '3',
-    appLanguage: 'en',
-    hardwareInfo: 'exynos2100',
-    model: 'SM-G998B',
-    product: 'p3sxxx',
-    cpu: 'arm64-v8a',
-    B29: '',
-    reserve1: '000000000000',
-    deviceToken: '',
-    drmId: '',
-    sdkVer: 33
-  };
-
-  var FINGERPRINT_FIXED = {
-    board: 'exynos2100',
-    brand: 'samsung',
-    cpuAbi: 'arm64-v8a',
-    device: 'p3s',
-    diskInfo: '8GB',
-    display: 'SM-G998B',
-    fingerprint: 'samsung/p3sxxx/p3s:13/TQ2B.230505.005.A1/jenkins08312143:user/release-keys',
-    hardware: 'exynos2100',
-    host: '211-12',
-    manufacturer: 'samsung',
-    ramSize: '4GB',
-    romSize: '8GB',
-    tags: 'release-keys',
-    verId: ''
-  };
+  var DEVICE_FIXED = CLIENT_PROFILES.masnew;
+  var FINGERPRINT_FIXED = CLIENT_PROFILES.masnew.fingerprint;
 
   var keyHexParsed = null;
   function getKey() {
@@ -313,8 +367,10 @@
     var list = item && item.posterList;
     if (!list || !list.length) return '';
     for (var i = 0; i < list.length; i++) {
-      if (list[i] && list[i].fileType === fileType && trim(list[i].fileUrl) !== '') {
-        return trim(list[i].fileUrl);
+      var p = list[i];
+      if (p && (p.fileType === fileType || p.type === fileType || p.posterType === fileType)) {
+        var u = trim(p.fileUrl || p.url || p.posterUrl);
+        if (u !== '') return u;
       }
     }
     return '';
@@ -453,18 +509,25 @@
     }
   }
 
-  function deviceDict() {
-    var dict = {};
-    for (var k in DEVICE_FIXED) {
-      if (Object.prototype.hasOwnProperty.call(DEVICE_FIXED, k)) {
-        dict[k] = DEVICE_FIXED[k];
-      }
-    }
-    dict.apkVersion = APK_VERSION;
-    dict.sysVersion = SYS_VERSION;
-    dict.appId = APP_ID;
-    dict.sn = session.sn;
-    return dict;
+  function deviceDict(profile) {
+    var prof = profile || resolveProfile();
+    return {
+      loginType: prof.loginType,
+      appLanguage: 'en',
+      hardwareInfo: prof.hardwareInfo,
+      model: prof.model,
+      product: prof.product,
+      cpu: prof.cpu,
+      B29: '',
+      reserve1: prof.reserve1 || '',
+      deviceToken: '',
+      drmId: '',
+      sdkVer: prof.sdkVer,
+      apkVersion: prof.apkVersion,
+      sysVersion: prof.sysVersion,
+      appId: prof.appId,
+      sn: session.sn
+    };
   }
 
   var preferredHost = '';
@@ -646,16 +709,17 @@
       opts = {};
     }
     opts = opts || {};
+    var prof = resolveProfile(opts.profile);
 
     enqueue(function (release) {
       var fullPayload = {};
       if (opts.baseFields !== false) {
-        fullPayload.portalCode = PORTAL_CODE;
+        fullPayload.portalCode = prof.portalCode;
         fullPayload.userId = session.userId;
         fullPayload.userToken = session.userToken;
       }
       if (opts.deviceFields !== false) {
-        var dev = deviceDict();
+        var dev = deviceDict(prof);
         for (var k in dev) {
           if (Object.prototype.hasOwnProperty.call(dev, k)) fullPayload[k] = dev[k];
         }
@@ -829,7 +893,7 @@
       appVer: APK_VERSION,
       lang: 'es',
       encMediaSupported: 1,
-      liveCodeList: ['masmobile_live', 'masnew_live'],
+      liveCodeList: ['masnew_live'],
       appParams: '',
       reserve1: DEVICE_FIXED.reserve1 || FIXED_RESERVE1,
       pipFlag: '0'
@@ -1167,15 +1231,24 @@
 
   var playCache = {};
   var playWaiters = {};
-  function loadPlay(contentId, seriesContentId, episodeNumber, callback) {
+  function loadPlay(contentId, seriesContentId, episodeNumber, callback, opts) {
     if (typeof episodeNumber === 'function') {
+      opts = callback;
       callback = episodeNumber;
       episodeNumber = null;
     }
+    if (typeof callback === 'object' && typeof opts === 'function') {
+      var _swap = callback;
+      callback = opts;
+      opts = _swap;
+    }
+    opts = opts || {};
+    var playProfile = resolveProfile(opts.profile || 'masmobile');
+
     var cid = trim(contentId);
     if (!cid) return callback(new Error('Missing contentId'));
     var epNum = normalizeEpisodeNumber(episodeNumber);
-    var key = cid + ':' + trim(seriesContentId) + ':' + (epNum || '');
+    var key = cid + ':' + trim(seriesContentId) + ':' + (epNum || '') + ':' + playProfile.name;
     if (playCache[key] && Date.now() < playCache[key].at + PLAY_TTL) {
       publishStartPlayDiag(playCache[key].data.diag);
       return callback(null, playCache[key].data);
@@ -1204,9 +1277,16 @@
         type: '1',
         columnId: -1,
         authType: null,
-        episodeNumberList: epNum > 0 ? [epNum] : null
+        episodeNumberList: epNum > 0 ? [epNum] : null,
+        portalCode: playProfile.portalCode,
+        appId: playProfile.appId,
+        apkVersion: playProfile.apkVersion,
+        sysVersion: playProfile.sysVersion,
+        loginType: playProfile.loginType,
+        model: playProfile.model,
+        hardwareInfo: playProfile.hardwareInfo
       };
-      call('v10/startPlayVOD', payload, function (pErr, pRes) {
+      call('v10/startPlayVOD', payload, { profile: playProfile }, function (pErr, pRes) {
         if (pErr) return doneAll(pErr);
         if (!pRes) return doneAll(new Error('No video response returned'));
         // The Android client accepts up to three nested portal data envelopes.
@@ -1251,8 +1331,9 @@
    * What a title offers, without resolving a stream: the audio languages and qualities of its tracks and the
    * languages of its subtitles. Shares loadPlay's cache with resolve(), so the player finds it already loaded.
    */
-  function mediaOptions(contentId, seriesContentId, episodeNumber, callback) {
+  function mediaOptions(contentId, seriesContentId, episodeNumber, callback, opts) {
     if (typeof episodeNumber === 'function') {
+      opts = callback;
       callback = episodeNumber;
       episodeNumber = null;
     }
@@ -1278,7 +1359,7 @@
         return (ix === -1 ? 99 : ix) - (iy === -1 ? 99 : iy);
       });
       callback(null, { audios: audios, qualities: qualities, subtitles: subs });
-    });
+    }, opts);
   }
 
   function resolve(contentId, seriesContentId, opts, callback) {
@@ -1372,7 +1453,7 @@
           })
         });
       });
-    });
+    }, opts);
   }
 
   // ---- Live TV Signing & Resolution (exact port from original magis.js) ----
@@ -1999,8 +2080,8 @@
     var pType = trim(asset.programType) || 'movie';
     var isSeries = pType === 'teleplay' || pType === 'series' || (asset.volumnCount && parseInt(asset.volumnCount, 10) > 1);
     var posterUrl = imageOf(asset, 'icon') || imageOf(asset, 'poster') || imageOf(asset, '1') || trim(asset.picture || asset.cover || asset.posterUrl);
-    var landscapeUrl = imageOf(asset, 'poster') || imageOf(asset, 'stage') || imageOf(asset, '2') || posterUrl;
-    var backdropUrl = imageOf(asset, 'stage') || imageOf(asset, 'poster') || imageOf(asset, '4') || imageOf(asset, '3') || landscapeUrl;
+    var landscapeUrl = imageOf(asset, 'banner') || imageOf(asset, 'special_topic_banner') || imageOf(asset, 'poster') || imageOf(asset, 'stage') || imageOf(asset, '2') || posterUrl;
+    var backdropUrl = imageOf(asset, 'background') || imageOf(asset, 'stage') || imageOf(asset, 'banner') || imageOf(asset, 'poster') || imageOf(asset, '4') || imageOf(asset, '3') || landscapeUrl;
     var posterAlternates = collectAssetAlternates(asset, null);
 
     var item = {
@@ -2287,23 +2368,52 @@
     if (hit && Date.now() - hit.at < TREE_TTL) return callback(null, hit.list);
     ensureSession(function (err) {
       if (err) return callback(err);
-      var body = { columnId: columnId, pageNum: 1, pageSize: 1000 };
-      if (special) body.specialFlag = '1';
-      call('v3/getColumnContents', body, { low: !!(opts && opts.low) }, function (cErr, cRes) {
-        if (cErr) return callback(cErr);
-        var raw = cRes && cRes.childColumnList || [];
+      var allRaw = [];
+      var page = 1;
+      var pageSize = 20;
+
+      function fetchPage() {
+        var body = { columnId: columnId, pageNum: page, pageSize: pageSize };
+        if (special) {
+          body.specialFlag = '1';
+          body.portalCode = 'masnew';
+          body.appId = 'com.android.msandroid';
+          body.loginType = '2';
+        }
+        call('v3/getColumnContents', body, { low: !!(opts && opts.low) }, function (cErr, cRes) {
+          if (cErr) {
+            if (allRaw.length > 0) return finish();
+            return callback(cErr);
+          }
+          var raw = cRes && cRes.childColumnList || [];
+          for (var r = 0; r < raw.length; r++) allRaw.push(raw[r]);
+          var total = parseInt(cRes && cRes.totalSize, 10) || 0;
+          if (raw.length > 0 && total > allRaw.length && page < 10) {
+            page++;
+            fetchPage();
+          } else {
+            finish();
+          }
+        });
+      }
+
+      function finish() {
         var list = [];
-        for (var i = 0; i < raw.length; i++) {
-          var c = raw[i];
+        for (var i = 0; i < allRaw.length; i++) {
+          var c = allRaw[i];
           if (!c || !c.id || (!special && String(c.restricted) === '1')) continue;
           var isColRestricted = special || String(c.restricted) === '1';
           if (isColRestricted) restrictedColumns[String(c.id)] = true;
           list.push({ id: c.id, code: text(c.code), name: text(c.name), free: String(c.free) === '1', restricted: isColRestricted, sequence: parseInt(c.sequence, 10) || 0 });
         }
         list.sort(function (a, b) { return a.sequence - b.sequence; });
-        columnCache[key] = { at: Date.now(), list: list };
+        if (list.length > 0) {
+          columnCache[key] = { at: Date.now(), list: list };
+        }
         callback(null, list);
-      });
+      }
+
+      fetchPage();
     });
   }
 
@@ -2313,14 +2423,21 @@
   function columnPage(columnId, pageNum, pageSize, callback, opts) {
     pageNum = Math.max(1, parseInt(pageNum, 10) || 1);
     pageSize = pageSize || 42;
-    var isRestrictedCol = !!(restrictedColumns[String(columnId)] || (opts && opts.restricted));
+    var isRestrictedCol = !!(restrictedColumns[String(columnId)] || (opts && opts.restricted) || String(columnId) === String(ROOT_IDS.adult));
     if (isRestrictedCol) restrictedColumns[String(columnId)] = true;
     var key = columnId + ':' + pageNum + ':' + pageSize;
     var hit = shelfCache[key];
     if (hit && Date.now() < hit.until) return callback(null, { items: hit.items, total: hit.total, cached: true });
     ensureSession(function (err) {
       if (err) return callback(err);
-      call('v3/getShelveData', { columnId: columnId, columnType: '2', pageNum: pageNum, pageSize: pageSize, numDisplay: null, encryptVersion: 0 }, { low: !!(opts && opts.low) }, function (sErr, sRes) {
+      var body = { columnId: columnId, columnType: '2', pageNum: pageNum, pageSize: pageSize, numDisplay: null, encryptVersion: 0 };
+      if (isRestrictedCol) {
+        body.portalCode = 'masnew';
+        body.appId = 'com.android.msandroid';
+        body.loginType = '2';
+        body.specialFlag = '1';
+      }
+      call('v3/getShelveData', body, { low: !!(opts && opts.low) }, function (sErr, sRes) {
         if (sErr) return callback(sErr);
         var list = sRes && sRes.assetList || [];
         var items = [];
@@ -2342,7 +2459,9 @@
           shelfCache = {};
           shelfCount = 0;
         }
-        shelfCache[key] = { until: Date.now() + fresh * 1000, items: items, total: total };
+        if (items.length > 0) {
+          shelfCache[key] = { until: Date.now() + fresh * 1000, items: items, total: total };
+        }
         callback(null, { items: items, total: total, cached: false });
       });
     });
@@ -2353,7 +2472,14 @@
   function browse(root, filters, pageNum, pageSize, callback, opts) {
     var columnId = ROOT_IDS[root];
     if (!columnId) return callback(new Error('unknown root ' + root));
+    var isAdult = root === 'adult' || String(columnId) === String(ROOT_IDS.adult);
     var body = { columnId: columnId, pageNum: Math.max(1, pageNum || 1), pageSize: pageSize || 42 };
+    if (isAdult) {
+      body.portalCode = 'masnew';
+      body.appId = 'com.android.msandroid';
+      body.loginType = '2';
+      body.specialFlag = '1';
+    }
     filters = filters || {};
     if (filters.tags) body.tags = filters.tags;
     if (filters.year) body.year = filters.year;
@@ -2366,8 +2492,16 @@
         var list = fRes && fRes.assetList || [];
         var items = [];
         for (var i = 0; i < list.length; i++) {
-          var it = itemFromAsset(list[i], ROOT_CATEGORY[root] || '', null);
-          if (it) items.push(it);
+          var it = itemFromAsset(list[i], ROOT_CATEGORY[root] || (isAdult ? 'adult' : ''), null);
+          if (it) {
+            if (isAdult) {
+              it.restricted = true;
+              it.privateContent = true;
+              it.category = 'adult';
+              remember(it);
+            }
+            items.push(it);
+          }
         }
         callback(null, { items: items, total: parseInt(fRes && fRes.totalSize, 10) || 0 });
       });
@@ -2380,9 +2514,17 @@
     var columnId = ROOT_IDS[root];
     if (!columnId) return callback(new Error('unknown root ' + root));
     if (filterCache[root]) return callback(null, filterCache[root]);
+    var isAdult = root === 'adult' || String(columnId) === String(ROOT_IDS.adult);
+    var body = { columnId: columnId };
+    if (isAdult) {
+      body.portalCode = 'masnew';
+      body.appId = 'com.android.msandroid';
+      body.loginType = '2';
+      body.specialFlag = '1';
+    }
     ensureSession(function (err) {
       if (err) return callback(err);
-      call('v3/filterGenre', { columnId: columnId }, function (gErr, gRes) {
+      call('v3/filterGenre', body, function (gErr, gRes) {
         if (gErr) return callback(gErr);
         filterCache[root] = {
           tags: gRes && gRes.tags || [],
@@ -2540,6 +2682,64 @@
     });
   }
 
+  var TAB_RECOMMEND_CODES = {
+    featured: ['masnew_featured01', 'masnew_featured02', 'masnew_featured03', 'masnew_featured04', 'masnew_featured05'],
+    movies: ['masnew_movies01', 'masnew_movies02', 'masnew_movies03', 'masnew_movies04', 'masnew_movies05', 'masnew_movies06', 'masnew_movies07'],
+    series: ['masnew_series01', 'masnew_series02', 'masnew_series03', 'masnew_series04', 'masnew_series05', 'masnew_series06', 'masnew_series07'],
+    kids: ['masnew_kids01', 'masnew_kids02', 'masnew_kids03', 'masnew_kids04', 'masnew_kids05', 'masnew_kids06', 'masnew_kids07', 'masnew_kids08'],
+    anime: ['masnew_anime01', 'masnew_anime02', 'masnew_anime03', 'masnew_anime04', 'masnew_anime05'],
+    explorar: ['masnew_explorar01', 'masnew_explorar02', 'masnew_explorar03', 'masnew_explorar04', 'masnew_explorar05']
+  };
+
+  var recommendCache = {};
+  var RECOMMEND_TTL = 10 * 60 * 1000;
+
+  function getRecommends(codes, callback) {
+    var codeArr = Array.isArray(codes) ? codes : [codes];
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      call('v3/getRecommends', {
+        recommendCodeArr: codeArr
+      }, function (rErr, rRes) {
+        if (rErr) return callback(rErr);
+        var recList = (rRes && rRes.recommendList) || (rRes && rRes.data && rRes.data.recommendList) || (rRes && rRes.dataList) || [];
+        callback(null, recList);
+      });
+    });
+  }
+
+  function getTabRecommends(root, callback) {
+    var codes = TAB_RECOMMEND_CODES[root];
+    if (!codes || !codes.length) return callback(null, []);
+    var cacheKey = root;
+    if (recommendCache[cacheKey] && Date.now() - recommendCache[cacheKey].at < RECOMMEND_TTL) {
+      return callback(null, recommendCache[cacheKey].items);
+    }
+    var cat = ROOT_CATEGORY[root] || '';
+    getRecommends(codes, function (err, recList) {
+      if (err) return callback(err);
+      var items = [];
+      var seen = {};
+      for (var i = 0; i < recList.length; i++) {
+        var group = recList[i];
+        var contents = (group && group.contentList) || [];
+        for (var j = 0; j < contents.length; j++) {
+          var c = contents[j];
+          if (!c || !c.contentId || seen[c.contentId]) continue;
+          seen[c.contentId] = true;
+          var kind = c.type === '1' ? 'serie' : 'película';
+          var it = itemFromAsset(c, cat, kind);
+          if (it) {
+            if (c.viewPoint) it.tagline = trim(c.viewPoint);
+            items.push(it);
+          }
+        }
+      }
+      recommendCache[cacheKey] = { at: Date.now(), items: items };
+      callback(null, items);
+    });
+  }
+
   function getPerson(contentId, callback) {
     ensureSession(function (err) {
       if (err) return callback(err);
@@ -2637,6 +2837,8 @@
     getHome: getHome,
     getShelveData: getShelveData,
     getShortVideo: getShortVideo,
+    getRecommends: getRecommends,
+    getTabRecommends: getTabRecommends,
     browse: browse,
     browseFilters: browseFilters,
     columns: columns,
@@ -2659,6 +2861,18 @@
     },
     getLastStartPlayDiag: function () { return lastStartPlayDiag; },
     vodCdns: vodCdns,
+    // Multi-profile manager: switch easily between profiles depending on request (catalog, 1080p, etc.)
+    profiles: CLIENT_PROFILES,
+    getProfiles: function () { return Object.keys(CLIENT_PROFILES); },
+    getActiveProfile: function () { return activeProfileName; },
+    setActiveProfile: function (name) {
+      if (CLIENT_PROFILES[name]) {
+        activeProfileName = name;
+        console.log('[MagisClient] active profile set to:', activeProfileName);
+      }
+      return activeProfileName;
+    },
+    getProfileConfig: function (name) { return CLIENT_PROFILES[name || activeProfileName]; },
     // Nothing running or waiting: background work (title details for a focused card) starts only then
     isIdle: function () { return !session.busy && !queue.length && !lowQueue.length; },
     call: call

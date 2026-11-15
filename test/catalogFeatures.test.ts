@@ -127,3 +127,71 @@ test('catalogService: local portal contract loads categories and a movie page', 
   assert.deepEqual(requested.map(entry => entry.kind), ['columns', 'columnPage']);
 });
 
+test('heroItemsForTab: prioritizes official recommended hero items when available', async () => {
+  const { heroItemsForTab } = await import('../src/app/tabRows.ts');
+
+  const dummyCatalog: any = {
+    historyItems: [],
+    featuredItems: [{ id: 'f1', title: 'Fallback Featured' }],
+    movieItems: [{ id: 'm1', title: 'Fallback Movie' }],
+    seriesItems: [{ id: 's1', title: 'Fallback Series' }],
+    kidsItems: [{ id: 'k1', title: 'Fallback Kids' }],
+    animeItems: [{ id: 'a1', title: 'Fallback Anime' }],
+    catalogRows: {},
+    portalRows: {},
+    heroByTab: {
+      destacados: [
+        { id: 'hero-rec-1', title: 'Estreno Exclusivo Destacados', tagline: 'Un thriller impactante' }
+      ],
+      peliculas: [
+        { id: 'hero-mov-1', title: 'Película Hero Oficial', tagline: 'La más vista del mes' }
+      ]
+    }
+  };
+
+  // With heroByTab present for destacados
+  const heroDestacados = heroItemsForTab('destacados', dummyCatalog);
+  assert.equal(heroDestacados.length, 1);
+  assert.equal(heroDestacados[0].id, 'hero-rec-1');
+  assert.equal(heroDestacados[0].title, 'Estreno Exclusivo Destacados');
+
+  // With heroByTab present for peliculas
+  const heroPeliculas = heroItemsForTab('peliculas', dummyCatalog);
+  assert.equal(heroPeliculas.length, 1);
+  assert.equal(heroPeliculas[0].id, 'hero-mov-1');
+  assert.equal(heroPeliculas[0].title, 'Película Hero Oficial');
+
+  // For series where heroByTab is not populated, falls back to slicing catalog rows
+  const heroSeries = heroItemsForTab('series', dummyCatalog);
+  assert.equal(heroSeries.length, 1);
+  assert.equal(heroSeries[0].id, 's1');
+  assert.equal(heroSeries[0].title, 'Fallback Series');
+});
+
+test('catalogService: getFilteredPage for adult root tags items restricted and marks them private', async () => {
+  const { getFilteredPage } = await import('../src/services/catalogService.ts');
+  const { historyService } = await import('../src/services/historyService.ts');
+
+  (globalThis as any).window = {
+    MagisClient: {
+      browse: (root: string, filters: any, pageNum: number, pageSize: number, cb: Function) => {
+        assert.equal(root, 'adult');
+        cb(null, {
+          items: [
+            { id: 'adult_item_1', contentId: 'adult_item_1', name: 'Item Adulto 1' }
+          ],
+          total: 1
+        });
+      }
+    }
+  };
+
+  const page = await getFilteredPage('adult', { tags: '', year: '', originalCountry: '', audio: '' }, 1, 24);
+  assert.equal(page.total, 1);
+  assert.equal(page.items[0].id, 'adult_item_1');
+  assert.equal(page.items[0].restricted, true);
+  assert.equal(page.items[0].privateContent, true);
+  assert.equal(page.items[0].category, 'adult');
+  assert.equal(historyService.isRestricted(page.items[0]), true);
+});
+

@@ -9,6 +9,7 @@ import { ScreenHeader, SearchIcon } from '../components/layout/Header';
 import { cardMeta } from '../components/search/SearchModal';
 import { formatQualityTag, firstQuality } from '../lib/subtitles';
 import { getCachedTitleMeta } from '../lib/titleMetaCache';
+import { parentalService } from '../services/parentalService';
 
 /**
  * Filter screen of the official app: Tipo / Género / Año / País / Audio over the full catalog of a
@@ -18,12 +19,17 @@ import { getCachedTitleMeta } from '../lib/titleMetaCache';
  * options as a vertical list, like the ⚙ of the detail and Perfil), and the titles taking the rest of the screen.
  */
 
-const TYPES: { value: FilterRoot; label: string }[] = [
+const BASE_TYPES: { value: FilterRoot; label: string }[] = [
   { value: 'movies', label: 'Película' },
   { value: 'series', label: 'Series' },
   { value: 'kids', label: 'Kids' },
   { value: 'anime', label: 'Anime' }
 ];
+
+const ADULT_TYPE: { value: FilterRoot; label: string } = {
+  value: 'adult',
+  label: 'Adultos +18'
+};
 
 // The portal sends the values in English
 const TAG_ES: Record<string, string> = {
@@ -100,11 +106,17 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
 }) => {
   useViewProfiler('Filtros');
   const [root, setRoot] = useState<FilterRoot>(initialRoot);
+  const types = useMemo(() => {
+    if (initialRoot === 'adult' || (parentalService.isAdultEnabled() && parentalService.isSessionUnlocked())) {
+      return [...BASE_TYPES, ADULT_TYPE];
+    }
+    return BASE_TYPES;
+  }, [initialRoot]);
   const [values, setValues] = useState<FilterValues>(NO_FILTERS);
   const [options, setOptions] = useState<FilterOptions | null>(null);
   const [results, setResults] = useState<Results>(EMPTY_RESULTS);
   const [area, setArea] = useState<'header' | 'type' | 'side' | 'grid'>('side');
-  const [typeCol, setTypeCol] = useState(Math.max(0, TYPES.findIndex(t => t.value === initialRoot)));
+  const [typeCol, setTypeCol] = useState(() => Math.max(0, types.findIndex(t => t.value === initialRoot)));
   // Left menu: the list of filters, or the options of one of them
   const [sideMode, setSideMode] = useState<'menu' | 'options'>('menu');
   const [sideRow, setSideRow] = useState(0);
@@ -235,10 +247,10 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
     // Types: pills in a row
     if (area === 'type') {
       if (key === 'left') setTypeCol(c => Math.max(0, c - 1));
-      else if (key === 'right') setTypeCol(c => Math.min(TYPES.length - 1, c + 1));
+      else if (key === 'right') setTypeCol(c => Math.min(types.length - 1, c + 1));
       else if (key === 'up') { if (onOpenSearch) setArea('header'); }
       else if (key === 'down') setArea('side');
-      else if (key === 'enter') selectType(TYPES[typeCol].value);
+      else if (key === 'enter') selectType(types[typeCol].value);
       return;
     }
 
@@ -247,7 +259,7 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
       if (sideMode === 'menu') {
         if (key === 'up') {
           if (sideRow > 0) setSideRow(r => r - 1);
-          else { setTypeCol(Math.max(0, TYPES.findIndex(t => t.value === root))); setArea('type'); }
+          else { setTypeCol(Math.max(0, types.findIndex(t => t.value === root))); setArea('type'); }
         } else if (key === 'down') {
           setSideRow(r => Math.min(menuCount - 1, r + 1));
         } else if (key === 'right') {
@@ -285,7 +297,7 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
     } else if (key === 'right') {
       if (gridIndex % COLS !== COLS - 1 && gridIndex + 1 < total) setGridIndex(i => i + 1);
     } else if (key === 'up') {
-      if (gridIndex < COLS) { setTypeCol(Math.max(0, TYPES.findIndex(t => t.value === root))); setArea('type'); }
+      if (gridIndex < COLS) { setTypeCol(Math.max(0, types.findIndex(t => t.value === root))); setArea('type'); }
       else setGridIndex(i => i - COLS);
     } else if (key === 'down') {
       const lastRowStart = Math.floor((total - 1) / COLS) * COLS;
@@ -313,7 +325,7 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
       />
 
       <div className="filter-types">
-        {TYPES.map((t, c) => (
+        {types.map((t, c) => (
           <div
             key={t.value}
             className={`filter-type ${t.value === root ? 'is-selected' : ''} ${area === 'type' && c === typeCol ? 'is-focused' : ''}`}

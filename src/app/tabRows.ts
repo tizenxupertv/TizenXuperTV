@@ -1,8 +1,8 @@
-import { TabId } from '../components/layout/TopNavbar';
-import { ContentRowDef } from '../views/DestacadosView';
-import { VodItem } from '../types/vod';
-import { HistoryItem } from '../types/history';
-import { BrowseRoot } from '../lib/screenStack';
+import type { TabId } from '../components/layout/TopNavbar';
+import type { ContentRowDef } from '../views/DestacadosView';
+import type { VodItem } from '../types/vod';
+import type { HistoryItem } from '../types/history';
+import type { BrowseRoot } from '../lib/screenStack';
 import type { PortalRow } from '../services/catalogService';
 
 export interface TabRowsData {
@@ -15,6 +15,8 @@ export interface TabRowsData {
   catalogRows: Record<string, VodItem[]>;
   /** Portal rows per root category ('destacado', 'pelicula', 'serie', 'infantil', 'anime', 'explorar') */
   portalRows?: Record<string, PortalRow[]>;
+  /** Official recommended hero items per tab ('destacados', 'peliculas', 'series', 'kids', 'anime', 'explorar') */
+  heroByTab?: Record<string, VodItem[]>;
 }
 
 /** Portal root of each VOD tab: its category in the catalog, and its column tree */
@@ -41,9 +43,9 @@ function portalTabRows(selectedTab: TabId, data: TabRowsData): ContentRowDef[] {
       title: r.name,
       type: 'vod' as const,
       items: r.items,
-      // Not sent by the portal: ranking numbers for its "TOP15" rows, landscape cards for trailers
+      // Not sent by the portal: ranking numbers for its "TOP15" rows, landscape cards for trailers and "All" in series
       isRanked: /\btop\s?\d+/i.test(r.name),
-      isWide: /tr[aá]iler/i.test(r.name),
+      isWide: /tr[aá]iler/i.test(r.name) || (selectedTab === 'series' && (/\ball\b/i.test(r.name) || /\btodas\b/i.test(r.name))),
       isCollections: r.items.every(it => !!it.collectionId),
       portalRoot: target!.root
     }));
@@ -56,6 +58,12 @@ export function portalRootForTab(selectedTab: TabId): BrowseRoot | undefined {
 
 /** Hero carousel items for a VOD tab */
 export function heroItemsForTab(selectedTab: TabId, data: TabRowsData): VodItem[] {
+  // If the portal returned official recommended banner items for this tab, use them
+  const recommendedHeroes = data.heroByTab?.[selectedTab];
+  if (recommendedHeroes && recommendedHeroes.length > 0) {
+    return recommendedHeroes.slice(0, 10);
+  }
+
   const { featuredItems, movieItems, seriesItems, kidsItems, animeItems } = data;
   if (selectedTab === 'explorar') {
     // One title per platform row (Netfix, Disney+, Prime Video…)

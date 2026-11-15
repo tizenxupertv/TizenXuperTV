@@ -19,6 +19,7 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
   const [animeItems, setAnimeItems] = useState<VodItem[]>([]);
   const [catalogRows, setCatalogRows] = useState<Record<string, VodItem[]>>({});
   const [portalRows, setPortalRows] = useState<Record<string, PortalRow[]>>({});
+  const [heroByTab, setHeroByTab] = useState<Record<string, VodItem[]>>({});
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
 
   const onLoadedRef = useRef(onLoaded);
@@ -45,6 +46,7 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
         setAnimeItems(catalog.anime || []);
         setCatalogRows(catalog.rowsByGroup || {});
         setPortalRows(catalog.portalRows || {});
+        setHeroByTab(catalog.heroByTab || {});
         setCatalogError(false);
         setCatalogLoading(false);
         if (onLoadedRef.current) onLoadedRef.current(catalog);
@@ -87,6 +89,7 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
     animeItems,
     catalogRows,
     portalRows,
+    heroByTab,
     historyItems,
     findVod
   };

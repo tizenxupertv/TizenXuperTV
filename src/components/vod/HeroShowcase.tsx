@@ -39,10 +39,10 @@ const HeroShowcaseComponent: React.FC<HeroShowcaseProps> = ({
 
   useEffect(() => {
     if (!item?.id) return;
-    if (!qualityTag || !hasCC || !year || !actorsStr) {
+    if (!qualityTag || !hasCC || !year || !actorsStr || !cachedMeta?.backdrop) {
       enrichTitleMetaInBackground(item, true);
     }
-  }, [item?.id, qualityTag, hasCC, year, actorsStr]);
+  }, [item?.id, qualityTag, hasCC, year, actorsStr, cachedMeta?.backdrop]);
 
   const historyEntry = useMemo(() => (item?.id ? historyService.getEntry(item.id) : null), [item?.id]);
   const resumeTarget = useMemo(
@@ -52,7 +52,7 @@ const HeroShowcaseComponent: React.FC<HeroShowcaseProps> = ({
 
   if (!item) return null;
 
-  const rawBg = item.backdrop || item.landscape || item.poster || 'assets/placeholder_landscape.png';
+  const rawBg = cachedMeta?.backdrop || item.backdrop || item.landscape || item.poster || 'assets/placeholder_landscape.png';
   const isLocal = typeof window !== 'undefined' && (
     import.meta.env.DEV ||
     window.location.hostname === 'localhost' ||
@@ -65,7 +65,7 @@ const HeroShowcaseComponent: React.FC<HeroShowcaseProps> = ({
   // Only what the catalog knows about the title
   const genresList = item.genres && item.genres.length ? item.genres.slice(0, 3) : [];
   const score = item.score && item.score !== '0' && item.score !== '—' ? item.score : '';
-  const synopsis = item.synopsis || '';
+  const synopsis = item.synopsis || item.tagline || '';
 
   const hasProgress = resumeTarget.startAt > 10 && (resumeTarget.progressPercent || 0) > 0;
 

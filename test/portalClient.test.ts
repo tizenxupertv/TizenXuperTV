@@ -340,7 +340,7 @@ test('client identity and startPlayVOD payload send masmobile profile with 60291
   assert.equal(p.hardwareInfo, 'exynos2100');
 });
 
-test('home keeps masnew column codes for featured, anime and explorar under masmobile profile', () => {
+test('home keeps masnew column codes for featured, anime and explorar under catalog profile', () => {
   const nextColPayloads: Record<string, any>[] = [];
   const harness = loadPortalClient(req => {
     const endpoint = req.url.split('/api/portalCore/')[1] || '';
@@ -373,5 +373,5 @@ test('home keeps masnew column codes for featured, anime and explorar under masm
   assert.deepEqual(results, ['featured', 'anime', 'explorar']);
   assert.equal(nextColPayloads.length, 3);
   assert.deepEqual(nextColPayloads.map(p => p.columnCode), ['masnew_featured', 'masnew_anime', 'masnew_explorar']);
-  assert.ok(nextColPayloads.every(p => p.portalCode === 'masmobile' && p.apkVersion === '60291'));
+  assert.ok(nextColPayloads.every(p => p.portalCode === 'masnew' && p.apkVersion === '49902'));
 });

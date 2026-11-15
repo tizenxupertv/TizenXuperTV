@@ -3,6 +3,7 @@ import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../
 import { formatDuration } from '../lib/vodResume.ts';
 import { collectPosterAlternates } from '../lib/searchArtwork.ts';
 import { getCachedTitleMeta, setCachedTitleMeta } from '../lib/titleMetaCache.ts';
+import { historyService } from './historyService.ts';
 import { catalogProvider } from './catalogProvider.ts';
 
 declare global {
@@ -46,7 +47,7 @@ function normalizeItem(raw: any, index: number): VodItem {
     };
   }
 
-  const id = String(raw.id || raw.vodId || raw.programId || raw.program_id || `item-${index}`);
+  const id = String(raw.id || raw.contentId || raw.vodId || raw.programId || raw.program_id || `item-${index}`);
   const title = String(raw.title || raw.name || raw.programName || raw.programTitle || 'Sin título');
   // Only what the portal sends: no made-up score, year, duration or genre when a field is missing
   const score = raw.score || raw.vote_average || raw.rating || raw.movieRate || raw.programScore || '';
@@ -60,6 +61,8 @@ function normalizeItem(raw: any, index: number): VodItem {
 
   const synopsis = raw.synopsis || raw.overview || raw.description || raw.programUpdateContent || '';
   const posterAlternates = collectPosterAlternates(
+    raw.icon,
+    raw.iconUrl,
     raw.posterUrl,
     raw.poster_url,
     raw.poster,
@@ -108,6 +111,7 @@ function normalizeItem(raw: any, index: number): VodItem {
     genres,
     director: raw.director || '—',
     actors: raw.actors || raw.actorDisplay || raw.cast || '—',
+    tagline: raw.tagline || raw.viewPoint || undefined,
     synopsis,
     poster,
     posterAlternates,
@@ -121,6 +125,10 @@ function normalizeItem(raw: any, index: number): VodItem {
     trailerUrl: raw.trailerUrl || raw.trailer_url || raw.trailer || raw.previewUrl || raw.preview_url || undefined,
     quality: raw.quality || raw.definition || undefined,
     qualities: Array.isArray(raw.qualities) ? raw.qualities : (raw.quality ? String(raw.quality).split(',') : undefined),
+    volumeCount: raw.volumeCount !== undefined ? Number(raw.volumeCount) : (raw.volumnCount !== undefined ? Number(raw.volumnCount) : undefined),
+    updateCount: raw.updateCount !== undefined ? Number(raw.updateCount) : undefined,
+    moreAudio: raw.moreAudio !== undefined ? Number(raw.moreAudio) : undefined,
+    moreSubtitle: raw.moreSubtitle !== undefined ? Number(raw.moreSubtitle) : undefined,
     seasons: raw.seasons || [],
     episodes: raw.episodes || []
   };
@@ -180,6 +188,32 @@ function fetchLiveCatalog(): Promise<any[]> {
   return liveInFlight;
 }
 
+const TAB_RECOMMEND_MAP: { tab: string; root: string }[] = [
+  { tab: 'destacados', root: 'featured' },
+  { tab: 'peliculas', root: 'movies' },
+  { tab: 'series', root: 'series' },
+  { tab: 'kids', root: 'kids' },
+  { tab: 'anime', root: 'anime' },
+  { tab: 'explorar', root: 'explorar' }
+];
+
+async function fetchTabRecommends(): Promise<Record<string, VodItem[]>> {
+  if (!catalogProvider.recommends) return {};
+  const result: Record<string, VodItem[]> = {};
+  await Promise.all(
+    TAB_RECOMMEND_MAP.map(({ tab, root }) =>
+      catalogProvider.recommends!(root)
+        .then(rawList => {
+          if (Array.isArray(rawList) && rawList.length > 0) {
+            result[tab] = rawList.map((raw, idx) => normalizeItem(raw, idx));
+          }
+        })
+        .catch(() => {})
+    )
+  );
+  return result;
+}
+
 class CatalogService {
   private cache: {
     featured: VodItem[];
@@ -189,6 +223,7 @@ class CatalogService {
     anime: VodItem[];
     rowsByGroup: Record<string, VodItem[]>;
     portalRows: Record<string, PortalRow[]>;
+    heroByTab: Record<string, VodItem[]>;
   } | null = null;
 
   public getCachedCatalog() {
@@ -203,14 +238,18 @@ class CatalogService {
     anime: VodItem[];
     rowsByGroup: Record<string, VodItem[]>;
     portalRows: Record<string, PortalRow[]>;
+    heroByTab: Record<string, VodItem[]>;
   }> {
     if (this.cache) return this.cache;
 
-    const items = await fetchLiveCatalog();
-    return this.categorize(items.map((item, index) => normalizeItem(item, index)));
+    const [items, heroByTab] = await Promise.all([
+      fetchLiveCatalog(),
+      fetchTabRecommends()
+    ]);
+    return this.categorize(items.map((item, index) => normalizeItem(item, index)), heroByTab);
   }
 
-  private categorize(rawItems: VodItem[]) {
+  private categorize(rawItems: VodItem[], heroByTab: Record<string, VodItem[]> = {}) {
     // 1. Group series seasons and filter adult content. On the way, keep the portal's rows per root
     //    (getNextColumns): the same rows, names and order as the official app's tabs.
     const collector = new SeriesCollector();
@@ -273,7 +312,8 @@ class CatalogService {
       kids: kids.length >= 4 ? kids : items.slice(0, 30),
       anime: anime.length >= 4 ? anime : items.slice(0, 30),
       rowsByGroup,
-      portalRows
+      portalRows,
+      heroByTab
     };
 
     return this.cache;
@@ -433,7 +473,8 @@ class CatalogService {
             year: detailItem.year,
             duration: detailItem.duration,
             actors: detailItem.actors,
-            director: detailItem.director
+            director: detailItem.director,
+            backdrop: detailItem.backdrop
           });
 
           return {
@@ -527,7 +568,20 @@ export function getFilteredPage(
     client.browse(root, filters, pageNum, pageSize, (err: any, res: { items: any[]; total: number }) => {
       if (err) return reject(err);
       const offset = (pageNum - 1) * pageSize;
-      resolve({ items: (res.items || []).map((raw, i) => normalizeItem(raw, offset + i)), total: res.total || 0 });
+      const isAdultRoot = root === 'adult';
+      const items = (res.items || []).map((raw, i) => {
+        const item = normalizeItem(raw, offset + i);
+        if (isAdultRoot) {
+          item.restricted = true;
+          item.privateContent = true;
+          if (!item.category) item.category = 'adult';
+        }
+        return item;
+      });
+      if (isAdultRoot && items.length) {
+        historyService.markPrivate(items);
+      }
+      resolve({ items, total: res.total || 0 });
     });
   });
 }
@@ -573,8 +627,10 @@ export async function getPortalColumnPage(
       });
       const total = res.total || 0;
       
-      // Save in cache
-      columnPageMemoryCache.set(cacheKey, { items, total, at: Date.now() });
+      // Save in cache only when items exist
+      if (items.length > 0) {
+        columnPageMemoryCache.set(cacheKey, { items, total, at: Date.now() });
+      }
 
       return { items, total };
   });
