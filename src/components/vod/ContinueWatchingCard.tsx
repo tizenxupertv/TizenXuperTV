@@ -41,7 +41,18 @@ const ContinueWatchingCardComponent: React.FC<ContinueWatchingCardProps> = ({
     setImgFailed(true);
   };
 
-  const pct = item.duration > 0
+  const isEpFinished = !!(item.series && item.duration > 0 && item.position >= item.duration * 0.95);
+  const currentEpNum = item.episodeNumber !== undefined ? parseInt(String(item.episodeNumber), 10) : undefined;
+  const displayEpNum = isEpFinished && currentEpNum ? currentEpNum + 1 : currentEpNum;
+  const sNum = item.seasonNumber || 1;
+
+  const episodeBadge = item.series && displayEpNum
+    ? `T${sNum}:E${displayEpNum}`
+    : 'Continuar';
+
+  const pct = isEpFinished
+    ? 0
+    : item.duration > 0
     ? Math.min(100, Math.max(5, Math.round((item.position / item.duration) * 100)))
     : 45;
 
@@ -49,14 +60,12 @@ const ContinueWatchingCardComponent: React.FC<ContinueWatchingCardProps> = ({
     ? Math.max(1, Math.round((item.duration - item.position) / 60))
     : 38;
 
-  const episodeBadge = item.series && item.episodeNumber
-    ? `T1:E${item.episodeNumber}`
-    : 'Continuar';
-
   const cachedMeta = useTitleMeta(item.id);
   const qualityTag = formatQualityTag(firstQuality(cachedMeta?.qualities, cachedMeta?.quality));
 
-  const infoText = `${episodeBadge} · ${remainingMin} min restantes`;
+  const infoText = isEpFinished
+    ? `${episodeBadge} · Siguiente episodio`
+    : `${episodeBadge} · ${remainingMin} min restantes`;
 
   return (
     <div

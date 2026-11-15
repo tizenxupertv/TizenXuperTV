@@ -8,6 +8,7 @@ import { ScreenHeader, SearchIcon, BackIcon } from '../components/layout/Header'
 import { PosterCard } from '../components/vod/PosterCard';
 import { ContinueWatchingCard } from '../components/vod/ContinueWatchingCard';
 import { isAdultItem } from '../lib/catalogOrganizer';
+import { continueWatchingItems } from '../lib/vodResume';
 
 interface MyStuffScreenProps {
   isTop: boolean;
@@ -112,7 +113,7 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
       : { text: 'No se pudo borrar el historial. Inténtalo de nuevo.', error: true });
   };
 
-  const historyList = historyService.getHistory();
+  const historyList = continueWatchingItems(historyService.getHistory());
   const favIds = favoritesService.getFavoriteIds();
 
   // Enrich legacy favorites stored without title/poster metadata

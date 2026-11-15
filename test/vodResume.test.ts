@@ -1,7 +1,47 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { canSaveProgress, formatDuration, formatRemaining, getResumeTarget, reachedResumeGoal, retryStartAt } from '../src/lib/vodResume.ts';
+import { canSaveProgress, formatDuration, formatRemaining, getResumeTarget, reachedResumeGoal, retryStartAt, isFinished, continueWatchingItems, parseDurationToSeconds } from '../src/lib/vodResume.ts';
 import type { VodItem } from '../src/types/vod.ts';
+import type { HistoryItem } from '../src/types/history.ts';
+
+test('isFinished requires 95% completion or <= 120s remaining', () => {
+  const duration = 6000; // 100 min
+  // 90% (5400s) was previously considered finished; now it is NOT finished so climax/ending is not lost
+  assert.equal(isFinished(5400, duration), false);
+  // 94% is not finished
+  assert.equal(isFinished(5640, duration), false);
+  // 95% is finished
+  assert.equal(isFinished(5700, duration), true);
+  // Within 120s of end is finished
+  assert.equal(isFinished(5900, duration), true);
+  // Unknown or 0 duration is never finished
+  assert.equal(isFinished(500, 0), false);
+  assert.equal(isFinished(0, 0), false);
+});
+
+test('continueWatchingItems preserves series after finishing an episode', () => {
+  const movieFinished: HistoryItem = { id: 'm-1', title: 'Movie 1', poster: '', series: false, position: 5800, duration: 6000, updatedAt: 1 };
+  const movieUnfinished: HistoryItem = { id: 'm-2', title: 'Movie 2', poster: '', series: false, position: 2000, duration: 6000, updatedAt: 2 };
+  const seriesEpFinished: HistoryItem = { id: 's-1', title: 'Series 1', poster: '', series: true, episodeNumber: 1, position: 2700, duration: 2700, updatedAt: 3 };
+
+  const res = continueWatchingItems([movieFinished, movieUnfinished, seriesEpFinished]);
+  // Finished movie is filtered out
+  assert.equal(res.some(h => h.id === 'm-1'), false);
+  // Unfinished movie is kept
+  assert.equal(res.some(h => h.id === 'm-2'), true);
+  // Series is KEPT even though episode 1 reached 100%, because next episode is up next!
+  assert.equal(res.some(h => h.id === 's-1'), true);
+});
+
+test('parseDurationToSeconds parses various formats', () => {
+  assert.equal(parseDurationToSeconds('02:18:00'), 8280);
+  assert.equal(parseDurationToSeconds('01:30'), 90);
+  assert.equal(parseDurationToSeconds('138 min'), 8280);
+  assert.equal(parseDurationToSeconds('2 h 18 min'), 8280);
+  assert.equal(parseDurationToSeconds('45 min'), 2700);
+  assert.equal(parseDurationToSeconds(5400), 5400);
+  assert.equal(parseDurationToSeconds(''), 0);
+});
 
 test('formatDuration formats various duration representations into standard X h Y min', () => {
   // HH:MM:SS format

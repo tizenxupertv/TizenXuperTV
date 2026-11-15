@@ -9,14 +9,24 @@ export interface ResumeTarget {
   progressPercent?: number;
 }
 
-/** A title counts as watched once 90% of it has been played (unknown duration: never) */
+/** A title counts as watched once 95% of it has been played or <= 120s remaining (unknown duration: never) */
 export function isFinished(position: number, duration: number): boolean {
-  return duration > 0 && position / duration >= 0.9;
+  if (duration <= 0) return false;
+  const ratio = position / duration;
+  const remaining = duration - position;
+  return ratio >= 0.95 || remaining <= 120;
 }
 
 /** History entries for "Seguir viendo": what was played last and is not finished yet */
 export function continueWatchingItems(history: HistoryItem[]): HistoryItem[] {
-  return history.filter(h => !isFinished(h.position, h.duration));
+  return history.filter(h => {
+    // For series: finishing an episode moves to the next episode, so it stays in continue watching
+    // unless the entire series is marked finished
+    if (h.series) {
+      return !h.finished;
+    }
+    return !isFinished(h.position, h.duration);
+  });
 }
 
 /** Seconds around the position a title was asked to continue at that count as being there */
@@ -99,6 +109,38 @@ export function formatDuration(raw: any): string {
   if (hours > 0 && mins > 0) return `${hours} h ${mins} min`;
   if (hours > 0) return `${hours} h`;
   return `${mins} min`;
+}
+
+/**
+ * Parses any duration representation into seconds.
+ * Handles "02:18:00", "01:45", "138 min", "2 h 18 min", "8280", seconds numbers, etc.
+ */
+export function parseDurationToSeconds(raw: any): number {
+  if (!raw) return 0;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return raw > 600 ? raw : Math.max(0, Math.round(raw * 60));
+  }
+  const s = String(raw).trim();
+  if (!s || s === '—') return 0;
+
+  if (/^\d{1,2}:\d{2}(?::\d{2})?$/.test(s)) {
+    const parts = s.split(':').map(n => parseInt(n, 10));
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+  }
+  const m = s.match(/^(\d+(?:\.\d+)?)/);
+  if (!m) return 0;
+  const num = Math.round(parseFloat(m[1]));
+  if (s.toLowerCase().includes('h')) {
+    const hourMatch = s.match(/(\d+)\s*h(?:our)?s?/i);
+    const minMatch = s.match(/(\d+)\s*m(?:in)?/i);
+    const h = hourMatch ? parseInt(hourMatch[1], 10) : 0;
+    const min = minMatch ? parseInt(minMatch[1], 10) : 0;
+    return h * 3600 + min * 60;
+  }
+  if (s.toLowerCase().includes('min')) return num * 60;
+  if (num > 600) return num;
+  return num * 60;
 }
 
 /**

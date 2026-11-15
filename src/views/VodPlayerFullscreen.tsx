@@ -4,7 +4,7 @@ import { VodItem, VodEpisode, VodSeason } from '../types/vod';
 import { historyService } from '../services/historyService';
 import { playerService } from '../services/playerService';
 import { catalogService } from '../services/catalogService';
-import { getEpisodeStatus, canSaveProgress, reachedResumeGoal, retryStartAt } from '../lib/vodResume';
+import { getEpisodeStatus, canSaveProgress, reachedResumeGoal, retryStartAt, parseDurationToSeconds } from '../lib/vodResume';
 import { scrollHorizontalSlider } from '../utils/scrollHelper';
 import { hostOf, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSeekHold, formatSkip } from '../lib/seekAccel';
@@ -363,6 +363,34 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   // ---------------------------------------------------------------------------
   const saveProgress = useCallback(() => {
     if (isTrailer) return;
+
+    // Directly query the active player for current time so unmounting / exiting always saves the true position
+    let liveT = timeRef.current.t;
+    if (useAvPlayRef.current && (window as any).XuperAVPlay && typeof (window as any).XuperAVPlay.currentTimeSec === 'number' && (window as any).XuperAVPlay.currentTimeSec > 0) {
+      liveT = Math.max(liveT, (window as any).XuperAVPlay.currentTimeSec);
+    } else if (useAvPlayRef.current && (window as any).webapis?.avplay) {
+      try {
+        const curMs = (window as any).webapis.avplay.getCurrentTime();
+        if (curMs > 0) liveT = Math.max(liveT, curMs / 1000);
+      } catch {}
+    } else if (videoRef.current && Number.isFinite(videoRef.current.currentTime) && videoRef.current.currentTime > 0) {
+      liveT = Math.max(liveT, videoRef.current.currentTime);
+    }
+    timeRef.current.t = liveT;
+
+    let liveD = timeRef.current.d;
+    if (!(liveD > 0)) {
+      if (videoRef.current && Number.isFinite(videoRef.current.duration) && videoRef.current.duration > 0) {
+        liveD = videoRef.current.duration;
+      } else if (useAvPlayRef.current && (window as any).XuperAVPlay?.durationSec > 0) {
+        liveD = (window as any).XuperAVPlay.durationSec;
+      } else if (item.duration) {
+        const parsed = parseDurationToSeconds(item.duration);
+        if (parsed > 0) liveD = parsed;
+      }
+      if (liveD > 0) timeRef.current.d = liveD;
+    }
+
     const { t, d } = timeRef.current;
     if (resumePendingRef.current && t < 3) return;
     // Asked to continue further ahead and not there yet: the saved position is not replaced (lib/vodResume.ts)
