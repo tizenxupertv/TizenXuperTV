@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import '../styles/sportsPlayer.css';
 import { MatchCrest, MatchHeader } from '../components/sports/MatchHeader';
 import { MatchDetailModal } from '../components/sports/MatchDetailModal';
+import { StreamSelectModal } from '../components/sports/StreamSelectModal';
 import { scoreboardService } from '../services/scoreboardService';
 import { SportsEvent, SportsStream } from '../types/sports.ts';
 import { sportsService } from '../services/sportsService.ts';
@@ -438,17 +439,8 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         return;
       }
 
-      // Error card: the other signals as a vertical list
-      if (error) {
-        e.preventDefault();
-        if (showServerMenu && e.key === 'ArrowUp') setServerMenuIdx(i => Math.max(0, i - 1));
-        else if (showServerMenu && e.key === 'ArrowDown') setServerMenuIdx(i => Math.min(streams.length - 1, i + 1));
-        else if (e.key === 'Enter') {
-          if (showServerMenu) { setCurrentStreamIdx(serverMenuIdx); setShowServerMenu(false); }
-          else if (streams.length > 1) setShowServerMenu(true);
-        } else if (isBack) onClose();
-        return;
-      }
+      // Error card: handled by StreamSelectModal
+      if (error) return;
 
       // Watching: the first key only shows the bar; ▲ ▼ move along the signals, OK switches, Back hides the bar
       if (!osdVisibleRef.current) {
@@ -483,28 +475,6 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [error, showServerMenu, serverMenuIdx, currentStreamIdx, streams, triggerOsd, onClose]);
-
-  // Signals list, shared by the error card and the side panel
-  const signalList = (
-    <div className="spp-signals">
-      {streams.map((s, idx) => {
-        const isFocused = idx === serverMenuIdx;
-        const isPlaying = idx === currentStreamIdx && !error;
-        const isFailed = failed.has(idx);
-        return (
-          <div
-            key={idx}
-            className={`spp-signal ${isFocused ? 'is-focused' : ''} ${isPlaying ? 'is-playing' : ''} ${isFailed ? 'is-failed' : ''}`}
-            onClick={() => { setCurrentStreamIdx(idx); setShowServerMenu(false); }}
-          >
-            <span className="spp-signal-name">{s.name}</span>
-            {isPlaying && <span className="spp-signal-tag">Viendo</span>}
-            {isFailed && !isPlaying && <span className="spp-signal-tag is-failed">No disponible</span>}
-          </div>
-        );
-      })}
-    </div>
-  );
 
   return (
     <div style={{
@@ -541,25 +511,33 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
         </div>
       )}
 
-      {/* The signal failed: what happened and the other signals, in one card */}
+      {/* The signal failed: what happened and the other signals, in one shared StreamSelectModal */}
       {error && (
-        <div className="spp-error">
-          <MatchHeader event={event} />
-          <div className="spp-error-msg">Esta señal no está disponible</div>
-          <div className="spp-error-detail">Transmisión deportiva · {error}</div>
-          {streams.length > 1 && showServerMenu ? (
-            <>
-              <div className="spp-hint">
-                {autoNext !== null && streams[autoNext]
-                  ? `Probando «${streams[autoNext].name}» en unos segundos · pulsa una tecla para elegir tú`
-                  : 'Elige otra señal · OK para ver · Atrás para salir'}
-              </div>
-              {signalList}
-            </>
-          ) : (
-            <div className="spp-hint">{streams.length > 1 ? 'OK para elegir otra señal · Atrás para salir' : 'Atrás para salir'}</div>
-          )}
-        </div>
+        <StreamSelectModal
+          event={event}
+          streams={streams}
+          error={error}
+          errorTitle="Esta señal no está disponible"
+          hint={
+            autoNext !== null && streams[autoNext]
+              ? `Probando «${streams[autoNext].name}» en unos segundos · pulsa una tecla para elegir tú`
+              : 'Elige otra señal · OK para ver · Atrás para salir'
+          }
+          currentStreamIdx={currentStreamIdx}
+          failedStreams={failed}
+          initialFocus={serverMenuIdx}
+          onSelectStream={idx => {
+            cancelAutoNext();
+            setCurrentStreamIdx(idx);
+            setShowServerMenu(false);
+          }}
+          onOpenDetails={() => {
+            cancelAutoNext();
+            setShowMatchModal(true);
+            hideOsd();
+          }}
+          onClose={onClose}
+        />
       )}
 
       {/* Bottom bar while watching: the match, its score, and the signals (◄ ► and OK) */}

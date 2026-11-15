@@ -6,6 +6,7 @@ import { feedPlan } from '../lib/scoreFeeds.ts';
 import '../styles/sports.css';
 import { MatchHeader } from '../components/sports/MatchHeader';
 import { MatchDetailModal } from '../components/sports/MatchDetailModal';
+import { StreamSelectModal } from '../components/sports/StreamSelectModal';
 import { setTrackOffset } from '../utils/scrollHelper';
 import { isPlus, plusFirst, withoutPlusDuplicates } from '../lib/sportsPlus';
 
@@ -410,46 +411,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
       lastKeyAtRef.current = Date.now();
       const k = e.key;
       const isBack = k === 'Escape' || k === 'Backspace' || e.keyCode === 10009;
-      if (detailEvent) return;
-
-      if (selected) {
-        e.preventDefault();
-        if (isBack) e.stopImmediatePropagation();
-        const N = streams.length;
-        if (k === 'ArrowLeft') {
-          if (streamFocus < N && streamFocus % 2 === 1) {
-            setStreamFocus(i => i - 1);
-          }
-        } else if (k === 'ArrowRight') {
-          if (streamFocus < N && streamFocus % 2 === 0 && streamFocus + 1 < N) {
-            setStreamFocus(i => i + 1);
-          }
-        } else if (k === 'ArrowUp') {
-          if (streamFocus === N) {
-            if (N > 0) setStreamFocus(N - 1);
-          } else if (streamFocus >= 2) {
-            setStreamFocus(i => i - 2);
-          }
-        } else if (k === 'ArrowDown') {
-          if (streamFocus < N) {
-            if (streamFocus + 2 < N) {
-              setStreamFocus(i => i + 2);
-            } else {
-              setStreamFocus(N);
-            }
-          }
-        } else if (k === 'Enter') {
-          if (streamFocus < N && streams[streamFocus]) {
-            onPlayEventStream(selected, streamFocus, streams);
-            setSelected(null);
-          } else if (streamFocus === N) {
-            const ev = selected;
-            setSelected(null);
-            setDetailEvent(ev);
-          }
-        } else if (isBack) setSelected(null);
-        return;
-      }
+      if (selected || detailEvent) return;
 
       if (focusArea === 'sidebar') {
         if (k === 'ArrowUp') {
@@ -632,37 +594,21 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
       </div>
 
       {selected && (
-        <div className="spb-modal">
-          <div className="spb-modal-card">
-            <MatchHeader event={{ ...selected, league: leagueOf(selected) }} />
-            {streamsLoading ? (
-              <div className="spp-loading spb-modal-status">
-                <div className="spp-wave" aria-hidden="true"><span /><span /><span /><span /></div>
-                Buscando señales…
-              </div>
-            ) : streams.length === 0 ? (
-              <div className="spb-empty-text spb-modal-status">Este evento no tiene señales que se puedan ver en la app por ahora.</div>
-            ) : (
-              <div className="spb-streams" ref={streamsContainerRef}>
-                {streams.map((st, i) => (
-                  <div key={i} className={`spb-stream ${i === streamFocus ? 'spb-focus' : ''}`} onClick={() => { onPlayEventStream(selected, i, streams); setSelected(null); }}>
-                    <span>{st.name}</span><span className="spb-stream-play">Ver ▶</span>
-                  </div>
-                ))}
-                <div
-                  className={`spb-stream spb-details-btn ${streamFocus === streams.length ? 'spb-focus' : ''}`}
-                  onClick={() => {
-                    const ev = selected;
-                    setSelected(null);
-                    setDetailEvent(ev);
-                  }}
-                >
-                  <span>Alineaciones y Estadísticas</span><span className="spb-stream-play">Ver ›</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <StreamSelectModal
+          event={{ ...selected, league: leagueOf(selected) }}
+          streams={streams}
+          loading={streamsLoading}
+          onSelectStream={idx => {
+            onPlayEventStream(selected, idx, streams);
+            setSelected(null);
+          }}
+          onOpenDetails={() => {
+            const ev = selected;
+            setSelected(null);
+            setDetailEvent(ev);
+          }}
+          onClose={() => setSelected(null)}
+        />
       )}
 
       {detailEvent && (

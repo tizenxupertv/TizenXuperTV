@@ -1,33 +1,50 @@
 /* Sports player: error card and signal picker (views/SportsPlayerFullscreen.tsx) */
 .spp-error {
-  position: absolute; width: 640px; max-width: 80vw; padding: 36px 40px; box-sizing: border-box; text-align: center;
-  border-radius: 26px; background: rgba(28, 28, 30, 0.97); border: 1px solid rgba(255, 255, 255, 0.14); color: #ffffff;
+  position: absolute; width: 920px; max-width: 90vw; max-height: 84vh; padding: 28px 36px; box-sizing: border-box; text-align: center;
+  border-radius: 26px; background: #0f1624; border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75); color: #ffffff;
+  display: flex; flex-direction: column; overflow: hidden;
 }
 .spp-league { font-size: 14px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; }
 
-.spp-error-msg { margin-top: 22px; font-size: 20px; font-weight: 800; color: #ffffff; }
-.spp-error-detail { margin-top: 6px; font-size: 15px; color: #64748b; }
-.spp-hint { margin: 18px 0 14px; font-size: 15px; color: #94a3b8; }
+.spp-error-msg { margin-top: 18px; font-size: 20px; font-weight: 800; color: #ffffff; }
+.spp-error-detail { margin-top: 4px; font-size: 14px; color: #64748b; }
+.spp-hint { margin: 14px 0 12px; font-size: 14px; color: #94a3b8; }
 .spp-error .spp-signals { text-align: left; }
 
 .spp-panel {
   position: absolute; right: 48px; top: 50%; transform: translateY(-50%); width: 420px; max-height: 80vh;
   padding: 28px; box-sizing: border-box; border-radius: 26px; z-index: 10000; color: #ffffff;
-  background: rgba(28, 28, 30, 0.97); border: 1px solid rgba(255, 255, 255, 0.14); display: flex; flex-direction: column;
+  background: #0f1624; border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75); display: flex; flex-direction: column;
 }
 .spp-panel-title { font-size: 24px; font-weight: 800; }
 .spp-panel .spp-hint { margin: 6px 0 18px; }
 
-.spp-signals { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.spp-signals {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
+  box-sizing: border-box;
+}
+.spp-signals::-webkit-scrollbar {
+  width: 6px;
+}
+.spp-signals::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
 .spp-signal {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-radius: 14px;
-  background: rgba(255, 255, 255, 0.05); color: #e2e8f0; font-size: 18px; font-weight: 700; border: 3px solid transparent;
+  display: flex; align-items: center; justify-content: space-between; min-width: 0; gap: 10px; padding: 13px 18px; border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05); color: #e2e8f0; font-size: 16px; font-weight: 700; border: 2px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer; box-sizing: border-box; transition: transform 0.15s ease, background 0.15s ease;
 }
 .spp-signal.is-playing { color: #38bdf8; }
 .spp-signal.is-failed { color: #64748b; }
-.spp-signal.is-focused { background: #ffffff; color: #000000; border-color: #ffffff; }
-.spp-signal-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.spp-signal-tag { flex-shrink: 0; font-size: 13px; font-weight: 800; padding: 3px 10px; border-radius: 8px; background: rgba(56, 189, 248, 0.14); color: #38bdf8; }
+.spp-signal.is-focused { background: #ffffff; color: #000000; border-color: #ffffff; outline: none; transform: scale(1.02); }
+.spp-signal-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.spp-signal-tag { flex-shrink: 0; font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 6px; background: rgba(56, 189, 248, 0.14); color: #38bdf8; margin-left: 6px; }
 .spp-signal-tag.is-failed { background: rgba(255, 255, 255, 0.06); color: #94a3b8; }
 .spp-signal.is-focused .spp-signal-tag { background: rgba(0, 0, 0, 0.08); color: #000000; }
 .spp-league { display: inline-flex; align-items: center; gap: 10px; }
