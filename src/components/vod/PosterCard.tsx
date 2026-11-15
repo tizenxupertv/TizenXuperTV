@@ -6,7 +6,6 @@ import { collectPosterAlternates } from '../../lib/searchArtwork';
 import { startImageTracking } from '../../lib/perfMonitor';
 import { formatQualityTag, firstQuality } from '../../lib/subtitles';
 import { useTitleMeta } from '../../lib/titleMetaCache';
-import { enrichTitleMetaInBackground } from '../../services/catalogService';
 
 interface PosterCardProps {
   item: VodItem;
@@ -99,14 +98,6 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
       item.category
     );
   }, [item.quality, item.qualities, cachedMeta?.quality, cachedMeta?.qualities, item.category]);
-
-  useEffect(() => {
-    if (!isFocused || qualityTag || !item.id) return;
-    const timer = setTimeout(() => {
-      enrichTitleMetaInBackground(item, false);
-    }, 600); // only for a card the user rests on, not every card passed while scrolling
-    return () => clearTimeout(timer);
-  }, [isFocused, qualityTag, item.id]);
 
   const categoryName = item.isSeries ? 'Programa de TV' : 'Película';
   // Only what the catalog knows: score, year, genres, category
