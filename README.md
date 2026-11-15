@@ -127,7 +127,7 @@ The Beta group is a Telegram forum with dedicated topics per TV generation:
 
 | Topic | Thread ID | Purpose |
 |---|---|---|
-| **Legacy** (Tizen 4.0–4.5) | 7 | Tests on Tizen 4.0–4.5 TVs (2017–2018) |
+| **Legacy** (Tizen 4.0) | 7 | Tests on Tizen 4.0 TVs (2018) |
 | **Mid-Gen** (Tizen 5.0–5.5) | 8 | Tests on Tizen 5.0–5.5 TVs (2019–2020) |
 | **Moderno** (Tizen 6.0+) | 9 | Tests on Tizen 6.0+ TVs (2021 and later) |
 | **Instalacion y Certificados** | 16 | Installation, signing, and certificate help |
