@@ -605,7 +605,7 @@ html, body {
   width: 28px;
   height: 9px;
   border-radius: 5px;
-  background: linear-gradient(90deg, #00e5ff 0%, #a855f7 100%);
+  background: #ffffff;
 }
 
 /* ==========================================================================
@@ -8733,8 +8733,15 @@ html.xuper-live-avplay .live-grand-preview-box .live-preview-video {
 
 /* Perfil › Sobre nosotros: version and updates as a bar at the bottom of the panel */
 .pf-about { display: flex; flex-direction: column; min-height: calc(100vh - 68px - 96px); }
-.pf-update-bar {
+.pf-update-card {
   margin-top: auto;
+  max-width: 1380px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.pf-update-card-hr { height: 1px; margin: 0 24px; background: rgba(255, 255, 255, 0.1); }
+.pf-update-card .pf-update-bar { background: none; border-radius: 0; max-width: none; }
+.pf-update-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -8748,8 +8755,8 @@ html.xuper-live-avplay .live-grand-preview-box .live-preview-video {
 .pf-update-bar-title { font-size: 19px; font-weight: 800; color: #ffffff; }
 .pf-update-bar-desc { margin-top: 4px; font-size: 15px; color: #94a3b8; }
 .pf-update-bar-actions { display: flex; gap: 12px; flex-shrink: 0; }
-/* Versiones beta: its own row under the update bar, the switch at the right */
-.pf-row.pf-row-wide.pf-beta-row { margin-top: 14px; width: 100%; }
+/* Versiones beta: the first row of the versions card, the switch at the right */
+.pf-row.pf-row-wide.pf-beta-row { margin-top: 0; width: 100%; max-width: none; background: none; }
 html.no-flexgap .pf-row-wide .pf-switch { margin-left: 32px; }
 html.no-flexgap .pf-update-bar-actions .pf-btn + .pf-btn { margin-left: 12px; }
 html.no-flexgap .pf-update-bar-actions { margin-left: 24px; }
@@ -9721,6 +9728,36 @@ html.legacy-video .maintenance-card { box-shadow: none; }
 
 .ms-bar .ms-bar-gap {
   flex: 1;
+}
+
+/* Actions (Quitar títulos, Borrar historial) weigh less than the lists: an outline, smaller text */
+.ms-bar .filter-type.ms-action {
+  padding: 6px 18px;
+  background: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  font-size: 16px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.ms-bar .filter-type.ms-action.is-selected {
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #ffffff;
+}
+
+.ms-bar .filter-type.ms-action.is-focused {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
+
+/* Ajustes › Mi perfil shows the same lists inside its panel */
+.pf-ms-bar .pf-total {
+  margin-left: 10px;
+}
+
+.pf-list .ms-bar.filter-types {
+  padding-top: 0;
 }
 
 .ms-grid {

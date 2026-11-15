@@ -4,7 +4,7 @@ import { localProfiles } from '../../lib/localProfiles';
 import { ProfileAvatar } from '../../screens/ProfilePickerScreen';
 import '../../styles/profiles.css';
 
-export type ProfileMenuAction = 'manage' | 'add' | 'list' | 'settings';
+export type ProfileMenuAction = 'manage' | 'add' | 'settings';
 
 interface ProfileMenuProps {
   onAction: (action: ProfileMenuAction) => void;
@@ -13,7 +13,7 @@ interface ProfileMenuProps {
 
 /**
  * The header avatar's menu, like the big streaming apps: the other profiles (OK switches to one), then
- * profile management, Mi lista e historial and Ajustes. ▲ ▼ move, OK runs, Back closes.
+ * profile management and Ajustes (Mi lista and the history are behind the header bookmark). ▲ ▼ move, OK runs, Back closes.
  */
 export const ProfileMenu: React.FC<ProfileMenuProps> = ({ onAction, onClose }) => {
   const active = localProfiles.active();
@@ -35,8 +35,7 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({ onAction, onClose }) =
     others.length > 0
       ? { id: 'manage', label: 'Administrar perfiles', run: () => onAction('manage') }
       : { id: 'add', label: 'Añadir perfil', run: () => onAction('add') },
-    { id: 'list', label: 'Mi lista e historial', run: () => onAction('list'), divider: true },
-    { id: 'settings', label: 'Ajustes', run: () => onAction('settings') }
+    { id: 'settings', label: 'Ajustes', run: () => onAction('settings'), divider: true }
   ];
   const [index, setIndex] = useState(0);
 

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { deliveredQualities, effectiveChoice, ownAudioName, qualityMatches, titleChoices, trackForQuality } from '../src/lib/titleOptions.ts';
 
-import { PREF_LANG_CODES, languageName, sameLanguage, formatAudioTrackList, formatResolutionBadge, formatQualityTag, firstQuality } from '../src/lib/subtitles.ts';
+import { PREF_LANG_CODES, languageName, sameLanguage, audioCoversSubtitles, formatAudioTrackList, formatResolutionBadge, formatQualityTag, firstQuality } from '../src/lib/subtitles.ts';
 
 const QUALITY = ['Auto', '1080p', '720p', '480p'];
 const lang = { matches: (label: string, i: number) => sameLanguage(label, PREF_LANG_CODES[i]), name: languageName };
@@ -115,4 +115,14 @@ test('firstQuality skips empty lists and blank texts, so a known quality is not 
   assert.equal(firstQuality([], '1080p', ['480p']), '1080p');
   assert.equal(firstQuality(undefined, null, [], '  '), undefined);
   assert.equal(formatQualityTag(firstQuality([], undefined, ['720p', '1080p', '480p'])), 'FHD');
+});
+
+test('audioCoversSubtitles: decided by the audio that plays, not by the list of the title', () => {
+  // English plays on a title that also carries Spanish: Spanish subtitles are wanted
+  assert.equal(audioCoversSubtitles({ label: 'Inglés', lang: 'ENG' }, 'SPA,ENG', 'es-es'), false);
+  // Spanish plays: subtitles in Spanish would repeat it
+  assert.equal(audioCoversSubtitles({ label: 'Español (España)', lang: 'SPA' }, 'SPA,ENG', 'es-es'), true);
+  // Unknown playing track: the title's audio decides
+  assert.equal(audioCoversSubtitles(undefined, 'ENG', 'es-es'), false);
+  assert.equal(audioCoversSubtitles(undefined, 'SPA', 'es-lat'), true);
 });

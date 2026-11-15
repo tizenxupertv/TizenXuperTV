@@ -15,7 +15,7 @@ import {
   SubtitleTrack,
   SubtitleCue,
   languageName,
-  sameLanguage,
+  sameLanguage, audioCoversSubtitles,
   PREF_LANG_CODES,
   loadSubtitle,
   cueAt,
@@ -779,7 +779,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         // First load: subtitles follow the profile preference (Configuración global)
         subsInitRef.current = true;
         const pref = PREF_LANG_CODES[settings.subLang] || 'es';
-        const audioInPref = sameLanguage(res.audio, pref);
+        // Skipped only when the audio that will play is already in that language (lib/subtitles.ts)
+        const audioInPref = audioCoversSubtitles(initialAudioOptions[activeAudioIdx], res.audio, pref);
         setSubIndex(settings.subtitle && !audioInPref ? subs.findIndex(sb => sameLanguage(sb.lang, pref)) : -1);
       }
       // MSE plays only the first audio of the file: a title whose wanted audio is another one goes to AVPlay

@@ -110,6 +110,20 @@ export function sameLanguage(code: string | undefined, pref: string): boolean {
 }
 
 /**
+ * Whether subtitles in `pref` would repeat the audio: true only when the audio that plays is in that language.
+ * The title's whole audio list (e.g. "SPA,ENG") is used just when the playing track is unknown: asked first, it
+ * said yes for any title that merely carries the language, so English audio started without Spanish subtitles.
+ */
+export function audioCoversSubtitles(
+  playing: { label?: string; lang?: string } | undefined,
+  titleAudio: string | undefined,
+  pref: string
+): boolean {
+  if (playing && (playing.label || playing.lang)) return sameLanguage(playing.label || playing.lang, pref);
+  return sameLanguage(titleAudio, pref);
+}
+
+/**
  * Formats a list of raw audio language codes (e.g. ['SPA', 'SPA', 'ENG'] or ['SPA,SPA,ENG'])
  * into user-friendly distinct labels (e.g. ['Español (Latino)', 'Español (España)', 'Inglés']).
  */
