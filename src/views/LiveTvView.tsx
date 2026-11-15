@@ -1291,18 +1291,6 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             )
           )}
           
-          <div className="live-preview-top-tags">
-            <span className="live-stream-badge">
-              <span className="live-pulse-dot" /> EN VIVO
-            </span>
-            {streamQuality && <span className="live-quality-tag">{streamQuality}</span>}
-            {tunedChannel && (
-              <span className="live-quality-tag" style={{ background: 'rgba(0, 229, 255, 0.25)', borderColor: '#00e5ff' }}>
-                {tunedChannel.name}
-              </span>
-            )}
-          </div>
-
           {!isFullscreen && (
             <div
               className="live-preview-expand-hint"
