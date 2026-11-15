@@ -9704,6 +9704,38 @@ html.legacy-video .live-preview-overlay { display: none; }
   text-overflow: ellipsis;
 }
 
+.live-tuning-wave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 22px;
+  margin-top: 10px;
+}
+
+.live-tuning-wave span {
+  width: 4px;
+  height: 18px;
+  background: #38bdf8;
+  border-radius: 4px;
+  transform-origin: center;
+  animation: liveSignalPulse 0.85s ease-in-out infinite alternate;
+}
+
+.live-tuning-wave span:nth-child(1) { animation-delay: 0.08s; }
+.live-tuning-wave span:nth-child(2) { animation-delay: 0.22s; }
+.live-tuning-wave span:nth-child(3) { animation-delay: 0.36s; }
+.live-tuning-wave span:nth-child(4) { animation-delay: 0.5s; }
+
+@keyframes liveSignalPulse {
+  0% { transform: scaleY(0.25); opacity: 0.35; }
+  100% { transform: scaleY(1); opacity: 1; }
+}
+
+html.legacy-video .live-tuning-wave span {
+  animation-duration: 1.2s;
+}
+
 .live-tuning-spinner {
   width: 34px;
   height: 34px;

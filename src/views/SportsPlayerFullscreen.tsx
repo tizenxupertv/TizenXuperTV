@@ -534,7 +534,10 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       {isBuffering && !error && (
         <div className="spp-error is-loading">
           <MatchHeader event={event} />
-          <div className="spp-loading"><span className="spp-spinner" />Conectando a {currentStream?.name || 'la señal'}…</div>
+          <div className="spp-loading">
+            <div className="spp-wave" aria-hidden="true"><span /><span /><span /><span /></div>
+            Conectando a {currentStream?.name || 'la señal'}…
+          </div>
         </div>
       )}
 

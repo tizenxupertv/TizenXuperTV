@@ -1261,7 +1261,9 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                 />
               )}
               <div className="live-tuning-name">{tunedChannel.name}</div>
-              <div className="live-tuning-spinner" />
+              <div className="live-tuning-wave" aria-hidden="true">
+                <span /><span /><span /><span />
+              </div>
             </div>
           )}
 

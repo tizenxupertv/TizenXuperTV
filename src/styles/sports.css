@@ -178,30 +178,30 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(3, 7, 18, 0.9);
-  backdrop-filter: blur(8px);
+  background: rgba(8, 12, 20, 0.94);
 }
 .spb-modal-card {
   width: 920px;
-  max-width: 94vw;
-  max-height: 88vh;
+  max-width: 90vw;
+  max-height: 84vh;
   text-align: center;
-  padding: 32px 36px;
-  border-radius: 28px;
+  padding: 30px 34px;
+  border-radius: 26px;
   background: #0f1624;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .spb-modal-status { display: flex; justify-content: center; margin-top: 26px; }
-.spb-modal-card .spb-streams { margin-top: 24px; }
+.spb-modal-card .spb-streams { margin-top: 22px; }
 .spb-streams {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  max-height: 480px;
+  max-height: 440px;
   overflow-y: auto;
   padding-right: 4px;
   box-sizing: border-box;
@@ -217,6 +217,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-width: 0;
   padding: 13px 18px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.05);
@@ -228,6 +229,14 @@
   transition: transform 0.15s ease, background 0.15s ease;
   box-sizing: border-box;
 }
+.spb-stream > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  text-align: left;
+}
 .spb-stream.spb-focus {
   background: #ffffff;
   color: #000000;
@@ -238,7 +247,7 @@
 .spb-stream-play {
   font-size: 14px;
   opacity: 0.7;
-  margin-left: 8px;
+  margin-left: 10px;
   flex-shrink: 0;
 }
 

@@ -636,7 +636,10 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
           <div className="spb-modal-card">
             <MatchHeader event={{ ...selected, league: leagueOf(selected) }} />
             {streamsLoading ? (
-              <div className="spp-loading spb-modal-status"><span className="spp-spinner" />Buscando señales…</div>
+              <div className="spp-loading spb-modal-status">
+                <div className="spp-wave" aria-hidden="true"><span /><span /><span /><span /></div>
+                Buscando señales…
+              </div>
             ) : streams.length === 0 ? (
               <div className="spb-empty-text spb-modal-status">Este evento no tiene señales que se puedan ver en la app por ahora.</div>
             ) : (
