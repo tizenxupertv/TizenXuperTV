@@ -98,15 +98,12 @@ const ContentSliderComponent: React.FC<ContentSliderProps> = ({
             className={`see-all-card ${isWide ? 'is-wide-card' : ''} ${focusedIndex === items.length ? 'is-focused' : ''}`}
             onClick={onSeeAll}
           >
-            <img
-              className="see-all-bg-img"
-              src={isWide ? 'images/bg_asset_horizon_more.png' : 'images/bg_asset_vertical_more.png'}
-              alt=""
-              loading="lazy"
-            />
-            <div className="see-all-overlay" />
             <div className="see-all-content">
-              <img className="see-all-icon-img" src="images/ic_asset_more.png" alt="" />
+              <div className="see-all-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </div>
               <span className="see-all-label">Ver más</span>
             </div>
           </div>
