@@ -9702,10 +9702,6 @@ html.legacy-video .maintenance-card { box-shadow: none; }
   flex: 1;
 }
 
-.ms-bar .pf-btn {
-  min-width: 0;
-}
-
 .ms-grid {
   display: flex;
   flex-wrap: wrap;
@@ -9723,17 +9719,23 @@ html.legacy-video .maintenance-card { box-shadow: none; }
   top: 8px;
   right: 8px;
   z-index: 6;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(225, 29, 72, 0.92);
+  box-sizing: border-box;
+  background: rgba(8, 10, 16, 0.78);
+  border: 2px solid rgba(255, 255, 255, 0.7);
   color: #fff;
-  font-size: 18px;
-  font-weight: 900;
+  font-size: 14px;
+  font-weight: 800;
   pointer-events: none;
+}
+
+.ms-body .pf-edit-hint {
+  color: #cbd5e1;
 }
 
 .ms-section {
