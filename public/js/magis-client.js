@@ -2614,6 +2614,8 @@
       });
     },
     getLastStartPlayDiag: function () { return lastStartPlayDiag; },
+    // Nothing running or waiting: background work (title details for a focused card) starts only then
+    isIdle: function () { return !session.busy && !queue.length && !lowQueue.length; },
     call: call
   };
 

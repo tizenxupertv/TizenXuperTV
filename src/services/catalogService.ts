@@ -706,6 +706,44 @@ export function getCatchupStreamUrl(channelCode: string, contentId: string, colu
   });
 }
 
+/**
+ * Title details asked for in the background (focused card, rotating hero). The portal answers one request at a
+ * time, so each of these delayed the grid pages and the detail behind it: walking a grid queued one request per
+ * card. Now only the latest wish is kept, and it starts only when the portal queue is empty.
+ */
+let backgroundWish: { item: VodItem; includeMediaOptions: boolean } | null = null;
+let backgroundPumping = false;
+const BACKGROUND_IDLE_POLL_MS = 400;
+
+function portalIdle(): boolean {
+  const client = window.MagisClient;
+  return !client || typeof client.isIdle !== 'function' || client.isIdle();
+}
+
+async function pumpBackgroundWishes(): Promise<void> {
+  backgroundPumping = true;
+  try {
+    while (backgroundWish) {
+      if (!portalIdle()) {
+        await new Promise(resolve => setTimeout(resolve, BACKGROUND_IDLE_POLL_MS));
+        continue;
+      }
+      const wish = backgroundWish;
+      backgroundWish = null;
+      await enrichTitleMeta(wish.item, wish.includeMediaOptions);
+    }
+  } finally {
+    backgroundPumping = false;
+  }
+}
+
+/** Same as enrichTitleMeta, but yields to every other portal request and drops wishes overtaken by a newer one */
+export function enrichTitleMetaInBackground(item: VodItem, includeMediaOptions = false): void {
+  if (!item?.id) return;
+  backgroundWish = { item, includeMediaOptions };
+  if (!backgroundPumping) void pumpBackgroundWishes();
+}
+
 const metaEnrichInFlight = new Map<string, Promise<void>>();
 const metaEnrichAttempted = new Set<string>();
 /** Titles whose play options were already asked for in this run: a title without subtitles or year stays without them */
