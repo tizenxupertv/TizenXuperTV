@@ -853,7 +853,7 @@ export const App: React.FC = () => {
     <div className="app-root theme-apple-dark">
       {catalog.catalogError && selectedTab !== 'tv' && !isSportsTab(selectedTab) && (
         <div role="alert" className="network-status-toast is-offline">
-          No se pudo cargar el catálogo. Vuelve a abrir la aplicación para reintentar.
+          No se pudo cargar el catálogo. Reintentando automáticamente…
         </div>
       )}
       {/* Network Connectivity Toast (Tizen Resilience) */}
