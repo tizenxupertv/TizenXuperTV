@@ -543,12 +543,12 @@ html, body {
 }
 
 .icon-btn-apple.is-fav {
-  color: #e879f9;
+  color: #ffffff;
 }
 
 .icon-btn-apple.is-focused {
-  background: rgba(255, 255, 255, 0.25) !important;
-  color: #ffffff !important;
+  background: #ffffff !important;
+  color: #000000 !important;
   border: 3px solid #ffffff !important;
   outline: none !important;
   box-shadow: none !important;
