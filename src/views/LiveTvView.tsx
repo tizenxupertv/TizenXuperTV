@@ -1363,13 +1363,6 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                 >
                   {isDisplayChannelFav ? '★' : '☆'}
                 </button>
-                <button
-                  className={`pi-action-btn ${fullscreenFocusBtn === 'screen' ? 'is-focused' : ''}`}
-                  title="Pantalla negra: apaga la imagen y sigue el sonido"
-                  onClick={onScreenOff}
-                >
-                  ◐ Pantalla negra
-                </button>
               </div>
 
               <div className="pi-date">{liveClock}</div>

@@ -264,10 +264,10 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
     return true;
   }
 
-  // When focused on InfoBar Action Buttons ([☰ Lista de canales] / [★ Favoritos] / [Pantalla negra])
+  // When focused on InfoBar Action Buttons ([☰ Lista de canales] / [★ Favoritos])
   if (fullscreenFocusBtn !== 'none') {
-    const buttons = ['channels', 'fav', 'screen'] as const;
-    const at = Math.max(0, buttons.indexOf(fullscreenFocusBtn));
+    const buttons = ['channels', 'fav'] as const;
+    const at = Math.max(0, buttons.indexOf(fullscreenFocusBtn as any));
     if (key === 'left') {
       setFullscreenFocusBtn(buttons[Math.max(0, at - 1)]);
       triggerOsd();
