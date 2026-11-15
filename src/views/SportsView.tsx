@@ -194,6 +194,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
   const trackRef = useRef<HTMLDivElement>(null);
   const liveTrackRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const streamsContainerRef = useRef<HTMLDivElement>(null);
 
   const loadedAtRef = useRef(0);
   const lastKeyAtRef = useRef(0);
@@ -371,7 +372,19 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     if (liveTrackRef.current) setTrackOffset(liveTrackRef.current, 'x', liveCol <= 1 ? 0 : (liveCol - 1) * LIVE_CARD_PITCH);
   }, [liveCol]);
 
+  useEffect(() => {
+    if (selected && streamsContainerRef.current) {
+      const el = streamsContainerRef.current.querySelector('.spb-focus') as HTMLElement | null;
+      if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selected, streamFocus]);
+
   const openEvent = useCallback(async (ev: SportsEvent) => {
+    const isGameTime = ev.status === 'live' || (ev.startMillis > 0 && Date.now() >= ev.startMillis && ev.status !== 'finished');
+    if (!isGameTime) {
+      setDetailEvent(ev);
+      return;
+    }
     setSelected(ev);
     setStreams([]);
     setStreamFocus(0);
@@ -402,14 +415,34 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
       if (selected) {
         e.preventDefault();
         if (isBack) e.stopImmediatePropagation();
-        const totalOpts = streams.length + 1; // streams + "Alineaciones y Estadísticas"
-        if (k === 'ArrowUp') setStreamFocus(i => Math.max(0, i - 1));
-        else if (k === 'ArrowDown') setStreamFocus(i => Math.min(totalOpts - 1, i + 1));
-        else if (k === 'Enter') {
-          if (streamFocus < streams.length && streams[streamFocus]) {
+        const N = streams.length;
+        if (k === 'ArrowLeft') {
+          if (streamFocus < N && streamFocus % 2 === 1) {
+            setStreamFocus(i => i - 1);
+          }
+        } else if (k === 'ArrowRight') {
+          if (streamFocus < N && streamFocus % 2 === 0 && streamFocus + 1 < N) {
+            setStreamFocus(i => i + 1);
+          }
+        } else if (k === 'ArrowUp') {
+          if (streamFocus === N) {
+            if (N > 0) setStreamFocus(N - 1);
+          } else if (streamFocus >= 2) {
+            setStreamFocus(i => i - 2);
+          }
+        } else if (k === 'ArrowDown') {
+          if (streamFocus < N) {
+            if (streamFocus + 2 < N) {
+              setStreamFocus(i => i + 2);
+            } else {
+              setStreamFocus(N);
+            }
+          }
+        } else if (k === 'Enter') {
+          if (streamFocus < N && streams[streamFocus]) {
             onPlayEventStream(selected, streamFocus, streams);
             setSelected(null);
-          } else if (streamFocus === streams.length) {
+          } else if (streamFocus === N) {
             const ev = selected;
             setSelected(null);
             setDetailEvent(ev);
@@ -607,7 +640,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
             ) : streams.length === 0 ? (
               <div className="spb-empty-text spb-modal-status">Este evento no tiene señales que se puedan ver en la app por ahora.</div>
             ) : (
-              <div className="spb-streams">
+              <div className="spb-streams" ref={streamsContainerRef}>
                 {streams.map((st, i) => (
                   <div key={i} className={`spb-stream ${i === streamFocus ? 'spb-focus' : ''}`} onClick={() => { onPlayEventStream(selected, i, streams); setSelected(null); }}>
                     <span>{st.name}</span><span className="spb-stream-play">Ver ▶</span>
@@ -621,7 +654,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
                     setDetailEvent(ev);
                   }}
                 >
-                  <span>📊 Alineaciones y Estadísticas</span><span className="spb-stream-play">Ver ›</span>
+                  <span>Alineaciones y Estadísticas</span><span className="spb-stream-play">Ver ›</span>
                 </div>
               </div>
             )}

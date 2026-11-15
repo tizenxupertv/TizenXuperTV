@@ -165,6 +165,14 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       return;
     }
     if (!currentStream || !currentStream.url) {
+      if (streams.length > 1) {
+        const next = nextSignal(streams.length, currentStreamIdx, failed);
+        if (next >= 0 && next !== currentStreamIdx) {
+          setFailed(prev => new Set(prev).add(currentStreamIdx));
+          setCurrentStreamIdx(next);
+          return;
+        }
+      }
       showError('Servidor sin URL disponible');
       showBuffering(false);
       return;
@@ -589,7 +597,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
                 hideOsd();
               }}
             >
-              <span className="spp-chip-name">📊 Alineaciones y Estadísticas</span>
+              <span className="spp-chip-name">Alineaciones y Estadísticas</span>
             </div>
             <div className="spp-bar-hint">▲ ▼ · OK cambiar / abrir · [Info] Alineaciones</div>
           </div>

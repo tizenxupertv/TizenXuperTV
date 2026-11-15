@@ -135,6 +135,9 @@ function streamProxyPlugin() {
           } catch {
             // ignore malformed referer url
           }
+        } else if (targetUrl.includes('wedd48c') || targetUrl.includes('daddylive') || targetUrl.includes('premium')) {
+          headers['Referer'] = 'https://daddylive.sx/';
+          headers['Origin'] = 'https://daddylive.sx';
         }
       }
       if (req.headers.range) headers['Range'] = req.headers.range;
