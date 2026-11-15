@@ -6,13 +6,15 @@ import { ProfileAvatar } from '../../screens/ProfilePickerScreen';
 
 export interface HeaderProps {
   selectedTab: TabId;
-  focusedIndex: number | null; // tabs first, then search, filter, profile
+  focusedIndex: number | null; // tabs first, then search, filter, mystuff, profile
   /** Tabs to show (the +18 tab is added when enabled) */
   tabs?: TabItem[];
   onSelectTab: (tab: TabId) => void;
   onSearchClick: () => void;
   onFilterClick: () => void;
+  onMyStuffClick?: () => void;
   onProfileClick: () => void;
+  myStuffActive?: boolean;
   profileActive?: boolean;
 }
 
@@ -22,7 +24,9 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectTab,
   onSearchClick,
   onFilterClick,
+  onMyStuffClick,
   onProfileClick,
+  myStuffActive,
   profileActive,
   tabs = TABS
 }) => {
@@ -53,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </nav>
 
-      {/* 3. Right: Search & Profile */}
+      {/* 3. Right: Search, Filter, Mis cosas & Profile */}
       <div className="header-notify">
         <button
           className={`notify-btn ${focusedIndex === searchIdx ? 'is-focused' : ''}`}
@@ -71,9 +75,17 @@ export const Header: React.FC<HeaderProps> = ({
           {FilterIcon}
         </button>
 
+        <button
+          className={`notify-btn ${myStuffActive ? 'is-active' : ''} ${focusedIndex === searchIdx + 2 ? 'is-focused' : ''}`}
+          onClick={onMyStuffClick}
+          title="Mis cosas"
+        >
+          {BookmarkIcon}
+        </button>
+
         {/* The profile in use: its menu switches profile and opens Mi lista and Ajustes */}
         <button
-          className={`notify-btn lp-header-avatar ${profileActive ? 'is-active' : ''} ${focusedIndex === searchIdx + 2 ? 'is-focused' : ''}`}
+          className={`notify-btn lp-header-avatar ${profileActive ? 'is-active' : ''} ${focusedIndex === searchIdx + 3 ? 'is-focused' : ''}`}
           onClick={onProfileClick}
           title={`Perfil: ${localProfiles.active().name}`}
         >
@@ -98,6 +110,12 @@ export const SearchIcon = (
 export const FilterIcon = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round">
     <path d="M3 5h18l-7 8.5V20l-4-2v-4.5L3 5z" />
+  </svg>
+);
+
+export const BookmarkIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
   </svg>
 );
 

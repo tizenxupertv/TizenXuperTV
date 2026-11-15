@@ -13,6 +13,7 @@ import { SportsPlayerFullscreen } from './views/SportsPlayerFullscreen';
 import type { SportsEvent, SportsStream } from './types/sports';
 import { SearchModal } from './components/search/SearchModal';
 import { ProfileScreen } from './screens/ProfileScreen';
+import { MyStuffScreen } from './screens/MyStuffScreen';
 import { BrowseScreen, resolveCategoryIdForRow } from './screens/BrowseScreen';
 import { FilterScreen } from './screens/FilterScreen';
 import { BrowseRoot, FilterRoot } from './lib/screenStack';
@@ -69,7 +70,7 @@ export const App: React.FC = () => {
 
   // Navigation / Focus State
   // Domains: 'header' | 'content'
-  // Header focus index: 0..6 = Tabs, 7 = Search, 8 = Profile
+  // Header focus index: tabs first, then Search, Filter, Mis cosas, Profile
   const [focusDomain, setFocusDomain] = useState<FocusDomain>('header');
   const [selectedTab, setSelectedTab] = useState<TabId>(validInitialTab);
   const [headerFocusIndex, setHeaderFocusIndex] = useState<number>(initialTabIdx !== -1 ? initialTabIdx : 1);
@@ -321,6 +322,11 @@ export const App: React.FC = () => {
       }
     }
 
+    const msParam = urlParams.get('mystuff');
+    if (msParam) {
+      push({ id: 'mystuff', tab: msParam === 'history' ? 'history' : 'favs' });
+    }
+
     if (urlParams.get('profile') === '1') {
       const sec = parseInt(urlParams.get('sec') || '0', 10);
       push({ id: 'profile', section: sec });
@@ -451,9 +457,13 @@ export const App: React.FC = () => {
     });
   }, [selectedTab]);
 
-  // The header avatar opens its menu: switch profile, manage profiles, Mi lista e historial, Ajustes
+  // The header bookmark opens Mis cosas; avatar opens its menu (switch/manage profile, Mi lista e historial, Ajustes)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [profilesView, setProfilesView] = useState<null | 'pick' | 'manage'>(null);
+  const openMyStuff = useCallback((tab: 'favs' | 'history' = 'favs') => {
+    playerService.stop();
+    push({ id: 'mystuff', tab });
+  }, [push]);
   const openProfile = useCallback(() => setProfileMenuOpen(true), []);
   const runProfileMenu = useCallback((action: ProfileMenuAction) => {
     setProfileMenuOpen(false);
@@ -461,10 +471,14 @@ export const App: React.FC = () => {
       setProfilesView(action === 'manage' ? 'manage' : 'pick');
       return;
     }
+    if (action === 'list') {
+      openMyStuff('favs');
+      return;
+    }
     playerService.stop();
-    // Ajustes: section 0 is Mi perfil (history and Mi lista), 1 Configuración global
-    push({ id: 'profile', section: action === 'list' ? 0 : 1 });
-  }, [push]);
+    // Ajustes: section 1 Configuración global
+    push({ id: 'profile', section: 1 });
+  }, [push, openMyStuff]);
 
   // "+18" tab: shown only when enabled in Perfil › Bloqueo; opens the adult section after the PIN
   const [adultEnabled, setAdultEnabled] = useState<boolean>(() => parentalService.isAdultEnabled());
@@ -646,6 +660,7 @@ export const App: React.FC = () => {
         setLiveTvFocus,
         setIsSearchOpen,
         guardTab,
+        openMyStuff: () => openMyStuff('favs'),
         openProfile,
         openFilter: () => openFilter(),
         tabs,
@@ -858,7 +873,9 @@ export const App: React.FC = () => {
           onSelectTab={selectTab}
           onSearchClick={() => setIsSearchOpen(true)}
           onFilterClick={() => openFilter()}
+          onMyStuffClick={() => openMyStuff('favs')}
           onProfileClick={openProfile}
+          myStuffActive={stack.some(s => s.id === 'mystuff')}
           profileActive={profileMenuOpen}
         />
       )}
@@ -1045,9 +1062,28 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* Stack screens: Profile / PIN dialog */}
+      {/* Stack screens: Mis cosas / Profile / PIN dialog */}
       {stack.map((screen, idx) => {
         const isTop = idx === stack.length - 1;
+        if (screen.id === 'mystuff') {
+          return (
+            <MyStuffScreen
+              key={`mystuff-${idx}`}
+              isTop={isTop}
+              hidden={!!activeDetailItem || !!activeVodPlayer}
+              isSearchOpen={isSearchOpen}
+              initialTab={screen.tab}
+              catalogItems={allCatalogItems}
+              onClose={pop}
+              onOpenSearch={() => setIsSearchOpen(true)}
+              onOpenVod={it => handleOpenDetail(it)}
+              onOpenHistory={h => {
+                const vod = findVod(h);
+                handleOpenDetail(vod);
+              }}
+            />
+          );
+        }
         if (screen.id === 'profile') {
           return (
             <ProfileScreen

@@ -575,6 +575,28 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 Sesión iniciada con Telegram{account && account.username ? ` (@${account.username})` : ''}
                 {profiles.length > 1 ? ` · perfil ${activeProfile.name}` : ''} · tu historial y tu lista se quedan en este TV
               </div>
+              {(() => {
+                const donorActive = accountService.isDonor();
+                const daysLeft = account && account.donorUntil
+                  ? Math.max(1, Math.ceil((account.donorUntil - Date.now()) / 86400000))
+                  : null;
+                const planLabel = donorActive
+                  ? (account && account.isTrial && daysLeft !== null
+                      ? `Prueba gratuita 1080p Full HD · quedan ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}`
+                      : daysLeft !== null
+                        ? `Donador activo (1080p Full HD) · quedan ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}`
+                        : 'Donador activo · 1080p Full HD desbloqueado')
+                  : 'Plan estándar (hasta 720p) · Desbloquea 1080p en @TizenXuperSupportBot';
+                return (
+                  <div
+                    className="pf-account-type"
+                    data-testid="pf-account-plan"
+                    style={{ marginTop: 6, color: donorActive ? '#6ee7b7' : '#fbbf24', fontWeight: 600 }}
+                  >
+                    {planLabel}
+                  </div>
+                );
+              })()}
             </div>
             <div className={`pf-btn pf-btn-danger pf-logout ${isF('logout') ? 'is-focused' : ''}`} onClick={tap('logout')}>
               {loggingOut ? 'Cerrando sesión…' : confirmLogout ? 'Pulsa OK otra vez para salir' : 'Cerrar sesión'}

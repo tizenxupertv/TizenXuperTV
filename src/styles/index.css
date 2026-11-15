@@ -893,6 +893,68 @@ html, body {
 .catalog-skeleton .poster-card.apple-poster-card {
   background: #252932;
   cursor: default;
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
+}
+
+.home-showcase.hero-skeleton {
+  background: linear-gradient(120deg, #161a24 0%, #1c2230 55%, #11141d 100%);
+  pointer-events: none;
+}
+
+.hero-skeleton-title {
+  width: 460px;
+  max-width: 75%;
+  height: 46px;
+  border-radius: 10px;
+  background: #252932;
+  margin-bottom: 14px;
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
+}
+
+.hero-skeleton-meta {
+  width: 280px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #252932;
+  margin-bottom: 14px;
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
+}
+
+.hero-skeleton-line {
+  width: 620px;
+  max-width: 90%;
+  height: 14px;
+  border-radius: 9999px;
+  background: rgba(37, 41, 50, 0.9);
+  margin-bottom: 8px;
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
+}
+
+.hero-skeleton-line.is-short {
+  width: 420px;
+  margin-bottom: 22px;
+}
+
+.hero-skeleton-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hero-skeleton-btn {
+  width: 190px;
+  height: 48px;
+  border-radius: 9999px;
+  background: #252932;
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
+}
+
+.hero-skeleton-btn-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #252932;
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
 }
 
 .poster-card.apple-poster-card.is-wide-card {
@@ -9595,4 +9657,227 @@ html.legacy-video .maintenance-card { box-shadow: none; }
   font-weight: 900;
   letter-spacing: 0.04em;
   line-height: 1.5;
+}
+
+
+/* ==========================================================================
+   Mis cosas ("Mi lista" y "Continuar viendo", estilo HBO Max)
+   ========================================================================== */
+.ms-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: var(--bg-main);
+  color: var(--text-main);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.ms-body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 68px;
+  bottom: 0;
+  padding: 34px 56px 72px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  box-sizing: border-box;
+}
+
+.ms-body::-webkit-scrollbar {
+  display: none;
+}
+
+.ms-heading {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: #ffffff;
+  margin: 0 0 24px;
+}
+
+.ms-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 26px;
+}
+
+.ms-tab {
+  position: relative;
+  padding: 9px 16px;
+  border-radius: 10px;
+  background: transparent;
+  border: 3px solid transparent;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.ms-tab.is-selected {
+  color: #ffffff;
+}
+
+.ms-tab.is-selected::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: -2px;
+  height: 3px;
+  border-radius: 2px;
+  background: #ffffff;
+}
+
+.ms-tab.is-focused {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+}
+
+.ms-tab.is-selected.is-focused::after {
+  background: transparent;
+}
+
+.ms-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px 20px;
+}
+
+.ms-card {
+  flex: 0 0 282px;
+  width: 282px;
+  cursor: pointer;
+}
+
+@supports (display: grid) {
+  .ms-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .ms-grid .ms-card {
+    flex: none;
+    width: auto;
+  }
+}
+
+.ms-card-thumb {
+  position: relative;
+  width: 100%;
+  height: 158px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #11141d;
+  border: 3px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
+}
+
+.ms-card.is-focused .ms-card-thumb {
+  border-color: #ffffff;
+}
+
+.ms-card.is-removing.is-focused .ms-card-thumb {
+  border-color: #fb7185;
+}
+
+.ms-card-dots {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(10, 13, 20, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 4;
+}
+
+.ms-card.is-removing .ms-card-dots {
+  background: rgba(225, 29, 72, 0.92);
+  border-color: transparent;
+}
+
+.ms-card-play {
+  position: absolute;
+  left: 10px;
+  bottom: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(10, 13, 20, 0.8);
+  color: #ffffff;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+}
+
+.ms-card-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+}
+
+.ms-card-caption {
+  padding: 10px 2px 0;
+}
+
+.ms-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ms-card.is-focused .ms-card-title {
+  color: #00e5ff;
+}
+
+.ms-card-sub {
+  font-size: 13px;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ms-rec-section {
+  margin-top: 44px;
+}
+
+.ms-rec-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 18px;
+}
+
+.ms-rec-row {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 12px;
+}
+
+.ms-rec-row::-webkit-scrollbar {
+  display: none;
 }

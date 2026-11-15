@@ -23,6 +23,7 @@ import {
   formatResolutionBadge
 } from '../lib/subtitles';
 import { setCachedTitleMeta } from '../lib/titleMetaCache';
+import { accountService } from '../services/accountService';
 
 interface VodPlayerFullscreenProps {
   item: VodItem;
@@ -660,15 +661,27 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         failed(friendlyPortalError(err));
         return;
       }
+      const donorAllowed = !!isTrailer || accountService.isDonor();
+      const isHighRes = (q: any): boolean => /1080|fhd|4k|2160|uhd/i.test(String(q || ''));
+      const tracksNow: any[] = Array.isArray(res.tracks) ? res.tracks : [];
+      const allowedTracks = donorAllowed ? tracksNow : tracksNow.filter(t => !isHighRes(t.quality));
+      if (!donorAllowed) {
+        if ((tracksNow.length > 0 && allowedTracks.length === 0) || (tracksNow.length === 0 && isHighRes(res.quality))) {
+          failed('🔒 Este título solo está disponible en 1080p Full HD (exclusivo para donadores). Apoya el proyecto en @TizenXuperSupportBot para desbloquearlo.');
+          return;
+        }
+      }
       // The portal returns its first track (often Portuguese): switch to the preferred audio
       // language once, unless the user already picked a track in this player
-      if (!audioPrefAppliedRef.current) {
+      const mustDowngrade = !donorAllowed && isHighRes(res.quality);
+      if (!audioPrefAppliedRef.current || mustDowngrade) {
+        const hadManualAudio = audioPrefAppliedRef.current;
         audioPrefAppliedRef.current = true;
-        const tracksNow: any[] = Array.isArray(res.tracks) ? res.tracks : [];
-        const prefCode = PREF_LANG_CODES[settingsService.get().audio] || 'es';
+        const prefCode = (hadManualAudio && res.audio) ? res.audio : (PREF_LANG_CODES[settingsService.get().audio] || 'es');
         // "Resolución" of the detail: among the tracks in that language, the preferred quality
         const qPref = QUALITY_OPTIONS[settingsService.get().quality || 0];
-        const qWanted = qPref && qPref !== QUALITY_OPTIONS[0] ? qPref.replace('p', '') : '';
+        const qWantedRaw = qPref && qPref !== QUALITY_OPTIONS[0] ? qPref.replace('p', '') : '';
+        const qWanted = !donorAllowed && isHighRes(qWantedRaw) ? '' : qWantedRaw;
         const qualityRank = (q: string): number => {
           const s = String(q || '').toUpperCase();
           if (s.includes('4K') || s.includes('2160')) return 4000;
@@ -691,9 +704,9 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           }
           return 0;
         };
-        const byAudio = tracksNow.filter(t => sameLanguage(t.audio, prefCode));
-        const pool = byAudio.length ? byAudio : tracksNow;
-        // In "Auto" quality: prioritize the highest resolution track (1080p / 4K) in the chosen audio
+        const byAudio = allowedTracks.filter(t => sameLanguage(t.audio, prefCode));
+        const pool = byAudio.length ? byAudio : allowedTracks;
+        // In "Auto" quality: prioritize the highest allowed resolution track in the chosen audio
         const poolSorted = pool.slice().sort(
           (a, b) => (qualityRank(b.quality) - qualityRank(a.quality)) || (codecRank(b.codec) - codecRank(a.codec))
         );
@@ -704,6 +717,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           console.log('[VodPlayer] preferred audio', prefCode, '-> track', wanted.index, 'instead of', res.trackIndex);
           portalTrackRef.current = wanted.index;
           window.MagisClient.resolve(contentId, seasonId, { trackIndex: wanted.index, episodeNumber }, onResolved);
+          return;
+        }
+        if (mustDowngrade) {
+          failed('🔒 Este título solo está disponible en 1080p Full HD (exclusivo para donadores). Apoya el proyecto en @TizenXuperSupportBot para desbloquearlo.');
           return;
         }
       }
@@ -1439,14 +1456,21 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
     });
 
+    const donorAllowed = !!isTrailer || accountService.isDonor();
     sortedGroups.forEach(group => {
       const isSelected = isManualQuality && group.tracks.some(t => t.index === activePortalIndex);
+      const locked = !donorAllowed && (/1080|fhd|4k|2160|uhd/i.test(String(group.label || ''))
+        || group.tracks.every(t => /1080|fhd|4k|2160|uhd/i.test(String(t.quality || ''))));
       qualityMenuRows.push({
         group: 'Resolución',
-        label: group.label,
-        selected: isSelected,
+        label: locked ? `${group.label} · 🔒 Solo donadores` : group.label,
+        selected: !locked && isSelected,
         close: true,
         apply: () => {
+          if (locked) {
+            flash('🔒 1080p Full HD es exclusivo para donadores (@TizenXuperSupportBot)');
+            return;
+          }
           setIsManualQuality(true);
           if (activePortalIndex === group.bestTrack.index) return;
           audioPrefAppliedRef.current = true;
@@ -1457,14 +1481,20 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       });
     });
   } else {
+    const donorAllowed = !!isTrailer || accountService.isDonor();
     QUALITY_OPTIONS.forEach((opt, i) => {
       const qLabel = i === 0 ? 'Automático' : opt.toUpperCase();
+      const locked = !donorAllowed && opt.toUpperCase().includes('1080');
       qualityMenuRows.push({
         group: 'Resolución',
-        label: qLabel,
-        selected: (settings.quality || 0) === i,
+        label: locked ? `${qLabel} · 🔒 Solo donadores` : qLabel,
+        selected: !locked && (settings.quality || 0) === i,
         close: true,
         apply: () => {
+          if (locked) {
+            flash('🔒 1080p Full HD es exclusivo para donadores (@TizenXuperSupportBot)');
+            return;
+          }
           settingsService.set({ quality: i });
           flash(`Resolución: ${qLabel}`);
         }

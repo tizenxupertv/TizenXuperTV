@@ -14,6 +14,7 @@ export interface HeaderKeysCtx {
   setLiveTvFocus: Setter<LiveTvFocus>;
   setIsSearchOpen: Setter<boolean>;
   guardTab: (tab: TabId, apply: () => void) => void;
+  openMyStuff?: () => void;
   openProfile: () => void;
   openFilter: () => void;
   /** Visible tabs (the +18 tab is added when enabled) */
@@ -33,6 +34,7 @@ export function handleHeaderKeys(key: TvKey, ctx: HeaderKeysCtx): boolean {
     setLiveTvFocus,
     setIsSearchOpen,
     guardTab,
+    openMyStuff,
     openProfile,
     openFilter,
     tabs,
@@ -44,7 +46,7 @@ export function handleHeaderKeys(key: TvKey, ctx: HeaderKeysCtx): boolean {
     return true;
   }
   if (key === 'right') {
-    setHeaderFocusIndex(prev => Math.min(searchIdx + 2, prev + 1));
+    setHeaderFocusIndex(prev => Math.min(searchIdx + 3, prev + 1));
     return true;
   }
   if (key === 'up') {
@@ -58,6 +60,8 @@ export function handleHeaderKeys(key: TvKey, ctx: HeaderKeysCtx): boolean {
     } else if (headerFocusIndex === searchIdx + 1) {
       openFilter();
     } else if (headerFocusIndex === searchIdx + 2) {
+      if (openMyStuff) openMyStuff();
+    } else if (headerFocusIndex === searchIdx + 3) {
       openProfile();
     }
     return true;
