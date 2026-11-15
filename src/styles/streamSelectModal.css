@@ -10,8 +10,8 @@
 }
 
 .ssm-card {
-  width: 920px;
-  max-width: 90vw;
+  width: 980px;
+  max-width: 92vw;
   max-height: 84vh;
   text-align: center;
   padding: 28px 36px 32px;
@@ -24,6 +24,11 @@
   flex-direction: column;
   overflow: hidden;
   color: #ffffff;
+  transition: width 0.2s ease;
+}
+
+.ssm-card.is-single {
+  width: 640px;
 }
 
 .ssm-error-msg {
@@ -63,9 +68,20 @@
   margin-top: 18px;
   max-height: 420px;
   overflow-y: auto;
-  padding-right: 4px;
+  padding: 4px;
   box-sizing: border-box;
   text-align: left;
+}
+
+.ssm-grid.is-single {
+  grid-template-columns: 1fr;
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ssm-grid.is-single .ssm-details-btn {
+  grid-column: 1;
 }
 
 .ssm-grid::-webkit-scrollbar {
@@ -81,16 +97,16 @@
   align-items: center;
   justify-content: space-between;
   min-width: 0;
-  padding: 13px 18px;
+  padding: 12px 18px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.05);
   color: #e2e8f0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   border: 2px solid rgba(255, 255, 255, 0.06);
   cursor: pointer;
   box-sizing: border-box;
-  transition: transform 0.15s ease, background 0.15s ease;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
 .ssm-item.is-playing {
@@ -106,7 +122,8 @@
   color: #000000;
   border-color: #ffffff;
   outline: none;
-  transform: scale(1.02);
+  transform: none; /* No scaling to prevent clipping on container overflow */
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
 .ssm-item-name {
@@ -115,6 +132,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+  padding-right: 6px;
 }
 
 .ssm-item-tag {
@@ -157,5 +175,5 @@
   background: #ffffff;
   color: #000000;
   border-color: #ffffff;
-  box-shadow: none !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }

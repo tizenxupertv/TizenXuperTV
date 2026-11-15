@@ -242,7 +242,7 @@
   color: #000000;
   border-color: #ffffff;
   outline: none;
-  transform: scale(1.02);
+  transform: none;
 }
 .spb-stream-play {
   font-size: 14px;

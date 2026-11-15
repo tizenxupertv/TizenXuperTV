@@ -62,6 +62,21 @@ export const StreamSelectModal: React.FC<StreamSelectModalProps> = ({
       const hasDetails = Boolean(onOpenDetails);
       const detailsIdx = N;
 
+      if (N === 1) {
+        if (k === 'ArrowDown') {
+          e.preventDefault();
+          if (focusIdx === 0 && hasDetails) setFocusIdx(detailsIdx);
+        } else if (k === 'ArrowUp') {
+          e.preventDefault();
+          if (focusIdx === detailsIdx) setFocusIdx(0);
+        } else if (k === 'Enter') {
+          e.preventDefault();
+          if (focusIdx === 0 && streams[0]) onSelectStream(0);
+          else if (focusIdx === detailsIdx && onOpenDetails) onOpenDetails();
+        }
+        return;
+      }
+
       if (k === 'ArrowLeft') {
         e.preventDefault();
         if (focusIdx < N && focusIdx % 2 === 1) {
@@ -103,10 +118,11 @@ export const StreamSelectModal: React.FC<StreamSelectModalProps> = ({
   }, [streams, focusIdx, onSelectStream, onOpenDetails, onClose]);
 
   const hasDetails = Boolean(onOpenDetails);
+  const isSingle = streams.length === 1;
 
   return (
     <div className="ssm-backdrop">
-      <div className="ssm-card">
+      <div className={`ssm-card ${isSingle ? 'is-single' : ''}`}>
         <MatchHeader event={event} />
 
         {error && (
@@ -128,7 +144,7 @@ export const StreamSelectModal: React.FC<StreamSelectModalProps> = ({
             Este evento no tiene señales que se puedan ver en la app por ahora.
           </div>
         ) : (
-          <div className="ssm-grid" ref={containerRef}>
+          <div className={`ssm-grid ${isSingle ? 'is-single' : ''}`} ref={containerRef}>
             {streams.map((st, i) => {
               const isFocused = i === focusIdx;
               const isPlaying = currentStreamIdx !== undefined && i === currentStreamIdx && !error;
