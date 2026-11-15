@@ -47,17 +47,39 @@
 
 ## 📥 Installation
 
-### Method 1: Via Apps2Samsung (Recommended)
+### Method 1: Via Apps2Samsung Repository (Recommended & Automatic)
 
-1. Download **[Apps2Samsung](https://github.com/Apps2Samsung/Apps2Samsung)** for your PC (Windows, macOS, or Linux).
-2. Ensure your Samsung TV and computer are connected to the **same local Wi-Fi or LAN network**.
+Add the official **TizenXuper TV Signed Repository** directly into Apps2Samsung to install the app and receive verified updates on your Samsung TV:
+
+- **Repository Source URL**:  
+  `https://tizenxupertv.github.io/TizenXuperTV/repository.json.signed`
+- **Key Fingerprint**:  
+  `3d259222b72643030121699cbfe73165aad7d6cc6c2f8c68a2d6468b323480bc`
+
+#### Step-by-Step Instructions:
+1. Open **[Apps2Samsung](https://github.com/Apps2Samsung/Apps2Samsung)** on your PC or mobile device.
+2. Navigate to **Settings > Installing > Your sources** (or *Fuentes / Repositorios*).
+3. Click **Add a source** and paste the Repository URL:  
+   `https://tizenxupertv.github.io/TizenXuperTV/repository.json.signed`
+4. Confirm that the key fingerprint matches `3d259222b72643030121699cbfe73165aad7d6cc6c2f8c68a2d6468b323480bc` and approve it.
+5. TizenXuper TV will now appear in your catalog list, always showing the latest verified version and installable in one click!  
+   *(If you use [TV-Store](https://github.com/Apps2Samsung/TV-Store) on your TV, click **Toolbox > Send sources to TV** in Apps2Samsung to add it there as well).*
+
+---
+
+### Method 2: Manual Package Installation (.wgt file)
+
+If you prefer to install packages manually via Apps2Samsung:
+
+1. Download **[Apps2Samsung](https://github.com/Apps2Samsung/Apps2Samsung)** for your PC (Windows, macOS, Linux) or Android.
+2. Ensure your Samsung TV and computer/phone are connected to the **same local Wi-Fi or LAN network**.
 3. Enable **Developer Mode** on your Samsung TV:
    - Go to **Apps** in Smart Hub.
    - Enter `1 2 3 4 5` on your remote.
-   - Switch Developer Mode to **ON** and set your computer's local IP address as the **Host PC IP**.
+   - Switch Developer Mode to **ON** and set your device's local IP address as the **Host PC IP**.
    - Restart the TV (hold the Power button on the remote for 3 seconds).
-4. Download `TizenXuperTV.wgt` from the [latest release](https://github.com/tizenxupertv/TizenXuperTV/releases/latest). TizenXuper TV is not in the Apps2Samsung catalog.
-5. In Apps2Samsung, choose **Install a file…** (PC) or **Your own package › WGT / TPK** (Android), select the file and click **Install on** your TV. The app is signed for your TV and installed automatically.
+4. Download `TizenXuperTV.wgt` from the [Latest Release](https://github.com/tizenxupertv/TizenXuperTV/releases/latest).
+5. In Apps2Samsung, choose **Install a file…** (PC) or **Your own package › WGT / TPK** (Android), select the file, and click **Install on** your TV.
 
 From 1.10.0 on, the app updates itself. To move to 1.10.0 from an older version, install the new `.wgt` over the installed one (keep **Install over installed version** on in Apps2Samsung's settings to keep your data).
 

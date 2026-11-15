@@ -1,0 +1,22 @@
+{
+  "repository": {
+    "id": "tv.tizenxuper.apps",
+    "name": "TizenXuper TV",
+    "maintainer": "TizenXuper TV",
+    "description": "Cliente no oficial de Magis / XuperTV para Samsung Smart TVs con Tizen OS.",
+    "homepage": "https://tizenxupertv.github.io/TizenXuperTV"
+  },
+  "providers": [
+    {
+      "id": "tizenxuper-tv",
+      "category": "media",
+      "url": "tizenxupertv/TizenXuperTV",
+      "displayName": "TizenXuper TV",
+      "match": "^TizenXuperTV[.]wgt$",
+      "take": 2,
+      "prerelease": true,
+      "source_url": "https://github.com/tizenxupertv/TizenXuperTV",
+      "flags": ["closed-source", "self-updating"]
+    }
+  ]
+}
