@@ -32,6 +32,7 @@ import { VodItem, VodEpisode } from './types/vod';
 import { LiveChannel, LiveCategory } from './types/channel';
 import { paneDisplay, supportsDisplayContents } from './lib/paneDisplay';
 import { historyService } from './services/historyService';
+import { recentChannelsService } from './services/recentChannelsService';
 import type { HistoryItem } from './types/history';
 import { settingsService, subtitleChoiceIndex, applySettingChoice, SETTINGS_ROW } from './services/settingsService';
 import { getResumeTarget, startAtForEpisode } from './lib/vodResume';
@@ -757,11 +758,13 @@ export const App: React.FC = () => {
     onDrawerResults: (list: LiveChannel[]) => { drawerResultsRef.current = list; },
     onTuneChannel: (ch: LiveChannel) => {
       setTunedLiveChannel(ch);
+      recentChannelsService.addRecentChannel(ch);
       try { localStorage.setItem(pk('xuper_last_live_ch'), JSON.stringify(ch)); } catch {}
     },
     onEnterFullscreen: (ch: LiveChannel) => {
       if (ch) {
         setTunedLiveChannel(ch);
+        recentChannelsService.addRecentChannel(ch);
         try { localStorage.setItem(pk('xuper_last_live_ch'), JSON.stringify(ch)); } catch {}
       }
       setIsFullscreenLive(true);

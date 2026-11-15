@@ -4,6 +4,7 @@ import { pressKey, moveCursor, keyAt } from '../../components/live/OnScreenKeybo
 import { LiveTvState } from '../useLiveTv';
 import { pk } from '../../lib/localProfiles';
 import { createSeekHold } from '../../lib/seekAccel';
+import { recentChannelsService } from '../../services/recentChannelsService';
 
 /** Holding ◄ ► in a replay makes the jumps grow, as in movies (lib/seekAccel.ts) */
 const replayHold = createSeekHold();
@@ -220,6 +221,15 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
   if (key === 'colorYellow') {
     ctx.triggerOsd();
     return true;
+  }
+  if (key === 'colorGreen') {
+    const prevCh = recentChannelsService.getPreviousChannel(ctx.tunedLiveChannel?.id);
+    if (prevCh) {
+      ctx.setTunedLiveChannel(prevCh);
+      recentChannelsService.addRecentChannel(prevCh);
+      ctx.triggerOsd();
+      return true;
+    }
   }
 
   // Direct channel number keys (0-9)

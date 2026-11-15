@@ -18,6 +18,9 @@ import { getChannelEntry, setChannelEntry } from '../lib/channelCache';
 import { pk } from '../lib/localProfiles';
 import { epicSportsService } from '../services/epicSportsService';
 
+import { recentChannelsService } from '../services/recentChannelsService';
+import { fetchChannelEpg } from '../services/epgService';
+
 declare global {
   interface Window {
     MagisClient?: any;
@@ -28,6 +31,7 @@ declare global {
 
 export const DEFAULT_LIVE_CATEGORIES: LiveCategory[] = [
   { id: 'favs', name: 'Favoritos', isFav: true },
+  { id: 'recents', name: 'Recientes', isRecents: true },
   { id: 76182, name: 'Todos los canales' },
   { id: 76206, name: 'Deportes en Vivo' },
   { id: 'espn', name: 'ESPN', isEspn: true, badge: 'Beta' },
@@ -73,65 +77,73 @@ export const DEFAULT_LIVE_CATEGORIES: LiveCategory[] = [
 
 export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
   {
-    id: 'wiwy-espn-1',
-    code: 'wiwy-espn-1',
-    name: 'ESPN',
-    url: 'http://190.61.47.54:8000/play/a004/index.m3u8',
-    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
+    id: 'epic-espn',
+    code: 'epic-espn',
+    name: '01 · ESPN',
+    url: 'https://epictvparaiphone.top/perelman/espn.m3u8',
+    logo: 'https://epictvparaiphone.top/logos/canales/ESPN_color.png?v=18',
     time: 'EN VIVO'
   },
   {
-    id: 'wiwy-espn-2',
-    code: 'wiwy-espn-2',
-    name: 'ESPN 2',
-    url: 'http://190.61.47.54:8000/play/a005/index.m3u8',
-    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-2-us.png',
+    id: 'epic-espn2',
+    code: 'epic-espn2',
+    name: '02 · ESPN 2',
+    url: 'https://epictvparaiphone.top/perelman/espn2.m3u8',
+    logo: 'https://epictvparaiphone.top/logos/canales/ESPN_2_color.png?v=18',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'epic-espn3',
+    code: 'epic-espn3',
+    name: '03 · ESPN 3',
+    url: 'https://epictvparaiphone.top/perelman/espn3.m3u8',
+    logo: 'https://epictvparaiphone.top/logos/canales/ESPN_3_color.png?v=18',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'epic-espn4',
+    code: 'epic-espn4',
+    name: '04 · ESPN 4',
+    url: 'https://epictvparaiphone.top/perelman/espn4.m3u8',
+    logo: 'https://epictvparaiphone.top/logos/canales/ESPN_4_color.png?v=18',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'epic-espn5',
+    code: 'epic-espn5',
+    name: '05 · ESPN 5',
+    url: 'https://epictvparaiphone.top/perelman/espn5.m3u8',
+    logo: 'https://epictvparaiphone.top/logos/canales/ESPN_5_color.png?v=18',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'epic-espn6',
+    code: 'epic-espn6',
+    name: '06 · ESPN 6',
+    url: 'https://epictvparaiphone.top/perelman/espn6.m3u8',
+    logo: 'https://epictvparaiphone.top/logos/canales/ESPN_6_color.png?v=18',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'epic-espn7',
+    code: 'epic-espn7',
+    name: '07 · ESPN 7',
+    url: 'https://epictvparaiphone.top/perelman/espn7.m3u8',
+    logo: 'https://epictvparaiphone.top/logos/canales/ESPN_7_color.png?v=18',
     time: 'EN VIVO'
   },
   {
     id: 'wiwy-espn-premium',
     code: 'wiwy-espn-premium',
-    name: 'ESPN Premium',
-    url: 'http://158.172.155.130:8000/play/a0ao/index.m3u8',
-    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
-    time: 'EN VIVO'
-  },
-  {
-    id: 'wiwy-espn-mx',
-    code: 'wiwy-espn-mx',
-    name: 'ESPN México',
-    url: 'http://168.228.44.241:9997/play/a06p/index.m3u8',
-    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
-    time: 'EN VIVO'
-  },
-  {
-    id: 'wiwy-espn-4',
-    code: 'wiwy-espn-4',
-    name: 'ESPN 4',
-    url: 'http://181.78.197.59:8000/play/a07n/index.m3u8',
-    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
-    time: 'EN VIVO'
-  },
-  {
-    id: 'wiwy-espn-usa',
-    code: 'wiwy-espn-usa',
-    name: 'ESPN USA HD',
-    url: 'http://85.237.89.160:9590/usa-s/ESPN-HD/index.m3u8',
-    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
-    time: 'EN VIVO'
-  },
-  {
-    id: 'wiwy-espn-2-usa',
-    code: 'wiwy-espn-2-usa',
-    name: 'ESPN 2 USA HD',
-    url: 'http://85.237.89.160:9590/usa-s/ESPN-2-HD/index.m3u8',
-    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-2-us.png',
+    name: '08 · ESPN Premium',
+    url: 'https://epictvparaiphone.top/perelman/espnpremium.m3u8',
+    logo: 'https://epictvparaiphone.top/logos/canales/ESPN_premium_color.png?v=18',
     time: 'EN VIVO'
   },
   {
     id: 'wiwy-espn-8',
     code: 'wiwy-espn-8',
-    name: 'ESPN The Ocho',
+    name: '09 · ESPN The Ocho',
     url: 'https://d3b6q2ou5kp8ke.cloudfront.net/ESPNTheOcho.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
     time: 'EN VIVO'
@@ -348,15 +360,35 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     setStreamQuality('');
   }, [tunedChannel]);
 
-  // Query AVPlay hardware stream quality when OSD is visible
+  // Live Stream Quality Detection (hardware AVPlay or video element)
   useEffect(() => {
-    if (isFullscreen && showOsd && (window as any).XuperAVPlay && (window as any).XuperAVPlay.getCurrentStreamQuality) {
-      try {
-        const q = (window as any).XuperAVPlay.getCurrentStreamQuality();
-        if (q && q.label) setStreamQuality(q.label);
-      } catch (e) {}
-    }
-  }, [isFullscreen, showOsd, tunedChannel]);
+    const updateQuality = () => {
+      if ((window as any).XuperAVPlay && (window as any).XuperAVPlay.getCurrentStreamQuality) {
+        try {
+          const q = (window as any).XuperAVPlay.getCurrentStreamQuality();
+          if (q && q.label) {
+            setStreamQuality(q.label);
+            return;
+          }
+        } catch (e) {}
+      }
+      const vid = previewVideoRef.current;
+      if (vid && vid.videoWidth && vid.videoHeight) {
+        const w = vid.videoWidth;
+        const h = vid.videoHeight;
+        let label = `${w}x${h}`;
+        if (w >= 3800 || h >= 2100) label = 'UHD 4K';
+        else if (w >= 1900 || h >= 1000) label = '1080p · FHD';
+        else if (w >= 1200 || h >= 700) label = '720p · HD';
+        else if (h >= 540) label = '540p';
+        else if (h >= 480) label = '480p · SD';
+        setStreamQuality(label);
+      }
+    };
+    updateQuality();
+    const timer = setInterval(updateQuality, 1500);
+    return () => clearInterval(timer);
+  }, [tunedChannel, isFullscreen, showOsd]);
   const savedCatIdx = useMemo(() => {
     try {
       const v = localStorage.getItem(pk('xuper_last_live_cat_idx'));
@@ -529,6 +561,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             .filter(c => adultOn || !parentalService.isAdultCategory(c.name));
           // Find position of "Deportes" or insert after Favorites/Todos
           const sportsIdx = formatted.findIndex(c => /deportes/i.test(c.name));
+          const recentsCat: LiveCategory = { id: 'recents', name: 'Recientes', isRecents: true };
           const espnCat: LiveCategory = { id: 'espn', name: 'ESPN', isEspn: true, badge: 'Beta' };
           const epicCat: LiveCategory = { id: 'epic-sports', name: 'Deportes+', isEpicSports: true, badge: 'Beta' };
 
@@ -537,6 +570,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             // Insert ESPN and Deportes+ right after the Deportes category
             ordered = [
               { id: 'favs', name: 'Favoritos', isFav: true },
+              recentsCat,
               ...formatted.slice(0, sportsIdx + 1),
               espnCat,
               epicCat,
@@ -546,6 +580,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             // Fallback if no category matches "deportes"
             ordered = [
               { id: 'favs', name: 'Favoritos', isFav: true },
+              recentsCat,
               espnCat,
               epicCat,
               ...formatted
@@ -737,21 +772,32 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       return;
     }
 
+    if (activeCategory.isRecents) {
+      const recentList = recentChannelsService.getRecentChannels();
+      const filtered = filterLockedChannels(recentList, categories, catId);
+      setChannels(filtered);
+      setIsLoadingChannels(false);
+      if (onChannelsLoaded) onChannelsLoaded(filtered);
+      return;
+    }
+
     // ESPN category: direct verified ESPN feeds + portal feeds
     if (activeCategory.id === 'espn' || activeCategory.isEspn) {
       const isEspnChannel = (name: string) => /\bespn\b/i.test(name) || /^espn/i.test(name.trim());
       const sortEspn = (a: LiveChannel, b: LiveChannel) => {
         const getPriority = (name: string) => {
           const n = name.toLowerCase();
-          if (n === 'espn') return 1;
-          if (n === 'espn 2') return 2;
-          if (n.includes('premium')) return 3;
-          if (n.includes('méxico') || n.includes('mexico')) return 4;
-          if (n === 'espn 4') return 5;
-          if (n.includes('usa hd') && !n.includes('2')) return 6;
-          if (n.includes('2 usa hd')) return 7;
-          if (n.includes('ocho')) return 8;
-          return 10;
+          const m = n.match(/^(\d+)/);
+          if (m) return parseInt(m[1], 10);
+          if (n.includes('espn 2')) return 2;
+          if (n.includes('espn 3')) return 3;
+          if (n.includes('espn 4')) return 4;
+          if (n.includes('espn 5')) return 5;
+          if (n.includes('espn 6')) return 6;
+          if (n.includes('espn 7')) return 7;
+          if (n.includes('premium')) return 8;
+          if (n.includes('espn')) return 1;
+          return 20;
         };
         const pA = getPriority(a.name);
         const pB = getPriority(b.name);
@@ -1037,6 +1083,23 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   // The info panel always describes the channel that is playing in the preview
   const displayChannel = tunedChannel || focusedChannel;
 
+  // Real-time EPG on-demand for displayChannel
+  const [epgData, setEpgData] = useState<{ now?: string; next?: string; time?: string; desc?: string } | null>(null);
+  useEffect(() => {
+    setEpgData(null);
+    if (!displayChannel) return;
+    let active = true;
+    fetchChannelEpg(displayChannel).then(info => {
+      if (active && info) setEpgData(info);
+    });
+    return () => { active = false; };
+  }, [displayChannel?.code, displayChannel?.id]);
+
+  const effectiveNow = (epgData && epgData.now) || displayChannel?.now;
+  const effectiveTime = (epgData && epgData.time) || displayChannel?.time;
+  const effectiveNext = (epgData && epgData.next) || displayChannel?.next;
+  const effectiveDesc = (epgData && epgData.desc);
+
   // A replay (catch-up programme) in fullscreen: its real position and length on the timeline, refreshed while
   // the info bar shows (a seek shows its target at once, playerService.replayPosition)
   const isReplay = !!(tunedChannel && ((tunedChannel.now && tunedChannel.now.startsWith('↺')) || (tunedChannel as { isCatchup?: boolean }).isCatchup));
@@ -1059,7 +1122,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   };
   // Progress of the current programme from its "HH:MM - HH:MM" times; null when the channel does not send them
   const programProgress = useMemo(() => {
-    const t = displayChannel && displayChannel.time;
+    const t = effectiveTime;
     const m = t && t.match(/(\d{1,2}):(\d{2})\s*(am|pm)?\s*-\s*(\d{1,2}):(\d{2})\s*(am|pm)?/i);
     if (!m) return null;
     const mins = (h: string, mm: string, ap?: string) => {
@@ -1074,8 +1137,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     let now = d.getHours() * 60 + d.getMinutes();
     if (now < start) now += 24 * 60;
     return Math.max(0, Math.min(100, Math.round(((now - start) / (end - start)) * 100)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayChannel && displayChannel.time, liveClock]);
+  }, [effectiveTime, liveClock]);
   const isFocusedChannelTuned = isSameChannel(tunedChannel, focusedChannel);
   const isDisplayChannelTuned = isSameChannel(tunedChannel, displayChannel);
   const isDisplayChannelFav = !!(displayChannel && favMap[channelKey(displayChannel)]);
@@ -1129,9 +1191,11 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             <div className="live-empty-msg">
               {activeCategory.isFav
                 ? 'Aún no tienes canales en Favoritos.\nSintoniza un canal y presiona Añadir a Favoritos.'
-                : channelsError
-                  ? channelsError
-                  : 'No hay canales disponibles en esta categoría.\nSi no carga ningún canal, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en Configuración › General › Red › Estado de la red › Configuración de IP.'}
+                : activeCategory.isRecents
+                  ? 'Aún no has sintonizado canales.\nLos canales que veas aparecerán aquí para acceso rápido.'
+                  : channelsError
+                    ? channelsError
+                    : 'No hay canales disponibles en esta categoría.\nSi no carga ningún canal, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en Configuración › General › Red › Estado de la red › Configuración de IP.'}
             </div>
           ) : (
             <>
@@ -1426,7 +1490,9 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                   <div className="pc-empty-msg">
                     {drawerSearching ? `Sin resultados para "${drawerQuery.trim()}"` : activeCategory.isFav
                       ? 'Aún no tienes canales en Favoritos.\nEn el reproductor usa el botón ☆ Favorito para guardarlos.'
-                      : 'No hay canales disponibles en esta categoría'}
+                      : activeCategory.isRecents
+                        ? 'Aún no hay canales recientes.'
+                        : 'No hay canales disponibles en esta categoría'}
                   </div>
                 ) : (
                   (() => {
@@ -1506,8 +1572,13 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                     <span className={`epg-signal-tag ${isDisplayChannelTuned ? 'is-playing' : 'is-preview'}`}>
                       {isDisplayChannelTuned ? '● EN REPRODUCCIÓN' : '○ SELECCIONADO (PRESIONA OK PARA SINTONIZAR)'}
                     </span>
-                    {hasClockTime(displayChannel.time) && (
-                      <span className="epg-time-badge">{displayChannel.time}</span>
+                    {hasClockTime(effectiveTime) && (
+                      <span className="epg-time-badge">{effectiveTime}</span>
+                    )}
+                    {streamQuality && isDisplayChannelTuned && (
+                      <span className="epg-signal-tag is-playing" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.35)' }}>
+                        {streamQuality}
+                      </span>
                     )}
                     <div className="epg-top-right">
                       {SHOW_REPLAY && <button
@@ -1552,18 +1623,23 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                     </div>
                     <div className="epg-channel-text">
                       <h2 className="epg-channel-title">{displayChannel.name}</h2>
-                      {displayChannel.now && !/^en vivo$/i.test(displayChannel.now.trim()) && (
-                        <div className="epg-program-name">{displayChannel.now}</div>
+                      {effectiveNow && !/^en vivo$/i.test(effectiveNow.trim()) && (
+                        <div className="epg-program-name">{effectiveNow}</div>
+                      )}
+                      {effectiveDesc && (
+                        <div className="epg-synopsis-text" style={{ fontSize: 13, color: '#94a3b8', marginTop: 3, maxHeight: 36, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {effectiveDesc}
+                        </div>
                       )}
                     </div>
                   </div>
 
                   {/* Progress of the current programme: only when the channel sends its start and end times */}
-                  {programProgress !== null && (
+                  {programProgress !== null && effectiveTime && (
                     <div className="epg-progress-container">
                       <div className="epg-progress-labels">
-                        <span className="epg-prog-time">{displayChannel.time!.split('-')[0].trim()}</span>
-                        <span className="epg-prog-time">{displayChannel.time!.split('-')[1].trim()}</span>
+                        <span className="epg-prog-time">{effectiveTime.split('-')[0].trim()}</span>
+                        <span className="epg-prog-time">{effectiveTime.split('-')[1].trim()}</span>
                       </div>
                       <div className="epg-progress-track">
                         <div className="epg-progress-fill" style={{ width: `${programProgress}%` }} />
@@ -1571,10 +1647,10 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                     </div>
                   )}
 
-                  {displayChannel.next && (
+                  {effectiveNext && (
                     <div className="epg-upcoming-row">
                       <span className="epg-upcoming-label">A CONTINUACIÓN:</span>
-                      <span className="epg-upcoming-title">{displayChannel.next}</span>
+                      <span className="epg-upcoming-title">{effectiveNext}</span>
                     </div>
                   )}
                 </div>

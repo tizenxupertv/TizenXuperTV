@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LiveChannel } from '../types/channel';
 import { playerService } from '../services/playerService';
+import { fetchChannelEpg } from '../services/epgService';
 
 interface LivePlayerFullscreenProps {
   channel: LiveChannel;
@@ -42,19 +43,49 @@ export const LivePlayerFullscreen: React.FC<LivePlayerFullscreenProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const guideListRef = useRef<HTMLDivElement>(null);
   const [streamQuality, setStreamQuality] = useState<string>('');
+  const [fullscreenEpg, setFullscreenEpg] = useState<{ now?: string; next?: string; time?: string } | null>(null);
 
-  // Reset quality on channel change
+  // Reset quality and fetch dynamic EPG on channel change
   useEffect(() => {
     setStreamQuality('');
-  }, [channel]);
+    setFullscreenEpg(null);
+    if (!channel) return;
+    let active = true;
+    fetchChannelEpg(channel).then(info => {
+      if (active && info) setFullscreenEpg(info);
+    });
+    return () => { active = false; };
+  }, [channel?.id, channel?.code]);
 
-  // Detect real hardware stream resolution on Tizen AVPlay
+  // Detect real hardware stream resolution on Tizen AVPlay or HTML5 Video
   useEffect(() => {
-    if (showOsd && (window as any).XuperAVPlay && (window as any).XuperAVPlay.getCurrentStreamQuality) {
-      try {
-        const q = (window as any).XuperAVPlay.getCurrentStreamQuality();
-        if (q && q.label) setStreamQuality(q.label);
-      } catch (e) {}
+    const updateQuality = () => {
+      if ((window as any).XuperAVPlay && (window as any).XuperAVPlay.getCurrentStreamQuality) {
+        try {
+          const q = (window as any).XuperAVPlay.getCurrentStreamQuality();
+          if (q && q.label) {
+            setStreamQuality(q.label);
+            return;
+          }
+        } catch (e) {}
+      }
+      const vid = videoRef.current;
+      if (vid && vid.videoWidth && vid.videoHeight) {
+        const w = vid.videoWidth;
+        const h = vid.videoHeight;
+        let label = `${w}x${h}`;
+        if (w >= 3800 || h >= 2100) label = 'UHD 4K';
+        else if (w >= 1900 || h >= 1000) label = '1080p · FHD';
+        else if (w >= 1200 || h >= 700) label = '720p · HD';
+        else if (h >= 540) label = '540p';
+        else if (h >= 480) label = '480p · SD';
+        setStreamQuality(label);
+      }
+    };
+    if (showOsd) {
+      updateQuality();
+      const timer = setInterval(updateQuality, 1200);
+      return () => clearInterval(timer);
     }
   }, [showOsd, channel]);
 
@@ -74,6 +105,10 @@ export const LivePlayerFullscreen: React.FC<LivePlayerFullscreenProps> = ({
       }
     }
   }, [showGuide, guideFocusIndex]);
+
+  const activeNow = (fullscreenEpg && fullscreenEpg.now) || channel.now;
+  const activeNext = (fullscreenEpg && fullscreenEpg.next) || channel.next;
+  const activeTime = (fullscreenEpg && fullscreenEpg.time) || channel.time;
 
   return (
     <div className="live-fullscreen-container">
@@ -154,7 +189,7 @@ export const LivePlayerFullscreen: React.FC<LivePlayerFullscreenProps> = ({
               <span>{channel.name}</span>
               {isFavorite && <span className="osd-fav-badge">★</span>}
             </div>
-            {channel.now && <div className="osd-program-name">{channel.now}</div>}
+            {activeNow && <div className="osd-program-name">{activeNow}</div>}
           </div>
           <div className="osd-live-tag">
             <span className="live-pulse-dot" /> EN VIVO
@@ -168,12 +203,13 @@ export const LivePlayerFullscreen: React.FC<LivePlayerFullscreenProps> = ({
 
         <div className="osd-bottom-row">
           <div className="osd-timing">
-            <span>{channel.time || 'EN DIRECTO'}</span>
-            {channel.next && <span className="osd-next"> • A continuación: {channel.next}</span>}
+            <span>{activeTime || 'EN DIRECTO'}</span>
+            {activeNext && <span className="osd-next"> • A continuación: {activeNext}</span>}
           </div>
           <div className="osd-hints">
             <span><b>▲ ▼</b> Cambiar canal</span>
             <span><b>◄</b> Guía rápida</span>
+            <span><b>VERDE</b> Último canal</span>
             <span><b>OK</b> OSD Info</span>
             <span><b>ATRÁS</b> Salir</span>
           </div>

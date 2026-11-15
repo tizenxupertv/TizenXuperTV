@@ -2819,6 +2819,26 @@
     });
   }
 
+  function getChannelProgram(channelCode, columnId, callback) {
+    ensureSession(function (err) {
+      if (err) return callback(err);
+      call('v3/getProgram', {
+        channelCode: String(channelCode || ''),
+        columnId: parseInt(columnId, 10) || 0,
+        type: '2'
+      }, function (pErr, pRes) {
+        if (pErr) return callback(pErr);
+        var data = pRes && pRes.data ? pRes.data : pRes;
+        var programList = (data && data.programList) || [];
+        callback(null, {
+          channelCode: (data && data.channelCode) || channelCode,
+          name: (data && data.name) || '',
+          programList: programList
+        });
+      });
+    });
+  }
+
   // Once the app has started: old channel pages go
   setTimeout(function () { dropLivePages(LIVE_PAGE_KEEP_MS); }, 20000);
 
@@ -2833,6 +2853,8 @@
     getItemByPerson: getItemByPerson,
     getAllbackProgram: getAllbackProgram,
     startPlayBTV: startPlayBTV,
+    getChannelProgram: getChannelProgram,
+    getProgram: getChannelProgram,
     home: home,
     getHome: getHome,
     getShelveData: getShelveData,

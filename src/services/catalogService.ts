@@ -762,6 +762,32 @@ export function getCatchupStreamUrl(channelCode: string, contentId: string, colu
   });
 }
 
+export interface EpgProgramItem {
+  contentId?: string;
+  programName: string;
+  startTime: string;
+  endTime: string;
+  desc?: string;
+  remark?: string;
+}
+
+export function getChannelProgram(channelCode: string, columnId = 0): Promise<{ channelCode: string; name: string; programList: EpgProgramItem[] }> {
+  return new Promise((resolve) => {
+    const client = window.MagisClient;
+    if (!client || typeof client.getChannelProgram !== 'function') {
+      return resolve({ channelCode, name: '', programList: [] });
+    }
+    client.getChannelProgram(channelCode, columnId, (err: any, res: any) => {
+      if (err || !res) return resolve({ channelCode, name: '', programList: [] });
+      resolve({
+        channelCode: res.channelCode || channelCode,
+        name: res.name || '',
+        programList: res.programList || []
+      });
+    });
+  });
+}
+
 /**
  * Title details asked for in the background (focused card, rotating hero). The portal answers one request at a
  * time, so each of these delayed the grid pages and the detail behind it: walking a grid queued one request per
