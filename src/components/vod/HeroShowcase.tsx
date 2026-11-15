@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { VodItem } from '../../types/vod';
 import { historyService } from '../../services/historyService';
-import { enrichTitleMeta } from '../../services/catalogService';
+import { enrichTitleMetaInBackground } from '../../services/catalogService';
 import { formatDuration, getResumeTarget } from '../../lib/vodResume';
 import { formatQualityTag, firstQuality } from '../../lib/subtitles';
 import { useTitleMeta } from '../../lib/titleMetaCache';
@@ -40,7 +40,7 @@ const HeroShowcaseComponent: React.FC<HeroShowcaseProps> = ({
   useEffect(() => {
     if (!item?.id) return;
     if (!qualityTag || !hasCC || !year || !actorsStr) {
-      enrichTitleMeta(item, true);
+      enrichTitleMetaInBackground(item, true);
     }
   }, [item?.id, qualityTag, hasCC, year, actorsStr]);
 

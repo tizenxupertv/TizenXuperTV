@@ -6,7 +6,7 @@ import { collectPosterAlternates } from '../../lib/searchArtwork';
 import { startImageTracking } from '../../lib/perfMonitor';
 import { formatQualityTag, firstQuality } from '../../lib/subtitles';
 import { useTitleMeta } from '../../lib/titleMetaCache';
-import { enrichTitleMeta } from '../../services/catalogService';
+import { enrichTitleMetaInBackground } from '../../services/catalogService';
 
 interface PosterCardProps {
   item: VodItem;
@@ -103,8 +103,8 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
   useEffect(() => {
     if (!isFocused || qualityTag || !item.id) return;
     const timer = setTimeout(() => {
-      enrichTitleMeta(item, false);
-    }, 250);
+      enrichTitleMetaInBackground(item, false);
+    }, 600); // only for a card the user rests on, not every card passed while scrolling
     return () => clearTimeout(timer);
   }, [isFocused, qualityTag, item.id]);
 
