@@ -14,6 +14,7 @@ import { isOlderTv } from '../lib/tvMemory';
 /** On a TV short of memory, a row this many rows away from the focus lets go of its images */
 const OLDER_TV = isOlderTv();
 const RELEASE_ROWS_AWAY = 4;
+const HEADER_HEIGHT = 68; // .app-header
 
 export interface DestacadosFocus {
   area: 'hero' | 'row';
@@ -95,7 +96,8 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
       const secEl = track.querySelectorAll('.content-section')[focus.rowIndex] as HTMLElement | undefined;
       const targetY = secEl ? secEl.offsetTop : 0;
       const max = Math.max(0, track.scrollHeight - container.clientHeight + 60);
-      setTrackOffset(track, 'y', Math.min(max, Math.max(0, targetY - 24)));
+      // The page starts behind the header (the hero runs under it): a row lands 24 px below the header
+      setTrackOffset(track, 'y', Math.min(max, Math.max(0, targetY - HEADER_HEIGHT - 24)));
     }
   }, [isFocusActive, focus.area, focus.rowIndex]);
 
@@ -152,7 +154,7 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
   })();
 
   return (
-    <div className="page-container" ref={containerRef}>
+    <div className={`page-container ${isFocusActive && focus.area === 'row' ? 'is-scrolled' : ''}`} ref={containerRef}>
       <div className="page-track" ref={trackRef}>
       {currentHero ? (
         <HeroShowcase
