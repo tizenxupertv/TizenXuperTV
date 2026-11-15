@@ -9,8 +9,7 @@ import { historyService } from '../services/historyService';
 import { favoritesService } from '../services/favoritesService';
 import { ScreenHeader, BackIcon } from '../components/layout/Header';
 import '../styles/personModal.css';
-import { settingsService, PREFERRED_LANGUAGES, SUBTITLE_CHOICES, subtitleChoiceIndex, QUALITY_OPTIONS, onDonorQualityBlocked } from '../services/settingsService';
-import { accountService } from '../services/accountService';
+import { settingsService, PREFERRED_LANGUAGES, SUBTITLE_CHOICES, subtitleChoiceIndex, QUALITY_OPTIONS } from '../services/settingsService';
 import { effectiveChoice, ownAudioName, titleChoices, type LanguageRules, type TitleChoices, type TitleMedia } from '../lib/titleOptions';
 import { PREF_LANG_CODES, languageName, sameLanguage, formatQualityTag, firstQuality } from '../lib/subtitles';
 import { setCachedTitleMeta, useTitleMeta } from '../lib/titleMetaCache';
@@ -435,19 +434,9 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   // Audio & subtitle preferences: the same ones as the profile (Configuración global); a preference the title
   // lacks shows what the player will really use
   const prefs = settingsService.get();
-  const isDonor = accountService.isDonor();
-  const [donorNotice, setDonorNotice] = useState(false);
-  useEffect(() => {
-    return onDonorQualityBlocked(() => setDonorNotice(true));
-  }, []);
-  useEffect(() => {
-    if (focus.area !== 'audioModal' && donorNotice) setDonorNotice(false);
-  }, [focus.area, donorNotice]);
-
   const audioIdx = effectiveChoice(choices.audio, prefs.audio);
   const subIdx = effectiveChoice(choices.subs, subtitleChoiceIndex(prefs));
-  const rawQualityIdx = effectiveChoice(choices.quality, prefs.quality || 0);
-  const qualityIdx = !isDonor && rawQualityIdx === 1 ? 0 : rawQualityIdx;
+  const qualityIdx = effectiveChoice(choices.quality, prefs.quality || 0);
   // What the home hero and the cards already learned about this title: shown at once instead of a loading
   // placeholder while the same data is asked for again
   const cachedMeta = useTitleMeta(item.id);
@@ -457,13 +446,9 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
       currentItem.category
     );
   }, [media?.qualities, currentItem.qualities, currentItem.quality, currentItem.category, cachedMeta?.qualities, cachedMeta?.quality]);
-  const isHighResLabel = (q: string) => /1080|fhd|4k|2160|uhd/i.test(String(q || ''));
-  const bestAvailableQuality = useMemo(() => {
-    const qs = media?.qualities || [];
-    if (isDonor) return qs.length ? qs[0].toUpperCase() : '1080P';
-    const allowed = qs.find(q => !isHighResLabel(q));
-    return allowed ? allowed.toUpperCase() : '720P';
-  }, [media?.qualities, isDonor]);
+  const bestAvailableQuality = media && media.qualities && media.qualities.length
+    ? media.qualities[0].toUpperCase()
+    : '1080P';
   const autoResolutionText = `Auto (${bestAvailableQuality})`;
 
   const settingsRows: { col: 'audio' | 'subs' | 'quality'; label: string; value: string; options: string[]; indices: number[] }[] = [
@@ -479,7 +464,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
       options: choices.quality.map(i => {
         if (i === 0) return autoResolutionText;
         const opt = (QUALITY_OPTIONS[i] || '').toUpperCase();
-        if (opt.includes('1080')) return isDonor ? '1080p · Full HD' : '1080p · Full HD 🔒 Solo donadores';
+        if (opt.includes('1080')) return '1080p · Full HD';
         if (opt.includes('720')) return '720p · Alta definición (HD)';
         if (opt.includes('480')) return '480p · Definición estándar (SD)';
         return opt;
@@ -488,7 +473,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         ? autoResolutionText
         : (() => {
             const opt = (QUALITY_OPTIONS[qualityIdx] || QUALITY_OPTIONS[0]).toUpperCase();
-            if (opt.includes('1080')) return isDonor ? '1080p · Full HD' : '1080p · Full HD 🔒 Solo donadores';
+            if (opt.includes('1080')) return '1080p · Full HD';
             if (opt.includes('720')) return '720p · Alta definición (HD)';
             if (opt.includes('480')) return '480p · Definición estándar (SD)';
             return opt;
@@ -798,11 +783,6 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                   </button>
                   {focus.area === 'audioModal' && (
                     <div className="vod-action-menu vod-settings-menu">
-                      {donorNotice && (
-                        <div className="vod-donor-notice">
-                          🔒 1080p Full HD es exclusivo para donadores. Activa tu prueba o apoya en @TizenXuperSupportBot
-                        </div>
-                      )}
                       {(focus.modalCol || 'menu') === 'menu'
                         ? settingsRows.map((row, r) => (
                             <div
@@ -827,13 +807,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
                                   <div
                                     key={opt}
                                     className={`vod-action-option ${opt === row.value ? 'is-active' : ''} ${(focus.modalIndex || 0) === o ? 'is-focused' : ''}`}
-                                    onClick={() => {
-                                      if (row.col === 'quality' && row.indices[o] === 1 && !isDonor) {
-                                        setDonorNotice(true);
-                                        return;
-                                      }
-                                      if (onSelectSetting) onSelectSetting(row.col, row.indices[o]);
-                                    }}
+                                    onClick={() => onSelectSetting && onSelectSetting(row.col, row.indices[o])}
                                   >
                                     <span>{opt}</span>
                                     {opt === row.value && <span className="vod-season-check">✓</span>}

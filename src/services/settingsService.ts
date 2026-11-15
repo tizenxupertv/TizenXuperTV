@@ -1,7 +1,6 @@
 import { pk } from '../lib/localProfiles';
 import { readStoredJson } from '../lib/storedJson';
 import { saveItem } from '../lib/safeStorage';
-import { accountService } from './accountService';
 const KEY = pk('xuper_global_playback_v1');
 
 export interface PlaybackSettings {
@@ -69,29 +68,11 @@ applyTextSize(settingsService.get());
 /** Row of each setting in the detail's settings list (Audio, Subtítulos, Resolución) */
 export const SETTINGS_ROW: Record<'audio' | 'subs' | 'quality', number> = { audio: 0, subs: 1, quality: 2 };
 
-let donorQualityListeners: Array<() => void> = [];
-export function onDonorQualityBlocked(cb: () => void): () => void {
-  donorQualityListeners.push(cb);
-  return () => {
-    donorQualityListeners = donorQualityListeners.filter(l => l !== cb);
-  };
-}
-
 /** Applies option `index` of a setting of the detail's settings list */
 export function applySettingChoice(col: 'audio' | 'subs' | 'quality', index: number): void {
   if (col === 'audio') settingsService.set({ audio: index });
   else if (col === 'subs') applySubtitleChoice(index);
-  else {
-    if (index === 1 && !accountService.isDonor()) {
-      donorQualityListeners.forEach(cb => {
-        try { cb(); } catch {}
-      });
-      const current = settingsService.get().quality || 0;
-      if (current === 1) settingsService.set({ quality: 2 });
-      return;
-    }
-    settingsService.set({ quality: index });
-  }
+  else settingsService.set({ quality: index });
 }
 
 /** Language codes in the same order as the audio / subtitle language options of the profile */

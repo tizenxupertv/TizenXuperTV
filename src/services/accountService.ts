@@ -23,18 +23,6 @@ const REQUEST_TIMEOUT_MS = 10000;
 export interface AccountUser {
   name: string;
   username: string | null;
-  donor?: boolean;
-  donorUntil?: number;
-  isTrial?: boolean;
-}
-
-function donorFields(u: any): Partial<AccountUser> {
-  if (!u || typeof u !== 'object') return {};
-  return {
-    ...(typeof u.donor === 'boolean' ? { donor: u.donor } : {}),
-    ...(typeof u.donorUntil === 'number' ? { donorUntil: u.donorUntil } : {}),
-    ...(typeof u.isTrial === 'boolean' ? { isTrial: u.isTrial } : {})
-  };
 }
 
 export interface AccountSession extends AccountUser {
@@ -166,9 +154,7 @@ export function createAccountService(deps: AccountDeps) {
     if (!raw) return null;
     try {
       const s = JSON.parse(raw);
-      return s && typeof s.token === 'string' && s.token
-        ? { token: s.token, name: String(s.name || ''), username: s.username || null, ...donorFields(s) }
-        : null;
+      return s && typeof s.token === 'string' && s.token ? { token: s.token, name: String(s.name || ''), username: s.username || null } : null;
     } catch (e) {
       return null;
     }
@@ -184,19 +170,6 @@ export function createAccountService(deps: AccountDeps) {
 
     isSignedIn(): boolean {
       return session() !== null;
-    },
-
-    /** Whether the signed-in account currently has active donor or 15-day trial 1080p access. */
-    isDonor(): boolean {
-      if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-        const override = new URLSearchParams(window.location.search).get('donor');
-        if (override === '0') return false;
-        if (override === '1') return true;
-      }
-      const s = session();
-      if (!s || s.donor !== true) return false;
-      if (typeof s.donorUntil === 'number' && s.donorUntil <= deps.now()) return false;
-      return true;
     },
 
     /** New one-time code for the QR screen; throws when the server cannot be reached */
@@ -224,8 +197,7 @@ export function createAccountService(deps: AccountDeps) {
         const s: AccountSession = {
           token: data.token,
           name: String((data.user && data.user.name) || ''),
-          username: (data.user && data.user.username) || null,
-          ...donorFields(data.user)
+          username: (data.user && data.user.username) || null
         };
         save(s);
         return { status: 'linked', session: s };
@@ -250,22 +222,8 @@ export function createAccountService(deps: AccountDeps) {
         latest = l && typeof l.version === 'string' && typeof l.guide === 'string' && /^https:\/\//.test(l.guide)
           ? { version: l.version, guide: l.guide }
           : null;
-        if (data.user) {
-          const nextDonor = donorFields(data.user);
-          const changed =
-            data.user.name !== s.name ||
-            (data.user.username || null) !== s.username ||
-            nextDonor.donor !== s.donor ||
-            nextDonor.donorUntil !== s.donorUntil ||
-            nextDonor.isTrial !== s.isTrial;
-          if (changed) {
-            save({
-              token: s.token,
-              name: String(data.user.name || ''),
-              username: data.user.username || null,
-              ...nextDonor
-            });
-          }
+        if (data.user && (data.user.name !== s.name || (data.user.username || null) !== s.username)) {
+          save({ token: s.token, name: String(data.user.name || ''), username: data.user.username || null });
         }
         return 'ok';
       } catch (e) {
