@@ -1,15 +1,12 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { VodItem } from '../types/vod';
 import { HistoryItem } from '../types/history';
 import { favoritesService } from '../services/favoritesService';
 import { historyService } from '../services/historyService';
 import { useScreenKeys } from '../hooks/useScreenKeys';
 import { ScreenHeader, SearchIcon, BackIcon } from '../components/layout/Header';
-import { collectPosterAlternates } from '../lib/searchArtwork';
-import { isImagePrecached, markImageLoaded, markImageFailed } from '../lib/imageCache';
-import { useCardImage } from '../lib/useCardImage';
-import { formatQualityTag, firstQuality } from '../lib/subtitles';
-import { useTitleMeta } from '../lib/titleMetaCache';
+import { PosterCard } from '../components/vod/PosterCard';
+import { ContinueWatchingCard } from '../components/vod/ContinueWatchingCard';
 import { isAdultItem } from '../lib/catalogOrganizer';
 
 interface MyStuffScreenProps {
@@ -24,226 +21,24 @@ interface MyStuffScreenProps {
   onOpenSearch?: () => void;
 }
 
+/** One title of either list: what the grid needs to draw it with the shared cards, open it and remove it */
 interface StuffEntry {
   key: string;
   title: string;
-  displayTitle: string;
-  subtitle: string;
-  candidates: string[];
-  quality?: string;
-  qualities?: string[];
-  category?: string;
-  progressPct?: number;
-  isHistory?: boolean;
+  /** Mi lista: drawn with PosterCard */
+  vod?: VodItem;
+  /** Continuar viendo: drawn with ContinueWatchingCard */
+  history?: HistoryItem;
   open: () => void;
   remove: () => void;
 }
 
-const COLS = 6;
+// Cards keep their home size (176 px posters, 326 px landscape); this is how many fit in the 1824 px body
+const COLS_POSTERS = 9;
+const COLS_LANDSCAPE = 5;
 const MAX_ITEMS = 60;
-const MAX_RECOMMENDED = 12;
+const MAX_FEATURED = 12;
 const NOTICE_MS = 3000;
-
-function computeRemainingMinutes(h: HistoryItem): number {
-  if (h.duration > h.position && h.duration > 0) {
-    return Math.max(1, Math.round((h.duration - h.position) / 60));
-  }
-  return 0;
-}
-
-function computeProgressPct(h: HistoryItem): number {
-  if (h.duration > 0) {
-    return Math.min(100, Math.max(5, Math.round((h.position / h.duration) * 100)));
-  }
-  return 45;
-}
-
-const StuffLandscapeCard: React.FC<{
-  entry: StuffEntry;
-  isFocused: boolean;
-  editMode: boolean;
-  onActivate: () => void;
-  onRemoveClick: () => void;
-}> = ({ entry, isFocused, editMode, onActivate, onRemoveClick }) => {
-  const [altIndex, setAltIndex] = useState(0);
-  const [allFailed, setAllFailed] = useState(false);
-
-  const candidatesKey = entry.candidates.join('|');
-  useEffect(() => {
-    setAltIndex(0);
-    setAllFailed(false);
-  }, [entry.key, candidatesKey]);
-
-  const rawUrl = !allFailed && entry.candidates.length > 0
-    ? entry.candidates[Math.min(altIndex, entry.candidates.length - 1)]
-    : '';
-  const cardSrc = useCardImage(rawUrl, 392, 221, !!rawUrl);
-  const [imgLoaded, setImgLoaded] = useState(() => !!cardSrc && isImagePrecached(cardSrc));
-
-  useEffect(() => {
-    setImgLoaded(!!cardSrc && isImagePrecached(cardSrc));
-  }, [cardSrc]);
-
-  const cachedMeta = useTitleMeta(entry.key);
-  const qualityTag = useMemo(
-    () => formatQualityTag(firstQuality(entry.qualities, entry.quality, cachedMeta?.qualities, cachedMeta?.quality), entry.category),
-    [entry.qualities, entry.quality, cachedMeta?.qualities, cachedMeta?.quality, entry.category]
-  );
-
-  const onImgLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    if (e.currentTarget && e.currentTarget.naturalWidth === 0) {
-      onImgError();
-      return;
-    }
-    if (cardSrc) markImageLoaded(cardSrc);
-    setImgLoaded(true);
-  };
-
-  const onImgError = () => {
-    if (cardSrc) markImageFailed(cardSrc);
-    if (altIndex + 1 < entry.candidates.length) {
-      setImgLoaded(false);
-      setAltIndex(prev => prev + 1);
-      return;
-    }
-    setImgLoaded(false);
-    setAllFailed(true);
-  };
-
-  return (
-    <div
-      className={`ms-card ${isFocused ? 'is-focused' : ''} ${editMode ? 'is-removing' : ''}`}
-      onClick={onActivate}
-    >
-      <div className="ms-card-thumb">
-        <img
-          className="poster-card-placeholder-img"
-          src="assets/placeholder_landscape.png"
-          alt=""
-          loading="eager"
-        />
-        {cardSrc && !allFailed && (
-          <img
-            className={`poster-card-img-element ${imgLoaded ? 'is-loaded' : ''}`}
-            src={cardSrc}
-            loading="lazy"
-            decoding="async"
-            onLoad={onImgLoad}
-            onError={onImgError}
-            alt=""
-          />
-        )}
-        {qualityTag && (
-          <div className={`poster-quality-badge ${qualityTag === '4K' ? 'is-4k' : ''}`}>
-            {qualityTag}
-          </div>
-        )}
-        <button
-          type="button"
-          className="ms-card-dots"
-          title="Quitar título"
-          aria-label={`Quitar ${entry.title}`}
-          onClick={e => {
-            e.stopPropagation();
-            onRemoveClick();
-          }}
-        >
-          {editMode ? '✕' : '⋮'}
-        </button>
-        {entry.isHistory && (
-          <>
-            <div className="ms-card-play" aria-hidden="true">▶</div>
-            <div className="cw-progress-track ms-card-progress">
-              <div className="cw-progress-fill" style={{ width: `${entry.progressPct || 45}%` }} />
-            </div>
-          </>
-        )}
-      </div>
-      <div className="ms-card-caption">
-        <div className="ms-card-title">{entry.displayTitle}</div>
-        {entry.subtitle && <div className="ms-card-sub">{entry.subtitle}</div>}
-      </div>
-    </div>
-  );
-};
-
-const RecommendedPosterCard: React.FC<{
-  item: VodItem;
-  isFocused: boolean;
-  onActivate: () => void;
-}> = ({ item, isFocused, onActivate }) => {
-  const candidates = useMemo(
-    () => collectPosterAlternates(item.poster, item.posterAlternates, item.landscape, item.backdrop),
-    [item.poster, item.posterAlternates, item.landscape, item.backdrop]
-  );
-  const [altIndex, setAltIndex] = useState(0);
-  const [allFailed, setAllFailed] = useState(false);
-
-  const rawUrl = !allFailed && candidates.length > 0
-    ? candidates[Math.min(altIndex, candidates.length - 1)]
-    : '';
-  const cardSrc = useCardImage(rawUrl, 230, 340, !!rawUrl);
-  const [imgLoaded, setImgLoaded] = useState(() => !!cardSrc && isImagePrecached(cardSrc));
-
-  useEffect(() => {
-    setImgLoaded(!!cardSrc && isImagePrecached(cardSrc));
-  }, [cardSrc]);
-
-  const qualityTag = useMemo(
-    () => formatQualityTag(firstQuality(item.qualities, item.quality), item.category),
-    [item.qualities, item.quality, item.category]
-  );
-
-  const handleLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    if (e.currentTarget && e.currentTarget.naturalWidth === 0) {
-      handleError();
-      return;
-    }
-    if (cardSrc) markImageLoaded(cardSrc);
-    setImgLoaded(true);
-  };
-
-  const handleError = () => {
-    if (cardSrc) markImageFailed(cardSrc);
-    if (altIndex + 1 < candidates.length) {
-      setImgLoaded(false);
-      setAltIndex(prev => prev + 1);
-      return;
-    }
-    setImgLoaded(false);
-    setAllFailed(true);
-  };
-
-  const year = item.year && item.year !== '—' ? item.year : '';
-
-  return (
-    <div className={`poster-card apple-poster-card ms-rec-card ${isFocused ? 'is-focused' : ''}`} onClick={onActivate}>
-      <div className="poster-card-img">
-        <img className="poster-card-placeholder-img" src="assets/placeholder_vertical.png" alt="" loading="eager" />
-        {cardSrc && !allFailed && (
-          <img
-            className={`poster-card-img-element ${imgLoaded ? 'is-loaded' : ''}`}
-            src={cardSrc}
-            loading="lazy"
-            decoding="async"
-            onLoad={handleLoad}
-            onError={handleError}
-            alt=""
-          />
-        )}
-        {qualityTag && (
-          <div className={`poster-quality-badge ${qualityTag === '4K' ? 'is-4k' : ''}`}>
-            {qualityTag}
-          </div>
-        )}
-        <div className="poster-bottom-vignette">
-          <div className="poster-vignette-title">{item.title}</div>
-          <div className="poster-vignette-genre">{year || (item.isSeries ? 'Serie' : 'Película')}</div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
   isTop,
@@ -269,7 +64,6 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
   const [, setTick] = useState(0);
 
   const bodyRef = useRef<HTMLDivElement>(null);
-  const recRowRef = useRef<HTMLDivElement>(null);
   const askedInfoRef = useRef<Set<string>>(new Set());
 
   const rerender = () => setTick(t => t + 1);
@@ -341,60 +135,39 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
 
   const items = useMemo<StuffEntry[]>(() => {
     if (tab === 'history') {
-      return historyList.slice(0, MAX_ITEMS).map(h => {
-        const vod = catalogById.get(String(h.id));
-        const remainingMin = computeRemainingMinutes(h);
-        const year = vod?.year && vod.year !== '—' ? vod.year : '';
-        const displayTitle = h.series && h.episodeNumber
-          ? `T1 E${h.episodeNumber} · ${h.title}`
-          : h.title;
-        const subtitleParts = [
-          year,
-          remainingMin > 0 ? `${remainingMin} min restantes` : (h.series ? 'Serie' : 'En progreso')
-        ].filter(Boolean);
-        return {
-          key: String(h.id),
-          title: h.title,
-          displayTitle,
-          subtitle: subtitleParts.join(' · '),
-          candidates: collectPosterAlternates(vod?.landscape, vod?.backdrop, h.poster, vod?.poster),
-          quality: vod?.quality,
-          qualities: vod?.qualities,
-          category: vod?.category,
-          progressPct: computeProgressPct(h),
-          isHistory: true,
-          open: () => onOpenHistory(h),
-          remove: () => removeFromList(true, String(h.id), h.title)
-        };
-      });
+      return historyList.slice(0, MAX_ITEMS).map(h => ({
+        key: String(h.id),
+        title: h.title,
+        history: h,
+        open: () => onOpenHistory(h),
+        remove: () => removeFromList(true, String(h.id), h.title)
+      }));
     }
 
     return favIds.slice(0, MAX_ITEMS).map(id => {
-      const vod = catalogById.get(id);
       const info = favoritesService.getFavoriteInfo(id);
-      const title = vod ? vod.title : info ? info.title : 'Cargando…';
-      const isSeries = vod ? !!vod.isSeries : !!(info && info.series);
-      const year = vod?.year && vod.year !== '—' ? vod.year : '';
-      const target: VodItem | null = vod || (info
-        ? ({ id, title: info.title, poster: info.poster, isSeries: info.series, kind: info.series ? 'serie' : 'película' } as VodItem)
-        : null);
+      // A favorite saved before the catalog knew it: drawn from what was stored with it
+      const vod: VodItem = catalogById.get(id) || ({
+        id,
+        title: info ? info.title : 'Cargando…',
+        poster: info ? info.poster : '',
+        isSeries: !!(info && info.series),
+        kind: info && info.series ? 'serie' : 'película'
+      } as VodItem);
       return {
         key: id,
-        title,
-        displayTitle: title,
-        subtitle: [year, isSeries ? 'Serie' : 'Película'].filter(Boolean).join(' · '),
-        candidates: collectPosterAlternates(vod?.landscape, vod?.backdrop, info?.poster, vod?.poster, vod?.posterAlternates),
-        quality: vod?.quality,
-        qualities: vod?.qualities,
-        category: vod?.category,
-        open: () => { if (target) onOpenVod(target); },
-        remove: () => removeFromList(false, id, title)
+        title: vod.title,
+        vod,
+        open: () => { if (catalogById.has(id) || info) onOpenVod(vod); },
+        remove: () => removeFromList(false, id, vod.title)
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, catalogById, historyList.length, favIds.map(id => (favoritesService.getFavoriteInfo(id) ? id + '+' : id)).join(',')]);
+  }, [tab, catalogById, historyList, favIds.map(id => (favoritesService.getFavoriteInfo(id) ? id + '+' : id)).join(',')]);
 
-  const recommendedItems = useMemo<VodItem[]>(() => {
+  const COLS = tab === 'history' ? COLS_LANDSCAPE : COLS_POSTERS;
+
+  const featuredItems = useMemo<VodItem[]>(() => {
     if (tab !== 'history') return [];
     const seen = new Set<string>(historyList.map(h => String(h.id)));
     const out: VodItem[] = [];
@@ -405,7 +178,7 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
       if (!(it.poster || it.landscape)) continue;
       seen.add(key);
       out.push(it);
-      if (out.length >= MAX_RECOMMENDED) break;
+      if (out.length >= MAX_FEATURED) break;
     }
     return out;
   }, [tab, catalogItems, historyList]);
@@ -464,10 +237,10 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
   }, [items.length, area, gridIdx]);
 
   useEffect(() => {
-    if (recIdx >= recommendedItems.length && recommendedItems.length > 0) {
-      setRecIdx(recommendedItems.length - 1);
+    if (recIdx >= featuredItems.length && featuredItems.length > 0) {
+      setRecIdx(featuredItems.length - 1);
     }
-  }, [recommendedItems.length, recIdx]);
+  }, [featuredItems.length, recIdx]);
 
   // Keep focused element visible inside body & horizontal recommended row
   useEffect(() => {
@@ -481,6 +254,13 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
       }
     }
   }, [area, tabBtnIdx, gridIdx, recIdx, tab]);
+
+  const firstActionIdx = tabButtons.findIndex(b => b.kind !== 'tab');
+
+  const openFeatured = useCallback((it: VodItem) => {
+    setArea('recommended');
+    onOpenVod(it);
+  }, [onOpenVod]);
 
   const headerActions = useMemo(() => ([
     ...(onOpenSearch ? [{ id: 'search', title: 'Buscar', icon: SearchIcon, onClick: onOpenSearch }] : []),
@@ -528,7 +308,7 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
         if (items.length > 0) {
           setArea('grid');
           setGridIdx(prev => Math.min(prev, items.length - 1));
-        } else if (recommendedItems.length > 0) {
+        } else if (featuredItems.length > 0) {
           setArea('recommended');
           setRecIdx(0);
         }
@@ -555,9 +335,9 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
           const lastRow = Math.floor((items.length - 1) / COLS);
           if (curRow < lastRow) {
             setGridIdx(items.length - 1);
-          } else if (recommendedItems.length > 0) {
+          } else if (featuredItems.length > 0) {
             setArea('recommended');
-            setRecIdx(Math.min(gridIdx % COLS, recommendedItems.length - 1));
+            setRecIdx(Math.min(gridIdx % COLS, featuredItems.length - 1));
           }
         }
       } else if (key === 'enter') {
@@ -572,7 +352,7 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
 
     if (area === 'recommended') {
       if (key === 'left') setRecIdx(i => Math.max(0, i - 1));
-      else if (key === 'right') setRecIdx(i => Math.min(recommendedItems.length - 1, i + 1));
+      else if (key === 'right') setRecIdx(i => Math.min(featuredItems.length - 1, i + 1));
       else if (key === 'up') {
         if (items.length > 0) {
           const lastRowStart = Math.floor((items.length - 1) / COLS) * COLS;
@@ -582,7 +362,7 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
           setArea('tabs');
         }
       } else if (key === 'enter') {
-        const rec = recommendedItems[recIdx];
+        const rec = featuredItems[recIdx];
         if (rec) onOpenVod(rec);
       }
     }
@@ -592,21 +372,23 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
     <div className="ms-screen" style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
       <ScreenHeader
         title="Mis cosas"
+        subtitle={`${items.length} ${items.length === 1 ? 'título' : 'títulos'}`}
         actions={headerActions}
         focusedAction={area === 'header' ? headerIdx : null}
       />
       <div className="ms-body" ref={bodyRef}>
-        <h1 className="ms-heading">Mis cosas</h1>
-
-        <div className="ms-tabs-bar">
+        <div className="filter-types ms-bar">
           {tabButtons.map((btn, i) => {
             const focused = area === 'tabs' && tabBtnIdx === i;
-            if (btn.kind === 'tab') {
-              return (
+            const className = btn.kind === 'tab'
+              ? `filter-type ${btn.selected ? 'is-selected' : ''} ${focused ? 'is-focused' : ''}`
+              : `pf-btn pf-list-action ${btn.kind === 'danger' ? 'pf-btn-danger' : ''} ${btn.selected ? 'is-on' : ''} ${focused ? 'is-focused' : ''}`;
+            return (
+              <React.Fragment key={btn.id}>
+                {i === firstActionIdx && <div className="ms-bar-gap" />}
                 <button
-                  key={btn.id}
                   type="button"
-                  className={`ms-tab ${btn.selected ? 'is-selected' : ''} ${focused ? 'is-focused' : ''}`}
+                  className={className}
                   onClick={() => {
                     setArea('tabs');
                     setTabBtnIdx(i);
@@ -615,26 +397,9 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
                 >
                   {btn.label}
                 </button>
-              );
-            }
-            return (
-              <button
-                key={btn.id}
-                type="button"
-                className={`pf-btn pf-list-action ${btn.kind === 'danger' ? 'pf-btn-danger' : ''} ${btn.selected ? 'is-on' : ''} ${focused ? 'is-focused' : ''}`}
-                onClick={() => {
-                  setArea('tabs');
-                  setTabBtnIdx(i);
-                  btn.onActivate();
-                }}
-              >
-                {btn.label}
-              </button>
+              </React.Fragment>
             );
           })}
-          <div className="pf-total">
-            {items.length} {items.length === 1 ? 'título' : 'títulos'}
-          </div>
         </div>
 
         {editMode && items.length > 0 && (
@@ -649,38 +414,35 @@ export const MyStuffScreen: React.FC<MyStuffScreenProps> = ({
           </div>
         ) : (
           <div className="ms-grid">
-            {items.map((it, idx) => (
-              <StuffLandscapeCard
-                key={it.key}
-                entry={it}
-                editMode={editMode}
-                isFocused={area === 'grid' && gridIdx === idx}
-                onActivate={() => {
-                  setArea('grid');
-                  setGridIdx(idx);
-                  if (editMode) it.remove();
-                  else it.open();
-                }}
-                onRemoveClick={it.remove}
-              />
-            ))}
+            {items.map((it, idx) => {
+              const isFocused = area === 'grid' && gridIdx === idx;
+              const activate = () => {
+                setArea('grid');
+                setGridIdx(idx);
+                if (editMode) it.remove();
+                else it.open();
+              };
+              return (
+                <div key={it.key} className={`ms-cell ${editMode ? 'is-removing' : ''}`}>
+                  {it.history
+                    ? <ContinueWatchingCard item={it.history} isFocused={isFocused} onActivate={activate} />
+                    : <PosterCard item={it.vod as VodItem} isFocused={isFocused} onActivate={activate} />}
+                </div>
+              );
+            })}
           </div>
         )}
 
-        {tab === 'history' && recommendedItems.length > 0 && (
-          <section className="ms-rec-section">
-            <h2 className="ms-rec-title">Recomendado para ti</h2>
-            <div className="ms-rec-row" ref={recRowRef}>
-              {recommendedItems.map((it, idx) => (
-                <RecommendedPosterCard
+        {featuredItems.length > 0 && (
+          <section className="ms-section">
+            <h2 className="section-title">Títulos destacados</h2>
+            <div className="ms-row">
+              {featuredItems.map((it, idx) => (
+                <PosterCard
                   key={it.id}
                   item={it}
                   isFocused={area === 'recommended' && recIdx === idx}
-                  onActivate={() => {
-                    setArea('recommended');
-                    setRecIdx(idx);
-                    onOpenVod(it);
-                  }}
+                  onActivate={openFeatured}
                 />
               ))}
             </div>
