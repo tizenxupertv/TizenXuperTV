@@ -944,31 +944,86 @@
     getSlb(function () {});
   }
 
-  function collectTracks(episode) {
+  function collectTracks(episode, response) {
     var tracks = [];
-    var totalList = episode && episode.totalMovieList || [];
-    for (var i = 0; i < totalList.length; i++) {
-      var mList = totalList[i] && totalList[i].movieList || [];
-      for (var j = 0; j < mList.length; j++) {
-        if (mList[j] && trim(mList[j].contentId)) tracks.push(mList[j]);
+    var seen = Object.create(null);
+
+    function addList(list, groupQuality) {
+      if (!Array.isArray(list)) return;
+      for (var i = 0; i < list.length; i++) {
+        var track = list[i];
+        if (!track || !trim(track.contentId)) continue;
+        var quality = trim(track.quality) || trim(groupQuality);
+        var key = JSON.stringify([
+          trim(track.contentId), quality.toLowerCase(),
+          trim(track.videoFormat).toLowerCase(), trim(track.encodeFormat).toLowerCase(),
+          trim(track.audioInfo), trim(track.language || track.languageName || track.audioLanguage)
+        ]);
+        var index = seen[key];
+        var candidate = trim(track.quality) || !quality ? track : Object.assign({}, track, { quality: quality });
+        if (index === undefined) {
+          seen[key] = tracks.length;
+          tracks.push(candidate);
+        } else if (!(tracks[index].licenseList || []).length && (candidate.licenseList || []).length) {
+          tracks[index] = candidate;
+        }
       }
     }
+
+    function addTracks(node) {
+      if (!node) return;
+      var groups = node.totalMovieList || [];
+      for (var i = 0; i < groups.length; i++) {
+        if (groups[i]) addList(groups[i].movieList, groups[i].quality);
+      }
+      addList(node.movieList, node.quality);
+    }
+
+    addTracks(episode);
+    if (response !== episode) addTracks(response);
     return tracks;
   }
 
-  function subtitleList(episode) {
+  function subtitleList(episode, play) {
     var subs = [];
-    var list = episode && episode.subtitleList || [];
-    for (var i = 0; i < list.length && subs.length < 30; i++) {
-      var f = list[i] && list[i].file && list[i].file[0];
-      if (f && trim(f.url)) {
+    var seenUrls = Object.create(null);
+
+    function addFrom(node) {
+      var list = node && node.subtitleList || [];
+      for (var i = 0; i < list.length && subs.length < 30; i++) {
+        var entry = list[i];
+        var files = entry && entry.file;
+        if (!Array.isArray(files) || !files.length) continue;
+        var picked = null;
+        var firstValid = null;
+        for (var j = 0; j < files.length; j++) {
+          var f = files[j];
+          var url = trim(f && f.url);
+          if (!url) continue;
+          if (!firstValid) firstValid = f;
+          var ft = trim(f.fileType).toLowerCase();
+          var lowerUrl = url.toLowerCase();
+          if (ft === 'srt' || ft === 'vtt' || lowerUrl.indexOf('.srt') !== -1 || lowerUrl.indexOf('.vtt') !== -1) {
+            picked = f;
+            break;
+          }
+        }
+        picked = picked || firstValid;
+        var chosenUrl = picked && trim(picked.url);
+        if (!chosenUrl || seenUrls[chosenUrl]) continue;
+        seenUrls[chosenUrl] = true;
+        var chosenFmt = trim(picked.fileType).toLowerCase();
+        if (!chosenFmt) chosenFmt = chosenUrl.toLowerCase().indexOf('.vtt') !== -1 ? 'vtt' : 'srt';
         subs.push({
-          lang: trim(list[i].language),
-          url: trim(f.url),
-          format: trim(f.fileType) || 'srt'
+          lang: trim(entry.language),
+          url: chosenUrl,
+          format: chosenFmt
         });
       }
     }
+
+    addFrom(episode);
+    if (play && play !== episode) addFrom(play);
     return subs;
   }
 
@@ -984,13 +1039,103 @@
     return num > 100000 ? num / 1000 : num;
   }
 
+  var lastStartPlayDiag = null;
+  function publishStartPlayDiag(diag) {
+    lastStartPlayDiag = diag;
+    try { window.__xuperLastStartPlayDiag = diag; } catch (e) {}
+  }
+
+  function normalizeEpisodeNumber(episodeNumber) {
+    var parsed = parseInt(episodeNumber, 10);
+    return !isNaN(parsed) && parsed > 0 ? parsed : 0;
+  }
+
+  function findEpisode(list, epNum) {
+    if (!Array.isArray(list) || !list.length) return null;
+    if (epNum > 0) {
+      for (var i = 0; i < list.length; i++) {
+        var item = list[i];
+        if (!item) continue;
+        var rawNum = item.episodeNumber != null ? item.episodeNumber
+          : (item.seriesNumber != null ? item.seriesNumber : item.number);
+        var n = parseInt(rawNum, 10);
+        if (!isNaN(n) && n === epNum) return item;
+      }
+    }
+    return list[0];
+  }
+
+  function summarizeRawVariant(track, source, groupQuality) {
+    return {
+      source: source,
+      contentId: trim(track.contentId),
+      quality: trim(track.quality) || trim(groupQuality),
+      groupQuality: trim(groupQuality),
+      codec: trim(track.encodeFormat).toUpperCase(),
+      container: trim(track.videoFormat).toUpperCase(),
+      audio: trim(track.audioInfo),
+      language: trim(track.language || track.languageName || track.audioLanguage)
+    };
+  }
+
+  function summarizeRawNode(node, prefix, out) {
+    if (!node) return;
+    var groups = node.totalMovieList || [];
+    for (var i = 0; i < groups.length; i++) {
+      var grp = groups[i];
+      if (!grp || !Array.isArray(grp.movieList)) continue;
+      for (var j = 0; j < grp.movieList.length; j++) {
+        if (grp.movieList[j]) out.push(summarizeRawVariant(grp.movieList[j], prefix + '.totalMovieList', grp.quality));
+      }
+    }
+    if (Array.isArray(node.movieList)) {
+      for (var k = 0; k < node.movieList.length; k++) {
+        if (node.movieList[k]) out.push(summarizeRawVariant(node.movieList[k], prefix + '.movieList', node.quality));
+      }
+    }
+  }
+
+  function summarizeStartPlayDiag(cid, seriesContentId, epNum, pRes, matchedEp, tracks) {
+    var before = [];
+    if (matchedEp && matchedEp !== pRes) summarizeRawNode(matchedEp, 'episode', before);
+    summarizeRawNode(pRes, 'play', before);
+    var after = [];
+    for (var i = 0; i < tracks.length; i++) {
+      var t = tracks[i];
+      after.push({
+        index: i,
+        contentId: trim(t.contentId),
+        quality: trim(t.quality),
+        codec: trim(t.encodeFormat).toUpperCase(),
+        container: trim(t.videoFormat).toUpperCase(),
+        audio: trim(t.audioInfo),
+        language: trim(t.language || t.languageName || t.audioLanguage)
+      });
+    }
+    return {
+      contentId: cid,
+      seriesContentId: trim(seriesContentId) || null,
+      episodeNumber: epNum || null,
+      episodeCount: Array.isArray(pRes && pRes.episodeList) ? pRes.episodeList.length : 0,
+      beforeCollectTracks: before,
+      afterCollectTracks: after,
+      selectedIndex: null
+    };
+  }
+
   var playCache = {};
   var playWaiters = {};
-  function loadPlay(contentId, seriesContentId, callback) {
+  function loadPlay(contentId, seriesContentId, episodeNumber, callback) {
+    if (typeof episodeNumber === 'function') {
+      callback = episodeNumber;
+      episodeNumber = null;
+    }
     var cid = trim(contentId);
     if (!cid) return callback(new Error('Missing contentId'));
-    var key = cid + ':' + trim(seriesContentId);
+    var epNum = normalizeEpisodeNumber(episodeNumber);
+    var key = cid + ':' + trim(seriesContentId) + ':' + (epNum || '');
     if (playCache[key] && Date.now() < playCache[key].at + PLAY_TTL) {
+      publishStartPlayDiag(playCache[key].data.diag);
       return callback(null, playCache[key].data);
     }
 
@@ -1012,33 +1157,49 @@
       if (err) return doneAll(err);
       var payload = {
         contentId: cid,
-        seriesContentId: trim(seriesContentId),
+        seriesContentId: trim(seriesContentId) || null,
         startTime: 0,
         type: '1',
-        columnId: 0,
-        authType: ''
+        columnId: -1,
+        authType: null,
+        episodeNumberList: epNum > 0 ? [epNum] : null
       };
       call('v10/startPlayVOD', payload, function (pErr, pRes) {
         if (pErr) return doneAll(pErr);
-        var ep = pRes && pRes.episodeList && pRes.episodeList[0];
-        if (!ep) return doneAll(new Error('No video episode returned'));
-        var tracks = collectTracks(ep);
+        if (!pRes) return doneAll(new Error('No video response returned'));
+        // The Android client accepts up to three nested portal data envelopes.
+        for (var depth = 0; depth < 3; depth++) {
+          if (!pRes.data || typeof pRes.data !== 'object' || Array.isArray(pRes.data)) break;
+          pRes = pRes.data;
+        }
+        var matchedEp = findEpisode(pRes.episodeList, epNum);
+        var tracks = collectTracks(matchedEp, pRes);
+        var ep = matchedEp || pRes;
+        var diag = summarizeStartPlayDiag(cid, seriesContentId, epNum, pRes, matchedEp, tracks);
+        publishStartPlayDiag(diag);
+        if (typeof console !== 'undefined' && console.info) {
+          console.info('[MagisClient] startPlayVOD variants', diag);
+        }
         if (!tracks.length) return doneAll(new Error('No video tracks returned'));
-        var data = { play: pRes, episode: ep, tracks: tracks };
+        var data = { play: pRes, episode: ep, tracks: tracks, diag: diag };
         playCache[key] = { at: Date.now(), data: data };
         doneAll(null, data);
       });
     });
   }
 
-  function mediaInfo(contentId, seriesContentId, callback) {
-    loadPlay(contentId, seriesContentId, function (err, res) {
+  function mediaInfo(contentId, seriesContentId, episodeNumber, callback) {
+    if (typeof episodeNumber === 'function') {
+      callback = episodeNumber;
+      episodeNumber = null;
+    }
+    loadPlay(contentId, seriesContentId, episodeNumber, function (err, res) {
       if (err) return callback(err);
       var tr = res.tracks[0];
       callback(null, {
         name: text(res.play && res.play.name),
         audio: trim(tr.audioInfo),
-        subtitles: subtitleList(res.episode),
+        subtitles: subtitleList(res.episode, res.play),
         duration: durationSeconds(tr.duration || res.episode.duration || (res.play && res.play.duration))
       });
     });
@@ -1048,8 +1209,12 @@
    * What a title offers, without resolving a stream: the audio languages and qualities of its tracks and the
    * languages of its subtitles. Shares loadPlay's cache with resolve(), so the player finds it already loaded.
    */
-  function mediaOptions(contentId, seriesContentId, callback) {
-    loadPlay(contentId, seriesContentId, function (err, res) {
+  function mediaOptions(contentId, seriesContentId, episodeNumber, callback) {
+    if (typeof episodeNumber === 'function') {
+      callback = episodeNumber;
+      episodeNumber = null;
+    }
+    loadPlay(contentId, seriesContentId, episodeNumber, function (err, res) {
       if (err) return callback(err);
       var audios = [], qualities = [], subs = [], i;
       for (i = 0; i < res.tracks.length; i++) {
@@ -1057,7 +1222,7 @@
         if (a && audios.indexOf(a) === -1) audios.push(a);
         if (q && qualities.indexOf(q) === -1) qualities.push(q);
       }
-      var list = subtitleList(res.episode);
+      var list = subtitleList(res.episode, res.play);
       for (i = 0; i < list.length; i++) {
         if (list[i].lang && subs.indexOf(list[i].lang) === -1) subs.push(list[i].lang);
       }
@@ -1083,13 +1248,17 @@
 
     // The CDN token does not depend on the title: ask it now, while the title loads
     warmSlb();
-    loadPlay(contentId, seriesContentId, function (err, res) {
+    loadPlay(contentId, seriesContentId, opts.episodeNumber, function (err, res) {
       if (err) return callback(err);
       var play = res.play;
       var episode = res.episode;
       var tracks = res.tracks;
       var trackIdx = parseInt(opts.trackIndex, 10);
       if (isNaN(trackIdx) || trackIdx < 0 || trackIdx >= tracks.length) trackIdx = 0;
+      if (res.diag) {
+        res.diag.selectedIndex = trackIdx;
+        publishStartPlayDiag(res.diag);
+      }
       var chosen = tracks[trackIdx];
 
       var license = trim(chosen.licenseList && chosen.licenseList[0] && chosen.licenseList[0].license || '');
@@ -1143,7 +1312,7 @@
           audio: trim(chosen.audioInfo),
           headers: makeHeaders(mainCdn.auth),
           backupUrls: backupUrls,
-          subtitles: subtitleList(episode),
+          subtitles: subtitleList(episode, play),
           name: text(play && play.name),
           isHls: false,
           // All audio/quality variants of this title; resolve again with opts.trackIndex to switch
@@ -1153,6 +1322,8 @@
               index: i,
               audio: trim(t.audioInfo),
               quality: trim(t.quality),
+              codec: trim(t.encodeFormat).toUpperCase(),
+              format: trim(t.videoFormat).toUpperCase(),
               language: trim(t.language || t.languageName || t.audioLanguage || ''),
               raw: Object.keys(t).join(',')
             };
@@ -1617,25 +1788,19 @@
           if (sErr) return tryStartLive(sErr);
           var addrList = sRes && sRes.liveAddressList || [];
           var validAddrs = addrList.filter(function (a) { return a && a.playCode && a.license; });
-          var chosen = null;
-          // Prefer FHD / 1080p definition if available (smart TV selection)
-          for (var i = 0; i < validAddrs.length; i++) {
-            var def = String(validAddrs[i].definition || validAddrs[i].quality || validAddrs[i].name || '').toUpperCase();
-            if (def.indexOf('FHD') !== -1 || def.indexOf('1080') !== -1) {
-              chosen = validAddrs[i];
-              break;
-            }
+          function liveQualityRank(address) {
+            var label = [address.definition, address.quality, address.name].join(' ').toUpperCase();
+            var code = trim(address.quality);
+            if (/2160|4K|UHD/.test(label) || code === '4') return 2160;
+            if (/1080|FHD/.test(label) || code === '3') return 1080;
+            if (/720|HD/.test(label) || code === '2') return 720;
+            if (/480|SD/.test(label) || code === '1') return 480;
+            return 0;
           }
-          if (!chosen) {
-            for (var j = 0; j < validAddrs.length; j++) {
-              var def2 = String(validAddrs[j].definition || validAddrs[j].quality || validAddrs[j].name || '').toUpperCase();
-              if (def2.indexOf('HD') !== -1 || def2.indexOf('720') !== -1) {
-                chosen = validAddrs[j];
-                break;
-              }
-            }
+          var chosen = validAddrs[0];
+          for (var i = 1; i < validAddrs.length; i++) {
+            if (liveQualityRank(validAddrs[i]) > liveQualityRank(chosen)) chosen = validAddrs[i];
           }
-          if (!chosen && validAddrs[0]) chosen = validAddrs[0];
           if (!chosen && addrList[0]) chosen = addrList[0];
           if (!chosen || !chosen.license) {
             return callback(new Error('Portal did not return live channel license'));
@@ -2039,7 +2204,7 @@
             var id = parseInt(row.col && (row.col.columnId || row.col.id), 10);
             if (!want || !id || row.titles.length >= want) return;
             pending++;
-            call('v3/getShelveData', { columnId: id, columnType: '2', pageNum: 1, pageSize: Math.max(20, want) }, { low: !!opts.low }, function (sErr, sRes) {
+            call('v3/getShelveData', { columnId: id, columnType: '2', pageNum: 1, pageSize: Math.max(20, want), numDisplay: null, encryptVersion: 0 }, { low: !!opts.low }, function (sErr, sRes) {
               var full = sErr ? [] : rowTitles(sRes && sRes.assetList || [], row.name);
               if (full.length > row.titles.length) row.titles = full.slice(0, want);
               if (--pending === 0) done();
@@ -2111,7 +2276,7 @@
     if (hit && Date.now() < hit.until) return callback(null, { items: hit.items, total: hit.total, cached: true });
     ensureSession(function (err) {
       if (err) return callback(err);
-      call('v3/getShelveData', { columnId: columnId, columnType: '2', pageNum: pageNum, pageSize: pageSize }, { low: !!(opts && opts.low) }, function (sErr, sRes) {
+      call('v3/getShelveData', { columnId: columnId, columnType: '2', pageNum: pageNum, pageSize: pageSize, numDisplay: null, encryptVersion: 0 }, { low: !!(opts && opts.low) }, function (sErr, sRes) {
         if (sErr) return callback(sErr);
         var list = sRes && sRes.assetList || [];
         var items = [];
@@ -2448,6 +2613,7 @@
         });
       });
     },
+    getLastStartPlayDiag: function () { return lastStartPlayDiag; },
     call: call
   };
 

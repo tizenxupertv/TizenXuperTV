@@ -11,7 +11,8 @@ import { ScreenHeader, BackIcon } from '../components/layout/Header';
 import '../styles/personModal.css';
 import { settingsService, PREFERRED_LANGUAGES, SUBTITLE_CHOICES, subtitleChoiceIndex, QUALITY_OPTIONS } from '../services/settingsService';
 import { effectiveChoice, ownAudioName, titleChoices, type LanguageRules, type TitleChoices, type TitleMedia } from '../lib/titleOptions';
-import { PREF_LANG_CODES, languageName, sameLanguage } from '../lib/subtitles';
+import { PREF_LANG_CODES, languageName, sameLanguage, formatQualityTag, firstQuality } from '../lib/subtitles';
+import { setCachedTitleMeta, useTitleMeta } from '../lib/titleMetaCache';
 import { getResumeTarget, getEpisodeStatus, EpisodeStatus, formatDuration } from '../lib/vodResume';
 import { useViewProfiler } from '../lib/perfMonitor';
 
@@ -403,15 +404,28 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   const playableId = isSeries ? String(resume.episode?.id || episodes[0]?.id || '') : String(item.id);
   const playableSeries = isSeries ? currentSeasonId : '';
   const [media, setMedia] = useState<TitleMedia | null>(null);
+  const [mediaLoading, setMediaLoading] = useState<boolean>(true);
   useEffect(() => {
     setMedia(null);
     const client = (window as any).MagisClient;
-    if (!playableId || !client || typeof client.mediaOptions !== 'function') return;
+    if (!playableId || !client || typeof client.mediaOptions !== 'function') {
+      setMediaLoading(false);
+      return;
+    }
+    setMediaLoading(true);
     // The CDN token too, so Play finds everything ready
     if (typeof client.warmSlb === 'function') client.warmSlb();
     let cancelled = false;
     client.mediaOptions(playableId, playableSeries, (err: any, m: TitleMedia) => {
-      if (!cancelled && !err && m) setMedia(m);
+      if (cancelled) return;
+      setMediaLoading(false);
+      if (!err && m) {
+        setMedia(m);
+        setCachedTitleMeta(item.id, {
+          qualities: Array.isArray(m.qualities) ? m.qualities : undefined,
+          hasCC: Array.isArray(m.subtitles) && m.subtitles.length > 0
+        });
+      }
     });
     return () => { cancelled = true; };
   }, [playableId, playableSeries]);
@@ -423,6 +437,20 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   const audioIdx = effectiveChoice(choices.audio, prefs.audio);
   const subIdx = effectiveChoice(choices.subs, subtitleChoiceIndex(prefs));
   const qualityIdx = effectiveChoice(choices.quality, prefs.quality || 0);
+  // What the home hero and the cards already learned about this title: shown at once instead of a loading
+  // placeholder while the same data is asked for again
+  const cachedMeta = useTitleMeta(item.id);
+  const detailQualityTag = useMemo(() => {
+    return formatQualityTag(
+      firstQuality(media?.qualities, currentItem.qualities, currentItem.quality, cachedMeta?.qualities, cachedMeta?.quality),
+      currentItem.category
+    );
+  }, [media?.qualities, currentItem.qualities, currentItem.quality, currentItem.category, cachedMeta?.qualities, cachedMeta?.quality]);
+  const bestAvailableQuality = media && media.qualities && media.qualities.length
+    ? media.qualities[0].toUpperCase()
+    : '1080P';
+  const autoResolutionText = `Auto (${bestAvailableQuality})`;
+
   const settingsRows: { col: 'audio' | 'subs' | 'quality'; label: string; value: string; options: string[]; indices: number[] }[] = [
     {
       col: 'audio', label: 'Audio', indices: choices.audio, options: choices.audio.map(i => AUDIO_OPTIONS[i]),
@@ -431,10 +459,25 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     { col: 'subs', label: 'Subtítulos', indices: choices.subs, options: choices.subs.map(i => SUB_OPTIONS[i]), value: SUB_OPTIONS[subIdx] || SUB_OPTIONS[0] },
     {
       col: 'quality',
-      label: 'Nitidez',
+      label: 'Resolución',
       indices: choices.quality,
-      options: choices.quality.map(i => i === 0 ? 'Auto' : QUALITY_OPTIONS[i].toUpperCase()),
-      value: qualityIdx === 0 ? 'Auto' : (QUALITY_OPTIONS[qualityIdx] || QUALITY_OPTIONS[0]).toUpperCase()
+      options: choices.quality.map(i => {
+        if (i === 0) return autoResolutionText;
+        const opt = (QUALITY_OPTIONS[i] || '').toUpperCase();
+        if (opt.includes('1080')) return '1080p · Full HD';
+        if (opt.includes('720')) return '720p · Alta definición (HD)';
+        if (opt.includes('480')) return '480p · Definición estándar (SD)';
+        return opt;
+      }),
+      value: qualityIdx === 0
+        ? autoResolutionText
+        : (() => {
+            const opt = (QUALITY_OPTIONS[qualityIdx] || QUALITY_OPTIONS[0]).toUpperCase();
+            if (opt.includes('1080')) return '1080p · Full HD';
+            if (opt.includes('720')) return '720p · Alta definición (HD)';
+            if (opt.includes('480')) return '480p · Definición estándar (SD)';
+            return opt;
+          })()
     }
   ];
   const hasTrailer = Boolean(currentItem.trailerUrl || (currentItem as any).trailer);
@@ -565,8 +608,21 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   const currentRange = currentEpIdx >= 0 ? Math.floor(currentEpIdx / EP_RANGE) : -1;
   // Only what the portal sends about the title
   const genres = currentItem.genres && currentItem.genres.length ? currentItem.genres : [];
-  const score = currentItem.score && currentItem.score !== '0' ? currentItem.score : '';
-  const year = currentItem.year && currentItem.year !== '—' ? currentItem.year : '';
+  const score = currentItem.score && currentItem.score !== '0' && currentItem.score !== '—' ? currentItem.score : '';
+  const year = (currentItem.year && currentItem.year !== '—' ? currentItem.year : '') || cachedMeta?.year || '';
+  const knownDuration = (currentItem.duration && currentItem.duration !== '—' ? currentItem.duration : '') || cachedMeta?.duration || '';
+  const durationLabel = isSeries
+    ? (seasons.length > 0 ? `${seasons.length} Temporada${seasons.length > 1 ? 's' : ''}` : '')
+    : (knownDuration ? (formatDuration(knownDuration) || knownDuration) : '');
+  const hasCC = Boolean((media && media.subtitles && media.subtitles.length > 0) || (currentItem as any).moreSubtitle || cachedMeta?.hasCC);
+  const actorsStr = currentItem.actors && currentItem.actors !== '—'
+    ? currentItem.actors.split(',').slice(0, 3).map(s => s.trim()).filter(Boolean).join(', ')
+    : (persons.actors.length
+      ? persons.actors.slice(0, 3).map(a => a.name).join(', ')
+      : (cachedMeta?.actors ? cachedMeta.actors.split(',').slice(0, 3).map(s => s.trim()).filter(Boolean).join(', ') : ''));
+  const directorStr = currentItem.director && currentItem.director !== '—'
+    ? currentItem.director
+    : (persons.directors.length ? persons.directors.slice(0, 2).map(d => d.name).join(', ') : (cachedMeta?.director || ''));
 
   return (
     <div className="vod-detail-screen" ref={rootScrollRef}>
@@ -590,65 +646,101 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
 
       {/* Main Metadata Section */}
       <main className="vod-detail-main">
-        <div className="vod-detail-header-block">
-          <h1 className="vod-detail-title">{currentItem.title}</h1>
+        {/* Same block as the home hero (.home-showcase): fixed height, text and buttons at its bottom */}
+        <div className="vod-detail-hero">
+        <div className="vod-detail-hero-row">
+          <div className="vod-detail-header-block">
+            <h1 className="vod-detail-title">{currentItem.title}</h1>
 
-          {/* Badges / Rating Row */}
-          <div className="vod-detail-badges-row">
-            {score && <span className="badge-rating-star">★ {score}</span>}
-            {year && <span className="badge-meta">{year}</span>}
-            {isSeries
-              ? seasons.length > 0 && <span className="badge-meta">{`${seasons.length} Temporada${seasons.length > 1 ? 's' : ''}`}</span>
-              : currentItem.duration && <span className="badge-meta">{formatDuration(currentItem.duration) || currentItem.duration}</span>}
-          </div>
-
-          {/* Genre Chips */}
-          <div className="vod-detail-genres-row">
-            {genres.map((g, idx) => (
-              <span key={idx} className="vod-genre-chip">
-                {g}
-              </span>
-            ))}
-          </div>
-
-          {/* Synopsis */}
-          {currentItem.synopsis && (
-            <p className="vod-detail-synopsis">
-              {currentItem.synopsis.length <= 210
-                ? currentItem.synopsis
-                : `${currentItem.synopsis.slice(0, 210).trim()}… `}
-              {currentItem.synopsis.length > 210 && (
-                <button
-                  type="button"
-                  className={`vod-synopsis-more-btn ${focus.area === 'synopsis' ? 'is-focused' : ''}`}
-                  onClick={() => {
-                    if (onOpenSynopsisModal) onOpenSynopsisModal();
-                    else setLocalSynopsisModal(true);
-                  }}
-                >
-                  Ver más
-                </button>
-              )}
-            </p>
-          )}
-
-          {/* Director and cast as text only when there are no cast cards below ("Reparto y Equipo"), and only
-              what the portal gives (no made-up names) */}
-          {effectiveCast.length === 0 && (currentItem.director || currentItem.actors) && (
-            <div className="vod-detail-crew-row">
-              {currentItem.director && (
+            {/* Apple TV Line 1: Type · Genres */}
+            <div className="hero-type-genres">
+              <span>{isSeries ? 'Programa de TV' : 'Película'}</span>
+              {genres.length > 0 ? (
+                genres.slice(0, 3).map((g, idx) => (
+                  <React.Fragment key={idx}>
+                    <span className="hero-meta-sep">·</span>
+                    <span>{g}</span>
+                  </React.Fragment>
+                ))
+              ) : isLoading ? (
                 <>
-                  <span className="crew-label">Director:</span>
-                  <span className="crew-value">{currentItem.director}</span>
+                  <span className="hero-meta-sep">·</span>
+                  <span className="vod-skel-pill" style={{ width: 68 }} />
+                  <span className="vod-skel-pill" style={{ width: 82 }} />
+                </>
+              ) : null}
+            </div>
+
+            {/* Apple TV Line 2: Compact Synopsis + MÁS pill */}
+            {currentItem.synopsis ? (
+              <p className="vod-detail-synopsis">
+                {currentItem.synopsis.length <= 185
+                  ? currentItem.synopsis
+                  : `${currentItem.synopsis.slice(0, 185).trim()}… `}
+                {currentItem.synopsis.length > 185 && (
+                  <button
+                    type="button"
+                    className={`vod-synopsis-more-btn ${focus.area === 'synopsis' ? 'is-focused' : ''}`}
+                    onClick={() => {
+                      if (onOpenSynopsisModal) onOpenSynopsisModal();
+                      else setLocalSynopsisModal(true);
+                    }}
+                  >
+                    MÁS
+                  </button>
+                )}
+              </p>
+            ) : isLoading ? (
+              <div className="vod-skel-synopsis">
+                <span className="vod-skel-line" style={{ width: '90%' }} />
+                <span className="vod-skel-line" style={{ width: '64%' }} />
+              </div>
+            ) : null}
+
+            {/* Apple TV Line 3: Year · Duration/Seasons · ★ Score · Technical Badges */}
+            <div className="vod-detail-badges-row">
+              {year && <span className="badge-meta">{year}</span>}
+              {year && durationLabel && <span className="hero-meta-sep">·</span>}
+              {durationLabel && <span className="badge-meta">{durationLabel}</span>}
+              {score && (
+                <>
+                  {(year || durationLabel) && <span className="hero-meta-sep">·</span>}
+                  <span className="badge-rating-star">★ {score}</span>
                 </>
               )}
-              {currentItem.director && currentItem.actors && <span className="crew-divider">·</span>}
-              {currentItem.actors && (
-                <>
-                  <span className="crew-label">Reparto:</span>
-                  <span className="crew-value">{currentItem.actors}</span>
-                </>
+              {isLoading && !year && !durationLabel && !score && (
+                <span className="vod-skel-pill" style={{ width: 130 }} />
               )}
+              {detailQualityTag ? (
+                <span className={`hero-solid-badge ${detailQualityTag === '4K' ? 'is-4k' : ''}`}>
+                  {detailQualityTag}
+                </span>
+              ) : (isLoading || mediaLoading) ? (
+                <span className="vod-skel-badge" />
+              ) : null}
+              {hasCC && <span className="hero-outline-badge">CC</span>}
+            </div>
+          </div>
+
+          {/* Right-side Cast & Director block (Apple TV+ style) */}
+          {(actorsStr || directorStr || isLoading) && (
+            <div className="vod-detail-hero-credits">
+              {actorsStr ? (
+                <div className="showcase-credit-line">
+                  <span className="credit-label">Reparto</span>{' '}
+                  <span className="credit-value">{actorsStr}</span>
+                </div>
+              ) : isLoading ? (
+                <span className="vod-skel-line" style={{ width: 220, marginLeft: 'auto' }} />
+              ) : null}
+              {directorStr ? (
+                <div className="showcase-credit-line">
+                  <span className="credit-label">Director</span>{' '}
+                  <span className="credit-value">{directorStr}</span>
+                </div>
+              ) : isLoading ? (
+                <span className="vod-skel-line" style={{ width: 160, marginLeft: 'auto' }} />
+              ) : null}
             </div>
           )}
         </div>
@@ -658,20 +750,21 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
         <div className="vod-detail-actions-row vod-actions-main">
           <div className="vod-main-btn-container">
             <button
-              className={`vod-main-btn is-primary ${focus.area === 'actions' ? 'is-focused' : ''}`}
+              className={`vod-main-btn is-primary ${resume.remainingText ? 'has-progress' : ''} ${focus.area === 'actions' ? 'is-focused' : ''}`}
               onClick={() => onPlay(currentItem, resume.episode)}
             >
               <span className="vod-main-icon">▶</span>
-              <span className="vod-main-label">{resume.label}</span>
+              {resume.remainingText ? (
+                <span className="hero-btn-progress-wrap">
+                  <span className="hero-btn-progress-track">
+                    <span className="hero-btn-progress-fill" style={{ width: `${Math.min(100, Math.max(8, resume.progressPercent ?? 0))}%` }} />
+                  </span>
+                  <span className="vod-main-label">{resume.remainingText}</span>
+                </span>
+              ) : (
+                <span className="vod-main-label">{resume.label}</span>
+              )}
             </button>
-            {resume.remainingText && (
-              <div className="vod-resume-meta">
-                <div className="vod-resume-track">
-                  <div className="vod-resume-fill" style={{ width: `${resume.progressPercent ?? 0}%` }} />
-                </div>
-                <span className="vod-resume-text">{resume.remainingText}</span>
-              </div>
-            )}
           </div>
           {quickItems.map((q, i) => {
             const focused = (focus.area === 'quick' && focus.quickIndex === i) || (q === 'settings' && focus.area === 'audioModal');
@@ -778,6 +871,7 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
               </button>
             );
           })}
+        </div>
         </div>
 
         {/* Series Section: Seasons Selector + Episodes Slider */}

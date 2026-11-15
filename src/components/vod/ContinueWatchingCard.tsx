@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { HistoryItem } from '../../types/history';
 import { isImagePrecached, markImageLoaded, markImageFailed } from '../../lib/imageCache';
 import { useCardImage } from '../../lib/useCardImage';
+import { formatQualityTag, firstQuality } from '../../lib/subtitles';
+import { useTitleMeta } from '../../lib/titleMetaCache';
 
 interface ContinueWatchingCardProps {
   item: HistoryItem;
@@ -51,6 +53,9 @@ const ContinueWatchingCardComponent: React.FC<ContinueWatchingCardProps> = ({
     ? `T1:E${item.episodeNumber}`
     : 'Continuar';
 
+  const cachedMeta = useTitleMeta(item.id);
+  const qualityTag = formatQualityTag(firstQuality(cachedMeta?.qualities, cachedMeta?.quality));
+
   const infoText = `${episodeBadge} · ${remainingMin} min restantes`;
 
   return (
@@ -76,9 +81,11 @@ const ContinueWatchingCardComponent: React.FC<ContinueWatchingCardProps> = ({
             alt=""
           />
         )}
-        <div className="poster-brand-badge">
-          <span>tv</span>
-        </div>
+        {qualityTag && (
+          <div className={`poster-quality-badge ${qualityTag === '4K' ? 'is-4k' : ''}`}>
+            {qualityTag}
+          </div>
+        )}
         <div className="cw-bottom-gradient">
           <div className="cw-title-row">{item.title || 'Contenido'}</div>
           <div className="cw-footer-row">

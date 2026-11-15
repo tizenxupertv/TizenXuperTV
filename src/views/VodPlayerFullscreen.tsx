@@ -11,7 +11,6 @@ import { createSeekHold, formatSkip } from '../lib/seekAccel';
 import { buildVodPlaylist, fileAudioLanguages, indexDuration, mseHlsConfig, mseNetworkAction, mseSourceAt, mseSourceCount, mseUnsupportedReason, wantedAudioIndex, MSE_PLAYLIST_URL } from '../lib/vodMseEngine';
 import { friendlyPortalError } from '../lib/portalErrors';
 import { settingsService, QUALITY_OPTIONS } from '../services/settingsService';
-import { deliveredQualities, trackForQuality } from '../lib/titleOptions';
 import {
   SubtitleTrack,
   SubtitleCue,
@@ -19,8 +18,11 @@ import {
   sameLanguage,
   PREF_LANG_CODES,
   loadSubtitle,
-  cueAt
+  cueAt,
+  formatAudioTrackList,
+  formatResolutionBadge
 } from '../lib/subtitles';
+import { setCachedTitleMeta } from '../lib/titleMetaCache';
 
 interface VodPlayerFullscreenProps {
   item: VodItem;
@@ -201,11 +203,35 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const mseRetryAtRef = useRef(0);
   /** Audio language picked in this player among the ones inside the file ('' = the profile preference) */
   const fileAudioRef = useRef('');
+  /** Specific stream index of the audio chosen inside the file (-1 = use profile preference) */
+  const fileAudioIndexRef = useRef(-1);
   /** Which of the file's audios MSE plays (0: the first one) */
   const mseAudioIndexRef = useRef(0);
   const [avMode, setAvMode] = useState(false);
 
   // Audio / subtitles chosen from the player menus (bottom-right buttons)
+  const [portalVariants, setPortalVariants] = useState<Array<{
+    index: number; quality: string; codec: string; format: string; audio: string;
+  }>>([]);
+  const [activePortalIndex, setActivePortalIndex] = useState(-1);
+  const [isManualQuality, setIsManualQuality] = useState(false);
+  const [videoDimensions, setVideoDimensions] = useState('');
+  useEffect(() => {
+    setIsManualQuality(false);
+    setVideoDimensions('');
+    fileAudioIndexRef.current = -1;
+    fileAudioRef.current = '';
+    const timer = window.setInterval(() => {
+      const video = videoRef.current;
+      const dimensions = useAvPlayRef.current
+        ? window.XuperAVPlay?.getCurrentStreamQuality?.()
+        : { width: video?.videoWidth, height: video?.videoHeight };
+      if (dimensions?.width && dimensions.height) {
+        setVideoDimensions(`${dimensions.width}×${dimensions.height}`);
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [item.id, episode]);
   const [quality, setQuality] = useState<string>('');
   const [subtitles, setSubtitles] = useState<SubtitleTrack[]>([]);
   const [subIndex, setSubIndex] = useState<number>(-1);
@@ -213,8 +239,6 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
   const [audioOptions, setAudioOptions] = useState<AudioOption[]>([]);
   // The portal tracks of the title (audio and quality of each) and the one playing: the Resolución menu offers only
   // the qualities they have
-  const [portalTracks, setPortalTracks] = useState<Array<{ index: number; audio: string; quality: string }>>([]);
-  const portalTrackNowRef = useRef(0);
   const [audioIndex, setAudioIndex] = useState<number>(0);
   // Remote focus: center transport (default), controls row, timeline scrubber, or episode drawer
   const [focusArea, setFocusArea] = useState<'center' | 'controls' | 'timeline' | 'episodes'>('center');
@@ -363,7 +387,8 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         const seasonId = episode ? String(seriesId || item.id || '') : null;
         if (window.MagisClient && typeof window.MagisClient.resolve === 'function' && contentId) {
           console.log('[VodPlayer] Proactively renewing SLB token before 17-minute expiration...');
-          window.MagisClient.resolve(contentId, seasonId, { trackIndex: portalTrackRef.current }, (err: any, newRes: any) => {
+          const episodeNumber = episode?.number ?? episode?.seriesNumber;
+          window.MagisClient.resolve(contentId, seasonId, { trackIndex: portalTrackRef.current, episodeNumber }, (err: any, newRes: any) => {
             if (!err && newRes && newRes.url) {
               lastTokenRenewalRef.current = Date.now();
               window.__xuperCurrentStreamMeta = {
@@ -534,15 +559,22 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         // Several audio languages inside the same stream: switch them without reloading
         try {
           const info = window.webapis.avplay.getTotalTrackInfo() || [];
-          const audios: AudioOption[] = [];
+          const rawLangs: { index: number; lang: string }[] = [];
           for (let i = 0; i < info.length; i++) {
             if (info[i].type !== 'AUDIO') continue;
             let lang = '';
             try { lang = JSON.parse(info[i].extra_info || '{}').language || ''; } catch (e) {}
-            audios.push({ kind: 'avplay', index: info[i].index, label: languageName(lang) });
+            rawLangs.push({ index: info[i].index, lang });
           }
-          console.log('[VodPlayer] AVPlay audio tracks', audios.length);
-          if (audios.length > 1) {
+          console.log('[VodPlayer] AVPlay audio tracks', rawLangs.length);
+          if (rawLangs.length > 1) {
+            const formatted = formatAudioTrackList(rawLangs.map(r => r.lang));
+            const audios: AudioOption[] = rawLangs.map((r, i) => ({
+              kind: 'avplay',
+              index: r.index,
+              label: formatted[i]?.label || languageName(r.lang),
+              lang: r.lang
+            }));
             setAudioOptions(audios);
             const prefCode = fileAudioRef.current || PREF_LANG_CODES[settingsService.get().audio] || 'es';
             const wantedIdx = Math.max(0, audios.findIndex(a => sameLanguage(a.label, prefCode)));
@@ -566,6 +598,10 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       video.onwaiting = () => isCurrent() && setIsBuffering(true);
       video.onplaying = () => {
         console.log('[VodPlayer] AVPlay playing');
+        const activeVideo = window.XuperAVPlay?.getCurrentStreamQuality?.();
+        if (activeVideo?.width && activeVideo.height) {
+          console.info('[VodPlayer] AVPlay resolution', activeVideo.width, activeVideo.height);
+        }
         if (!isCurrent()) return;
         const timing = startTimingRef.current;
         if (timing && !timing.logged && !isTrailer) {
@@ -609,6 +645,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
     const contentId = String(episode?.id || item.id || '');
     const seasonId = episode ? String(seriesId || item.id || '') : null;
+    const episodeNumber = episode?.number ?? episode?.seriesNumber;
 
     if (!window.MagisClient || typeof window.MagisClient.resolve !== 'function' || !contentId) {
       failed('El portal no está disponible.');
@@ -641,29 +678,101 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
           const num = parseInt(s, 10);
           return isNaN(num) ? 0 : num;
         };
+        const isTv = hasAvPlay();
+        const codecRank = (c: string): number => {
+          const s = String(c || '').toUpperCase();
+          if (isTv) {
+            if (s.includes('265') || s.includes('HEVC')) return 2;
+            if (s.includes('264') || s.includes('AVC')) return 1;
+          } else {
+            // In browser without TV hardware AVPlay: prioritize H.264 / MP4 for native compatibility
+            if (s.includes('264') || s.includes('AVC')) return 2;
+            if (s.includes('265') || s.includes('HEVC')) return 1;
+          }
+          return 0;
+        };
         const byAudio = tracksNow.filter(t => sameLanguage(t.audio, prefCode));
-        const pool = byAudio.length ? byAudio : (qWanted ? tracksNow : []);
+        const pool = byAudio.length ? byAudio : tracksNow;
         // In "Auto" quality: prioritize the highest resolution track (1080p / 4K) in the chosen audio
-        const poolSorted = pool.slice().sort((a, b) => qualityRank(b.quality) - qualityRank(a.quality));
+        const poolSorted = pool.slice().sort(
+          (a, b) => (qualityRank(b.quality) - qualityRank(a.quality)) || (codecRank(b.codec) - codecRank(a.codec))
+        );
         const wanted = pool.length
-          ? (qWanted && pool.find(t => String(t.quality || '').indexOf(qWanted) !== -1)) || poolSorted[0] || pool[0]
+          ? (qWanted && poolSorted.find(t => String(t.quality || '').indexOf(qWanted) !== -1)) || poolSorted[0] || pool[0]
           : undefined;
         if (wanted && wanted.index !== res.trackIndex) {
           console.log('[VodPlayer] preferred audio', prefCode, '-> track', wanted.index, 'instead of', res.trackIndex);
           portalTrackRef.current = wanted.index;
-          window.MagisClient.resolve(contentId, seasonId, { trackIndex: wanted.index }, onResolved);
+          window.MagisClient.resolve(contentId, seasonId, { trackIndex: wanted.index, episodeNumber }, onResolved);
           return;
         }
       }
       setStreamInfoText([res.quality, res.codec, res.audio && `Audio: ${res.audio}`].filter(Boolean).join(' · '));
       setQuality(res.quality || '');
+      if (res.quality || (Array.isArray(res.tracks) && res.tracks.length)) {
+        const trackQualities = Array.isArray(res.tracks)
+          ? res.tracks.map((t: any) => t?.quality).filter(Boolean)
+          : undefined;
+        setCachedTitleMeta(item.id, { quality: res.quality || undefined, qualities: trackQualities });
+      }
       const tracks: any[] = Array.isArray(res.tracks) ? res.tracks : [];
-      setPortalTracks(tracks.map(t => ({ index: t.index, audio: String(t.audio || ''), quality: String(t.quality || '') })));
-      portalTrackNowRef.current = typeof res.trackIndex === 'number' ? res.trackIndex : 0;
-      setAudioOptions(tracks.length > 0
-        ? tracks.map(t => ({ kind: 'portal' as const, index: t.index, label: languageName(t.audio) + (tracks.length > 1 && t.quality ? ` · ${t.quality}` : '') }))
-        : [{ kind: 'portal', index: 0, label: languageName(res.audio) }]);
-      setAudioIndex(Math.max(0, tracks.findIndex(t => t.index === res.trackIndex)));
+      portalTrackRef.current = res.trackIndex;
+      console.info('[VodPlayer] Portal variants', {
+        selected: res.trackIndex,
+        variants: tracks.map(({ index, quality, codec, format }) => ({ index, quality, codec, format }))
+      });
+      setPortalVariants(tracks);
+      setActivePortalIndex(res.trackIndex);
+
+      // Build distinct, user-friendly audio options
+      const fileLangsRaw = fileAudioLanguages(res.audio);
+      let initialAudioOptions: AudioOption[] = [];
+
+      if (fileLangsRaw.length > 1) {
+        const formatted = formatAudioTrackList(fileLangsRaw);
+        initialAudioOptions = formatted.map((item, idx) => ({
+          kind: 'file' as const,
+          index: idx,
+          label: item.label,
+          lang: item.lang
+        }));
+      } else if (tracks.length > 0) {
+        const distinctAudios = new Set(tracks.map(t => String(t.audio || '').trim()));
+        if (distinctAudios.size > 1) {
+          const seen = new Set<string>();
+          tracks.forEach(t => {
+            const lbl = languageName(t.audio);
+            if (!seen.has(lbl)) {
+              seen.add(lbl);
+              initialAudioOptions.push({
+                kind: 'portal' as const,
+                index: t.index,
+                label: lbl,
+                lang: t.audio
+              });
+            }
+          });
+        }
+      }
+
+      if (initialAudioOptions.length === 0) {
+        const rawSingle = fileLangsRaw.length ? fileLangsRaw[0] : res.audio;
+        const singleFormatted = formatAudioTrackList([rawSingle])[0]?.label || 'Español';
+        initialAudioOptions = [{ kind: 'portal' as const, index: 0, label: singleFormatted, lang: rawSingle }];
+      }
+
+      setAudioOptions(initialAudioOptions);
+
+      const prefCode = fileAudioRef.current || PREF_LANG_CODES[settingsService.get().audio] || 'es';
+      let activeAudioIdx = 0;
+      if (fileAudioIndexRef.current >= 0 && fileAudioIndexRef.current < initialAudioOptions.length) {
+        activeAudioIdx = fileAudioIndexRef.current;
+      } else {
+        const found = initialAudioOptions.findIndex(o => sameLanguage(o.label, prefCode) || (o.lang && sameLanguage(o.lang, prefCode)));
+        if (found !== -1) activeAudioIdx = found;
+      }
+      setAudioIndex(activeAudioIdx);
+
       const subs: SubtitleTrack[] = Array.isArray(res.subtitles) ? res.subtitles : [];
       setSubtitles(subs);
       if (!subsInitRef.current) {
@@ -679,41 +788,45 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
         ? 'MSE falló en esta reproducción'
         : mseUnsupportedReason(res);
       // The wanted audio may not be the file's first one: MSE is told which one to play (lib/tsAudioSelect.ts)
-      mseAudioIndexRef.current = wantedAudioIndex(res.audio, l => sameLanguage(l, audioWanted));
+      mseAudioIndexRef.current = fileAudioIndexRef.current >= 0
+        ? fileAudioIndexRef.current
+        : activeAudioIdx;
       if (hasAvPlay() && !isTrailer) {
         // Which player and why, for the problem report (the first thing to know when a title misbehaves)
         const resumeAt = startedAtRef.current > 5 ? ` · retomar en ${Math.round(startedAtRef.current)} s` : '';
         logPlayback({ kind: 'info', player: 'VOD', detail: `${mseWhyNot ? `motor AVPlay (${mseWhyNot})` : 'motor MSE'}${res.codec ? ` · ${res.codec}` : ''}${resumeAt}` });
       }
-      // Browser development has no AVPlay: the same MSE engine plays the title through the dev server proxy,
-      // which adds the portal headers and passes the byte ranges on
-      const mseInBrowser = !hasAvPlay() && import.meta.env.DEV;
+      // Browser development / preview has no AVPlay: the MSE engine plays through the proxy
+      const isLocal = typeof window !== 'undefined' && (
+        import.meta.env.DEV ||
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname === '0.0.0.0'
+      );
+      const mseInBrowser = !hasAvPlay() && isLocal;
       if ((hasAvPlay() || mseInBrowser) && !isTrailer && !mseWhyNot) {
         // Indexed .ts on a TV with MSE: pieces by byte range, instant seeks inside the buffer
         // After a CDN failed in this player: the same title from the next one (fresh links from the portal)
         if (mseCdnRef.current > 0) res = mseSourceAt(res, mseCdnRef.current) || res;
         if (mseInBrowser) res = viaDevProxy(res);
         window.__xuperCurrentStreamMeta = { ...res, contentId, seasonId, trackIndex: portalTrackRef.current, startedAt: Date.now() };
-        // The audios inside the file are the menu: choosing another one reopens the title on it, at the same position
-        const fileLangs: AudioOption[] = [];
-        fileAudioLanguages(res.audio).forEach((lang, i) => {
-          const label = languageName(lang);
-          if (!fileLangs.some(o => o.label === label)) fileLangs.push({ kind: 'file', index: i, label, lang });
-        });
-        if (tracks.length <= 1 && fileLangs.length > 1) {
-          setAudioOptions(fileLangs);
-          const playing = languageName(fileAudioLanguages(res.audio)[mseAudioIndexRef.current]);
-          setAudioIndex(Math.max(0, fileLangs.findIndex(o => o.label === playing)));
-        }
         setMseRes(res);
       } else if (hasAvPlay()) {
         playOnTv(res);
       } else if (res.mime === 'video/mp2t' || /\.ts(\?|$)/i.test(res.url)) {
-        // Desktop Chrome cannot play MPEG-TS files; the TV plays them with AVPlay
+        // Desktop Chrome cannot play MPEG-TS files without MSE;
+        // switch to an MP4 track if one exists in variants
+        const playableTrack = tracks.find(t => t.format === 'mp4' || /264|AVC/i.test(t.codec));
+        if (playableTrack && playableTrack.index !== res.trackIndex) {
+          console.log('[VodPlayer] Browser switching to compatible MP4/H264 track', playableTrack.index);
+          portalTrackRef.current = playableTrack.index;
+          window.MagisClient.resolve(contentId, seasonId, { trackIndex: playableTrack.index, episodeNumber }, onResolved);
+          return;
+        }
         setIsBuffering(false);
         setError('Este video (.ts) solo se reproduce en la TV. En el navegador no es compatible.');
       } else {
-        // Desktop browser (development): the dev server proxy adds the portal headers
+        // Desktop browser (development / preview): the dev server proxy adds the portal headers
         const auth = res.headers?.['Content-Auth'] || '';
         const license = res.headers?.['Content-License'] || '';
         setBrowserUrl(`/stream-proxy?url=${encodeURIComponent(res.url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}`);
@@ -721,7 +834,7 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     };
 
     startTimingRef.current = { at: Date.now(), resolvedAt: 0, logged: false };
-    window.MagisClient.resolve(contentId, seasonId, { trackIndex: portalTrackRef.current }, onResolved);
+    window.MagisClient.resolve(contentId, seasonId, { trackIndex: portalTrackRef.current, episodeNumber }, onResolved);
 
     return () => {
       requestIdRef.current++;
@@ -1170,10 +1283,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
       try { window.webapis.avplay.setSelectTrack('AUDIO', opt.index); } catch (e) {}
     } else if (opt.kind === 'file') {
       // Another audio of the same file: the title reopens on it at the same position
+      fileAudioIndexRef.current = opt.index;
       fileAudioRef.current = opt.lang || '';
       setRetryTick(t => t + 1);
     } else {
       // Another audio language is another file on the portal: reload it at the same position
+      fileAudioIndexRef.current = -1;
       portalTrackRef.current = opt.index;
       setRetryTick(t => t + 1);
     }
@@ -1234,27 +1349,128 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     close: true,
     apply: () => chooseAudio(r.value)
   }));
-  // Only the qualities the title delivers (lib/titleOptions.ts): the catalog declares more than the portal serves
-  const qualityMenuRows: SettingRow[] = deliveredQualities(portalTracks.map(t => t.quality), QUALITY_OPTIONS).map(i => {
-    const qLabel = i === 0 ? 'Auto' : QUALITY_OPTIONS[i].toUpperCase();
-    return {
+  const activeTrack = portalVariants.find(t => t.index === activePortalIndex);
+  const getQualityBadge = (q: string): string => {
+    const s = String(q || '').toLowerCase();
+    if (s.includes('4k') || s.includes('2160')) return '4K Ultra HD';
+    if (s.includes('1080')) return '1080p Full HD';
+    if (s.includes('720')) return '720p HD';
+    if (s.includes('480')) return '480p SD';
+    return q.toUpperCase();
+  };
+  const autoResolutionLabel = activeTrack
+    ? `Automático (${getQualityBadge(activeTrack.quality)})`
+    : 'Automático (Recomendado)';
+
+  const qualityMenuRows: SettingRow[] = [];
+  if (portalVariants.length && !isTrailer) {
+    qualityMenuRows.push({
       group: 'Resolución',
-      label: qLabel,
-      selected: (settings.quality || 0) === i,
+      label: autoResolutionLabel,
+      selected: !isManualQuality,
       close: true,
       apply: () => {
-        settingsService.set({ quality: i });
-        // A track in that quality reloads the title on it, at the same position
-        const next = i === 0 ? -1 : trackForQuality(portalTracks, portalTrackNowRef.current, QUALITY_OPTIONS[i]);
-        if (next !== -1) {
-          audioPrefAppliedRef.current = true;
-          portalTrackRef.current = next;
-          setRetryTick(t => t + 1);
-        }
-        flash(`Resolución: ${qLabel}`);
+        setIsManualQuality(false);
+        settingsService.set({ quality: 0 });
+        audioPrefAppliedRef.current = false;
+        setRetryTick(t => t + 1);
+        flash(`Resolución: ${autoResolutionLabel}`);
       }
+    });
+
+    // Group variants by normalized resolution so user sees a clean, single option per resolution
+    const isTv = hasAvPlay();
+    const codecRank = (c: string): number => {
+      const s = String(c || '').toUpperCase();
+      if (isTv) {
+        if (s.includes('265') || s.includes('HEVC')) return 2;
+        if (s.includes('264') || s.includes('AVC')) return 1;
+      } else {
+        if (s.includes('264') || s.includes('AVC')) return 2;
+        if (s.includes('265') || s.includes('HEVC')) return 1;
+      }
+      return 0;
     };
-  });
+
+    const normalizeQualityKey = (q: string): string => {
+      const s = String(q || '').toLowerCase();
+      if (s.includes('4k') || s.includes('2160')) return '4k';
+      if (s.includes('1080')) return '1080p';
+      if (s.includes('720')) return '720p';
+      if (s.includes('480')) return '480p';
+      return s;
+    };
+
+    const groupsMap = new Map<string, {
+      key: string;
+      label: string;
+      tracks: typeof portalVariants;
+      bestTrack: typeof portalVariants[0];
+    }>();
+
+    portalVariants.forEach(track => {
+      const key = normalizeQualityKey(track.quality);
+      let group = groupsMap.get(key);
+      if (!group) {
+        let label = track.quality ? track.quality.toUpperCase() : 'Estándar';
+        if (key === '4k') label = '4K · Ultra HD';
+        else if (key === '1080p') label = '1080p · Full HD';
+        else if (key === '720p') label = '720p · Alta definición (HD)';
+        else if (key === '480p') label = '480p · Definición estándar (SD)';
+
+        group = {
+          key,
+          label,
+          tracks: [],
+          bestTrack: track
+        };
+        groupsMap.set(key, group);
+      }
+      group.tracks.push(track);
+      if (codecRank(track.codec) > codecRank(group.bestTrack.codec)) {
+        group.bestTrack = track;
+      }
+    });
+
+    const order = ['4k', '1080p', '720p', '480p'];
+    const sortedGroups = Array.from(groupsMap.values()).sort((a, b) => {
+      const idxA = order.indexOf(a.key);
+      const idxB = order.indexOf(b.key);
+      return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
+    });
+
+    sortedGroups.forEach(group => {
+      const isSelected = isManualQuality && group.tracks.some(t => t.index === activePortalIndex);
+      qualityMenuRows.push({
+        group: 'Resolución',
+        label: group.label,
+        selected: isSelected,
+        close: true,
+        apply: () => {
+          setIsManualQuality(true);
+          if (activePortalIndex === group.bestTrack.index) return;
+          audioPrefAppliedRef.current = true;
+          portalTrackRef.current = group.bestTrack.index;
+          setRetryTick(t => t + 1);
+          flash(`Resolución: ${group.label}`);
+        }
+      });
+    });
+  } else {
+    QUALITY_OPTIONS.forEach((opt, i) => {
+      const qLabel = i === 0 ? 'Automático' : opt.toUpperCase();
+      qualityMenuRows.push({
+        group: 'Resolución',
+        label: qLabel,
+        selected: (settings.quality || 0) === i,
+        close: true,
+        apply: () => {
+          settingsService.set({ quality: i });
+          flash(`Resolución: ${qLabel}`);
+        }
+      });
+    });
+  }
   const settingRows: SettingRow[] = [
     ...DISPLAY_LABELS.map((label, i) => ({
       group: 'Formato de pantalla',
@@ -1812,7 +2028,9 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
 
       {/* Apple TV style overlay */}
       <div className={`vp-osd ${osdVisible ? 'is-visible' : ''}`}>
-        {quality && !isTrailer && <div className="vp-badge">{quality}</div>}
+        {formatResolutionBadge(videoDimensions, quality) && !isTrailer && (
+          <div className="vp-badge">{formatResolutionBadge(videoDimensions, quality)}</div>
+        )}
 
         {/* With an error the center is the error box: OK retries and Back leaves, the round buttons would only cover it */}
         {!error && <div className="vp-center">

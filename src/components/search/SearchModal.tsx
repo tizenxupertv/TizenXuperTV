@@ -13,6 +13,8 @@ import { allChannelEntries } from '../../lib/channelCache';
 import { enrichSearchItems, collectPosterAlternates } from '../../lib/searchArtwork';
 import { markImageFailed } from '../../lib/imageCache';
 import { ScreenHeader, CloseIcon } from '../layout/Header';
+import { formatQualityTag, firstQuality } from '../../lib/subtitles';
+import { getCachedTitleMeta } from '../../lib/titleMetaCache';
 
 export interface SearchModalProps {
   isOpen: boolean;
@@ -792,6 +794,15 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                         }}
                       />
                       <div className="svc-kind-badge">{item.kind === 'serie' ? 'Serie' : 'Película'}</div>
+                      {(() => {
+                        const cachedMeta = getCachedTitleMeta(item.id);
+                        const qTag = formatQualityTag(firstQuality(item.qualities, item.quality, cachedMeta?.qualities, cachedMeta?.quality), item.category);
+                        return qTag ? (
+                          <div className={`poster-quality-badge ${qTag === '4K' ? 'is-4k' : ''}`}>
+                            {qTag}
+                          </div>
+                        ) : null;
+                      })()}
                       <div className="poster-bottom-vignette">
                         <div className="poster-vignette-title">{item.title || 'Sin título'}</div>
                         <div className="poster-vignette-genre">{cardMeta(item)}</div>
