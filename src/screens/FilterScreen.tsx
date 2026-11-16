@@ -416,7 +416,12 @@ export const FilterScreen: React.FC<FilterScreenProps> = ({
           ) : (
             <div className="filter-grid-clip">
               <div className="browse-cards-grid filter-grid" ref={gridTrackRef}>
-                {firstRow > 0 && <div style={{ gridColumn: '1 / -1', height: firstRow * ROW_HEIGHT - GAP_Y }} />}
+                {firstRow > 0 && (
+                  <div
+                    className="browse-grid-spacer"
+                    style={{ gridColumn: '1 / -1', width: '100%', flex: '0 0 100%', height: firstRow * ROW_HEIGHT - GAP_Y }}
+                  />
+                )}
                 {windowItems.map((item, i) => {
                   const idx = firstRow * COLS + i;
                   return (

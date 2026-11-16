@@ -6524,29 +6524,74 @@ html.xuper-live-avplay .live-grand-preview-box .live-preview-video {
 .browse-cards-grid {
   display: flex;
   flex-wrap: wrap;
+  grid-gap: 16px;
   gap: 16px;
   padding-bottom: 60px;
   box-sizing: border-box;
 }
 .browse-cards-grid > * {
-  flex: 1 1 calc(14.285% - 14px);
+  flex: 0 0 calc((100% - 96px) / 7) !important;
+  width: calc((100% - 96px) / 7) !important;
+  max-width: calc((100% - 96px) / 7) !important;
   min-width: 0;
+  box-sizing: border-box;
 }
+
+.browse-cards-grid .poster-card.apple-poster-card {
+  flex: 0 0 calc((100% - 96px) / 7) !important;
+  width: calc((100% - 96px) / 7) !important;
+  max-width: calc((100% - 96px) / 7) !important;
+  height: 250px !important;
+  transition: none !important;
+}
+
+.browse-cards-grid > .browse-grid-spacer {
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+}
+
 @supports (display: grid) {
   .browse-cards-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
+    grid-gap: 16px;
+    gap: 16px;
   }
-  .browse-cards-grid > * {
-    flex: none;
+  .browse-cards-grid > *,
+  .browse-cards-grid .poster-card.apple-poster-card {
+    flex: none !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+  .filter-grid.browse-cards-grid {
+    grid-template-columns: repeat(6, 1fr);
   }
 }
 
-.browse-cards-grid .poster-card.apple-poster-card {
-  width: 100% !important;
-  flex: none !important;
-  height: 250px !important;
-  transition: none !important;
+html.no-flexgap .browse-cards-grid > * {
+  margin-right: 16px;
+  margin-bottom: 16px;
+}
+html.no-flexgap .browse-cards-grid > *:nth-child(7n) {
+  margin-right: 0;
+}
+html.no-flexgap .filter-grid.browse-cards-grid > *:nth-child(7n) {
+  margin-right: 16px;
+}
+html.no-flexgap .filter-grid.browse-cards-grid > *:nth-child(6n) {
+  margin-right: 0;
+}
+html.no-flexgap .browse-cards-grid > .browse-grid-spacer {
+  margin-right: 0 !important;
+  margin-bottom: 0 !important;
+}
+@supports (display: grid) {
+  html.no-flexgap .browse-cards-grid > * {
+    margin-right: 0;
+    margin-bottom: 0;
+  }
 }
 
 .browse-empty-category {
@@ -7398,8 +7443,22 @@ html.xuper-live-avplay .live-grand-preview-box .live-preview-video {
 .filter-grid .svc-poster-wrap { aspect-ratio: auto; flex: 1; min-height: 0; }
 
 .filter-grid.browse-cards-grid {
-  grid-template-columns: repeat(6, 1fr);
   will-change: transform;
+}
+.filter-grid.browse-cards-grid > * {
+  flex: 0 0 calc((100% - 80px) / 6) !important;
+  width: calc((100% - 80px) / 6) !important;
+  max-width: calc((100% - 80px) / 6) !important;
+}
+@supports (display: grid) {
+  .filter-grid.browse-cards-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+  .filter-grid.browse-cards-grid > * {
+    flex: none !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
 }
 
 /* Screen header (catalog, filters, search, detail, profile): the home bar with a title instead of tabs */
