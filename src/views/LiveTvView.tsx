@@ -548,8 +548,10 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
 
   // Load Categories on mount (and when the +18 section or a free IPTV list is turned on/off) and notify parent
   const [adultTick, setAdultTick] = useState(0);
+  const [recentsTick, setRecentsTick] = useState(0);
   useEffect(() => parentalService.subscribe(() => setAdultTick(t => t + 1)), []);
   useEffect(() => iptvService.subscribe(() => setAdultTick(t => t + 1)), []);
+  useEffect(() => recentChannelsService.subscribe(() => setRecentsTick(t => t + 1)), []);
   useEffect(() => {
     if (window.MagisClient && typeof window.MagisClient.getLiveCategories === 'function') {
       window.MagisClient.getLiveCategories((err: any, cats: any[]) => {
@@ -1024,7 +1026,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
       setIsLoadingChannels(false);
     }
     return () => { alive = false; };
-  }, [activeCategory, favMap, categories, lockTick]);
+  }, [activeCategory, favMap, categories, lockTick, recentsTick]);
 
   // When channels load and nothing is tuned yet (first run), tune the saved channel or the first one.
   // A channel that is already tuned keeps playing even if it belongs to another category:

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ACCOUNT_API, ACCOUNT_APIS, ACCOUNT_API_RELAY, ACCOUNT_API_FALLBACK, createAccountService, formatCode, isNewerVersion } from '../src/services/accountService.ts';
+import { ACCOUNT_API, ACCOUNT_APIS, ACCOUNT_API_RELAY, ACCOUNT_API_FALLBACK, createAccountService, formatCode, isNewerVersion, tvHardwareId } from '../src/services/accountService.ts';
 
 interface Sent { url: string; init: RequestInit }
 
@@ -191,8 +191,51 @@ test('sign-in falls back through endpoints when earlier ones are blocked', async
   assert.equal(new URL(sent[2].url).origin, ACCOUNT_API_FALLBACK);
 });
 
-test('a 502 from the fallback also moves on to the next endpoint', async () => {
-  const { service, sent } = harness([new Error('blocked'), { status: 502 }, { status: 200, body: LOGIN }], ACCOUNT_APIS);
+test('a 500 or 502 from the fallback also moves on to the next endpoint', async () => {
+  const { service, sent } = harness([new Error('blocked'), { status: 500 }, { status: 200, body: LOGIN }], ACCOUNT_APIS);
   await service.startLogin();
   assert.equal(sent.length, 3);
+});
+
+test('hardwareId uses permanent Tizen DUID over random generation', async () => {
+  const data = new Map<string, string>();
+  const sent: Sent[] = [];
+  const service = createAccountService({
+    storage: () => ({
+      getItem: k => data.get(k) ?? null,
+      setItem: (k, v) => { data.set(k, v); },
+      removeItem: k => { data.delete(k); }
+    }),
+    fetchFn: async (url, init) => {
+      sent.push({ url, init });
+      return new Response(JSON.stringify(LOGIN), { status: 200 });
+    },
+    now: () => 1_000_000,
+    device: () => ({ version: '1.18.2', model: 'UN55MU6300' }),
+    hardwareId: () => 'SAMSUNG_DUID_0123456789ABCDEF',
+    randomBytes: n => new Uint8Array(n).fill(171),
+  });
+
+  await service.startLogin();
+  assert.equal(sent.length, 1);
+  const sentBody = body(sent[0]);
+  assert.equal(sentBody.deviceId, 'SAMSUNG_DUID_0123456789ABCDEF');
+  assert.equal(data.get('xuper_device_id_v1'), 'SAMSUNG_DUID_0123456789ABCDEF');
+});
+
+test('tvHardwareId extracts and sanitizes duid from webapis.productinfo', () => {
+  const prevWindow = (globalThis as any).window;
+  try {
+    (globalThis as any).window = {
+      webapis: {
+        productinfo: {
+          getDuid: () => ' 0Z8D3C-XYZ_9999$$  '
+        }
+      }
+    };
+    const id = tvHardwareId();
+    assert.equal(id, '0Z8D3C-XYZ_9999');
+  } finally {
+    (globalThis as any).window = prevWindow;
+  }
 });

@@ -139,7 +139,18 @@ const HeroShowcaseComponent: React.FC<HeroShowcaseProps> = ({
             onClick={() => onToggleFav(item)}
             title={isFavorite ? 'En Mi Lista' : 'Añadir a Mi Lista'}
           >
-            {isFavorite ? '✓' : '＋'}
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {isFavorite ? <path d="M5 12.5l4.5 4.5L19 7.5" /> : <path d="M12 5v14M5 12h14" />}
+            </svg>
           </button>
         </div>
       </div>

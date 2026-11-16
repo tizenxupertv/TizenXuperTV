@@ -77,6 +77,8 @@ export interface AccountDeps {
   /** App version and TV model sent to the server */
   device: () => { version: string; model: string };
   randomBytes: (n: number) => Uint8Array;
+  /** Optional hardware-backed device identifier (e.g. Samsung DUID) */
+  hardwareId?: () => string | null;
   /** Custom endpoint list; defaults to ACCOUNT_APIS in browsers */
   endpoints?: string[];
 }
@@ -109,8 +111,13 @@ export function createAccountService(deps: AccountDeps) {
     }
   }
 
-  /** Random id of this installation (not the TV's hardware id) */
+  /** Stable hardware ID when on Tizen, or saved random ID in storage, fallback to new random ID */
   function deviceId(): string {
+    const hw = deps.hardwareId ? deps.hardwareId() : null;
+    if (hw && /^[A-Za-z0-9_-]{8,64}$/.test(hw)) {
+      write(DEVICE_KEY, hw);
+      return hw;
+    }
     const saved = read(DEVICE_KEY);
     if (saved && /^[A-Za-z0-9_-]{8,64}$/.test(saved)) return saved;
     const id = Array.from(deps.randomBytes(16), b => b.toString(16).padStart(2, '0')).join('');
@@ -134,7 +141,7 @@ export function createAccountService(deps: AccountDeps) {
           signal: ctrl ? ctrl.signal : undefined
         });
         // A transient 5xx: try the next address, when there is one
-        if (i < endpoints.length - 1 && (res.status === 502 || res.status === 503 || res.status === 504)) {
+        if (i < endpoints.length - 1 && res.status >= 500 && res.status < 600) {
           console.warn(`[account] ${endpoint}${path} returned ${res.status}, trying fallback...`);
           continue;
         }
@@ -360,10 +367,26 @@ function tvModel(): string {
   return [model, tizen && `Tizen ${tizen}`].filter(Boolean).join(' · ');
 }
 
+/** Hardware DUID from Samsung Tizen productinfo; null outside a TV or if call throws */
+export function tvHardwareId(): string | null {
+  try {
+    const w = typeof window !== 'undefined' ? (window as any) : null;
+    if (w && w.webapis && w.webapis.productinfo && typeof w.webapis.productinfo.getDuid === 'function') {
+      const duid = String(w.webapis.productinfo.getDuid() || '').trim();
+      const clean = duid.replace(/[^A-Za-z0-9_-]/g, '');
+      if (clean.length >= 8) {
+        return clean.slice(0, 64);
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
 export const accountService = createAccountService({
   storage: () => window.localStorage,
   fetchFn: (url, init) => fetch(url, init),
   now: () => Date.now(),
+  hardwareId: tvHardwareId,
   device: () => ({ version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev', model: tvModel() }),
   randomBytes: n => {
     try {

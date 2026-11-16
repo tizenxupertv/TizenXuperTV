@@ -672,6 +672,9 @@ export const LoginScreen: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }
                 )}
               </div>
               <div className="tg-login-report-info">
+                <div className="tg-login-report-alert">
+                  ⚠️ <b>Este código NO inicia sesión</b>: es únicamente para reportar problemas técnicos a soporte. Para iniciar sesión, pulsa <b>Cerrar</b> y luego <b>Reintentar</b>.
+                </div>
                 <div className="tg-login-report-steps">
                   <div><b>1.</b> Escanea el código con la cámara del teléfono.</div>
                   <div><b>2.</b> Se abre nuestro bot de Telegram: toca <b>Iniciar</b>.</div>
