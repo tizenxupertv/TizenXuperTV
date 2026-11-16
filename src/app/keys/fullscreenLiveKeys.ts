@@ -248,17 +248,10 @@ export function handleFullscreenLiveKeys(key: TvKey, ctx: FullscreenLiveKeysCtx,
     }
   }
 
-  // Back key
+  // Back key: exit fullscreen immediately (matching VOD and Sports player behavior)
   if (key === 'back' || key === 'stop') {
-    if (fullscreenFocusBtn !== 'none') {
-      setFullscreenFocusBtn('none');
-      return true;
-    }
-    if (showFullscreenOsd) {
-      setShowFullscreenOsd(false);
-      setFullscreenFocusBtn('none');
-      return true;
-    }
+    setShowFullscreenOsd(false);
+    setFullscreenFocusBtn('none');
     setIsFullscreenLive(false);
     playerService.exitFullscreen();
     return true;
