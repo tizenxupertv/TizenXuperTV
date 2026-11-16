@@ -153,20 +153,20 @@ export const UpdateNotice: React.FC<{ info: UpdateInfo; current: string; cleanIn
           <h1 className="upd-notice-title">Ya salió TizenXuper TV {info.version}</h1>
           <p className="upd-notice-lead">
             {cleanInstall
-              ? `Tienes la ${current}. Esta versión cambia archivos base de la app y no puede instalarse sola: instálala encima de la que tienes.`
+              ? `Tienes la ${current}. Esta versión renueva la base interna de la app y requiere instalar el archivo nuevo. Tus datos y perfiles están a salvo en la nube.`
               : `Tienes la ${current}. Actualízala para tener las últimas mejoras y correcciones.`}
           </p>
           {cleanInstall ? (
             <div className="upd-notice-steps">
               <div className="upd-notice-step"><span className="tg-login-num">1</span><span>Descarga <b>TizenXuperTV.wgt</b> de esta versión del bot de Telegram (<b>Última versión</b>)</span></div>
-              <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Instálalo <b>encima</b> de la que tienes, con la app TizenXuper TV para Android o con Apps2Samsung. <b>No la desinstales</b>: desinstalar borra tu lista, tu historial y tus perfiles</span></div>
-              <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Tu lista, tus canales favoritos, tus perfiles y tu sesión se conservan</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Instálalo con la app para Android o con Apps2Samsung. Si te pide desinstalar la versión previa, hazlo con tranquilidad: tu perfil y favoritos están respaldados en la nube</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Al abrirla y escanear el código QR con el bot, tu lista, tus canales favoritos y tus perfiles se restauran automáticamente</span></div>
             </div>
           ) : (
             <div className="upd-notice-steps">
               <div className="upd-notice-step"><span className="tg-login-num">1</span><span>Descarga <b>TizenXuperTV.wgt</b> del bot de Telegram (<b>Última versión</b>)</span></div>
-              <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Instálalo con Apps2Samsung encima de la que tienes</span></div>
-              <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Tu lista, tus canales favoritos y tu sesión se conservan</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">2</span><span>Instálalo con la app para Android o con Apps2Samsung</span></div>
+              <div className="upd-notice-step"><span className="tg-login-num">3</span><span>Tu lista, tus canales favoritos, tus perfiles y tu sesión se conservan</span></div>
             </div>
           )}
           <div className="upd-notice-ok">
