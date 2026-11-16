@@ -195,3 +195,21 @@ test('catalogService: getFilteredPage for adult root tags items restricted and m
   assert.equal(historyService.isRestricted(page.items[0]), true);
 });
 
+test('BrowseScreen & FilterScreen: css fallback rules enforce 7-col and 6-col widths in flexbox without grid', async () => {
+  const fs = await import('node:fs');
+  const css = fs.readFileSync('src/styles/index.css', 'utf-8');
+
+  // Verify flex fallback does not give cards 100% width outside @supports (display: grid)
+  assert.match(css, /\.browse-cards-grid > \*\s*\{\s*flex:\s*0 0 calc\(\(100% - 96px\) \/ 7\)/);
+  assert.match(css, /\.browse-cards-grid \.poster-card\.apple-poster-card\s*\{\s*flex:\s*0 0 calc\(\(100% - 96px\) \/ 7\)/);
+
+  // Verify FilterScreen 6-column flex fallback
+  assert.match(css, /\.filter-grid\.browse-cards-grid > \*\s*\{\s*flex:\s*0 0 calc\(\(100% - 80px\) \/ 6\)/);
+
+  // Verify virtual scroll spacer handles 100% width in flex
+  assert.match(css, /\.browse-cards-grid > \.browse-grid-spacer\s*\{\s*flex:\s*0 0 100%/);
+
+  // Verify no-flexgap margins
+  assert.match(css, /html\.no-flexgap \.browse-cards-grid > \*\s*\{\s*margin-right:\s*16px/);
+});
+

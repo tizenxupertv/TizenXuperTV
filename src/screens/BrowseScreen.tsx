@@ -664,8 +664,12 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
     if (area === 'cats') {
       if (key === 'up') {
-        if (catIndex === 0) setArea('search');
-        else selectEntry(catIndex - 1);
+        if (catIndex === 0) {
+          setArea('search');
+          setHeadBtn(0);
+        } else {
+          selectEntry(catIndex - 1);
+        }
       } else if (key === 'down') {
         if (catIndex < entries.length - 1) selectEntry(catIndex + 1);
       } else if (key === 'right' || key === 'enter') {
@@ -689,8 +693,12 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
       } else if (key === 'right') {
         if (gridIndex % COLS !== COLS - 1 && gridIndex + 1 < total) setGridIndex(i => i + 1);
       } else if (key === 'up') {
-        if (gridIndex < COLS) setArea('cats');
-        else setGridIndex(i => i - COLS);
+        if (gridIndex < COLS) {
+          setArea('search');
+          setHeadBtn(gridIndex >= Math.floor(COLS / 2) && onOpenFilter ? 1 : 0);
+        } else {
+          setGridIndex(i => i - COLS);
+        }
       } else if (key === 'down') {
         // Into the last, shorter row: land on its last card
         const lastRowStart = Math.floor((total - 1) / COLS) * COLS;
@@ -713,10 +721,23 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
 
     if (area === 'search') {
       // Header buttons: Buscar (0) | Filtrar (1)
-      if (key === 'down') setArea('cats');
-      else if (key === 'left') setHeadBtn(0);
-      else if (key === 'right' && onOpenFilter) setHeadBtn(1);
-      else if (key === 'enter') {
+      if (key === 'down') {
+        if (gridItems.length > 0) {
+          setArea('grid');
+          const targetCol = headBtn === 1 && onOpenFilter ? Math.min(COLS - 1, gridItems.length - 1) : 0;
+          setGridIndex(targetCol);
+        } else {
+          setArea('cats');
+        }
+      } else if (key === 'left') {
+        if (headBtn > 0) {
+          setHeadBtn(0);
+        } else {
+          setArea('cats');
+        }
+      } else if (key === 'right') {
+        if (headBtn === 0 && onOpenFilter) setHeadBtn(1);
+      } else if (key === 'enter') {
         if (headBtn === 1 && onOpenFilter) onOpenFilter();
         else if (onOpenSearch) onOpenSearch();
       }
@@ -808,7 +829,10 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
             <div className="browse-cards-grid-track" ref={gridTrackRef}>
               <div className="browse-cards-grid">
                 {firstRow > 0 && (
-                  <div style={{ gridColumn: '1 / -1', height: firstRow * ROW_HEIGHT - GAP_Y }} />
+                  <div
+                    className="browse-grid-spacer"
+                    style={{ gridColumn: '1 / -1', width: '100%', flex: '0 0 100%', height: firstRow * ROW_HEIGHT - GAP_Y }}
+                  />
                 )}
                 {windowItems.map((item, i) => {
                   const idx = firstRow * COLS + i;
