@@ -52,9 +52,13 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
         if (onLoadedRef.current) onLoadedRef.current(catalog);
       }).catch(() => {
         if (cancelled) return;
-        setCatalogError(true);
-        setCatalogLoading(false);
         attempt += 1;
+        // Don't panic the user on transient initial network hiccups:
+        // Keep showing the loading state and only surface the error toast after sustained failure.
+        if (attempt >= 2) {
+          setCatalogError(true);
+          setCatalogLoading(false);
+        }
         retryTimer = setTimeout(load, catalogRetryDelayMs(attempt));
       });
     };
