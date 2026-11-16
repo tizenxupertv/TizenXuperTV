@@ -8412,6 +8412,8 @@ html.xuper-live-avplay .live-grand-preview-box .live-preview-video {
 .tg-login-report-qr { padding: 12px; border-radius: 16px; background: #ffffff; line-height: 0; flex-shrink: 0; }
 .tg-login-report-wait { width: 230px; height: 230px; display: flex; align-items: center; justify-content: center; color: #0f1422; }
 .tg-login-report-info { min-width: 0; flex: 1; }
+.tg-login-report-alert { margin-bottom: 14px; padding: 10px 14px; border-radius: 12px; background: rgba(251, 146, 60, 0.15); border: 1px solid rgba(251, 146, 60, 0.4); color: #fdba74; font-size: 15px; line-height: 1.5; }
+.tg-login-report-alert b { color: #ffffff; }
 .tg-login-report-steps { font-size: 17px; line-height: 1.7; color: #e2e8f0; }
 .tg-login-report-data { margin-top: 18px; padding: 14px 18px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); font-size: 15px; line-height: 1.7; color: var(--text-muted); }
 .tg-login-report-data b { color: #ffffff; }
