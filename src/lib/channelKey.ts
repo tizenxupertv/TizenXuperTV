@@ -1,4 +1,4 @@
-import { LiveChannel } from '../types/channel';
+import type { LiveChannel } from '../types/channel.ts';
 
 const EMPTY = ['', 'undefined', 'null', '0'];
 

@@ -7,6 +7,7 @@ import { getChannelEntry } from '../lib/channelCache';
 import { channelKey, cleanFavMap, isSameChannel, normalizeChannel, normalizeChannels } from '../lib/channelKey';
 import { pk } from '../lib/localProfiles';
 import { resumeLiveAtStart } from '../lib/resumeAfterUpdate';
+import { recentChannelsService } from '../services/recentChannelsService';
 
 /** Live TV state: categories, channels, tuned channel, favorites and the fullscreen player/drawer */
 export function useLiveTv() {
@@ -66,6 +67,7 @@ export function useLiveTv() {
   useEffect(() => {
     if (!tunedLiveChannel) return;
     try { localStorage.setItem(pk('xuper_last_live_ch'), JSON.stringify(tunedLiveChannel)); } catch {}
+    recentChannelsService.addRecentChannel(tunedLiveChannel);
   }, [tunedLiveChannel]);
 
   const [liveFavMap, setLiveFavMap] = useState<Record<string, boolean>>(() => {

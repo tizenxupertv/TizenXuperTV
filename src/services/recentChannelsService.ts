@@ -1,12 +1,13 @@
-import { LiveChannel } from '../types/channel';
-import { pk } from '../lib/localProfiles';
-import { isAdultLabel } from '../lib/catalogOrganizer';
-import { readStoredJson } from '../lib/storedJson';
-import { saveItem } from '../lib/safeStorage';
+import type { LiveChannel } from '../types/channel.ts';
+import { pk } from '../lib/localProfiles.ts';
+import { isAdultLabel } from '../lib/catalogOrganizer.ts';
+import { readStoredJson } from '../lib/storedJson.ts';
+import { saveItem } from '../lib/safeStorage.ts';
+import { isSameChannel } from '../lib/channelKey.ts';
 
 const MAX_RECENTS = 20;
 
-class RecentChannelsService {
+export class RecentChannelsService {
   private memoryCache: LiveChannel[] | null = null;
   private listeners: Array<() => void> = [];
 
@@ -18,27 +19,30 @@ class RecentChannelsService {
     if (this.memoryCache) return this.memoryCache;
     const key = this.storageKey();
     const stored = readStoredJson<LiveChannel[]>(key);
-    this.memoryCache = Array.isArray(stored) ? stored : [];
+    this.memoryCache = Array.isArray(stored) ? stored.filter(Boolean) : [];
     return this.memoryCache;
   }
 
   public addRecentChannel(channel: LiveChannel | null | undefined): void {
-    if (!channel || !channel.id) return;
+    if (!channel || (!channel.id && !channel.code)) return;
     // Do not record adult/restricted channels in history
     if (isAdultLabel(channel.name || '') || isAdultLabel(channel.categoryName || '')) return;
 
-    const current = this.getRecentChannels().filter(c => c && c.id !== channel.id && c.code !== channel.code);
+    const current = this.getRecentChannels().filter(c => c && !isSameChannel(c, channel));
     const updated = [channel, ...current].slice(0, MAX_RECENTS);
     this.memoryCache = updated;
     saveItem(this.storageKey(), JSON.stringify(updated));
     this.notify();
   }
 
-  public getPreviousChannel(currentChannelId?: string | number): LiveChannel | null {
+  public getPreviousChannel(currentChannel?: Partial<LiveChannel> | string | number | null): LiveChannel | null {
     const list = this.getRecentChannels();
     if (!list.length) return null;
-    if (!currentChannelId) return list[0] || null;
-    const found = list.find(c => c && c.id !== currentChannelId);
+    if (!currentChannel) return list[0] || null;
+    const isTarget = typeof currentChannel === 'object'
+      ? (c: LiveChannel) => isSameChannel(c, currentChannel)
+      : (c: LiveChannel) => String(c.id) === String(currentChannel) || String(c.code) === String(currentChannel);
+    const found = list.find(c => c && !isTarget(c));
     return found || null;
   }
 
