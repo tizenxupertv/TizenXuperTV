@@ -191,8 +191,8 @@ test('sign-in falls back through endpoints when earlier ones are blocked', async
   assert.equal(new URL(sent[2].url).origin, ACCOUNT_API_FALLBACK);
 });
 
-test('a 502 from the fallback also moves on to the next endpoint', async () => {
-  const { service, sent } = harness([new Error('blocked'), { status: 502 }, { status: 200, body: LOGIN }], ACCOUNT_APIS);
+test('a 500 or 502 from the fallback also moves on to the next endpoint', async () => {
+  const { service, sent } = harness([new Error('blocked'), { status: 500 }, { status: 200, body: LOGIN }], ACCOUNT_APIS);
   await service.startLogin();
   assert.equal(sent.length, 3);
 });

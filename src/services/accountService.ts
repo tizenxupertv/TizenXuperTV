@@ -141,7 +141,7 @@ export function createAccountService(deps: AccountDeps) {
           signal: ctrl ? ctrl.signal : undefined
         });
         // A transient 5xx: try the next address, when there is one
-        if (i < endpoints.length - 1 && (res.status === 502 || res.status === 503 || res.status === 504)) {
+        if (i < endpoints.length - 1 && res.status >= 500 && res.status < 600) {
           console.warn(`[account] ${endpoint}${path} returned ${res.status}, trying fallback...`);
           continue;
         }
