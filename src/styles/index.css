@@ -913,6 +913,12 @@ html, body {
   contain: layout style paint;
 }
 
+/* One pulse per block, not per element: each animated element is its own GPU layer on the TV */
+.catalog-skeleton,
+.hero-skeleton .showcase-content {
+  animation: vodSkelPulse 1.4s ease-in-out infinite;
+}
+
 .catalog-skeleton {
   pointer-events: none;
 }
@@ -920,7 +926,6 @@ html, body {
 .catalog-skeleton .poster-card.apple-poster-card {
   background: #252932;
   cursor: default;
-  animation: vodSkelPulse 1.4s ease-in-out infinite;
 }
 
 .home-showcase.hero-skeleton {
@@ -935,7 +940,6 @@ html, body {
   border-radius: 10px;
   background: #252932;
   margin-bottom: 14px;
-  animation: vodSkelPulse 1.4s ease-in-out infinite;
 }
 
 .hero-skeleton-meta {
@@ -944,7 +948,6 @@ html, body {
   border-radius: 9999px;
   background: #252932;
   margin-bottom: 14px;
-  animation: vodSkelPulse 1.4s ease-in-out infinite;
 }
 
 .hero-skeleton-line {
@@ -954,7 +957,6 @@ html, body {
   border-radius: 9999px;
   background: rgba(37, 41, 50, 0.9);
   margin-bottom: 8px;
-  animation: vodSkelPulse 1.4s ease-in-out infinite;
 }
 
 .hero-skeleton-line.is-short {
@@ -973,7 +975,6 @@ html, body {
   height: 48px;
   border-radius: 9999px;
   background: #252932;
-  animation: vodSkelPulse 1.4s ease-in-out infinite;
 }
 
 .hero-skeleton-btn-circle {
@@ -981,7 +982,6 @@ html, body {
   height: 48px;
   border-radius: 50%;
   background: #252932;
-  animation: vodSkelPulse 1.4s ease-in-out infinite;
 }
 
 .poster-card.apple-poster-card.is-wide-card {
