@@ -152,7 +152,8 @@ function formatEpisodeDuration(raw: any): string {
 const LIVE_ROOTS = ['featured', 'movies', 'series', 'kids', 'anime', 'free', 'explorar'];
 let liveInFlight: Promise<any[]> | null = null;
 
-const CATALOG_WAIT_MS = 8000;
+// The TV needs a catalog session (up to 12 s) before the portal roots: 8 s cut cold starts off and showed the snapshot
+const CATALOG_WAIT_MS = 25000;
 
 function waitForCatalogRequest<T>(request: Promise<T>, fallback: T): Promise<T> {
   return new Promise(resolve => {
