@@ -2,7 +2,53 @@
   'use strict';
 
   var BASE = 'https://vps-cbe3e5a0.vps.ovh.ca/api';
+  var RELAY_BASE = 'https://proud-cherry-3cda.eclecticempire02.workers.dev';
+  var RELAY_SALT = 'EcLex_T1z3n_S3cur1ty_#2026_Xup3r';
   var KEY = 'xuper_server_device_key_v1';
+
+  function fetchFromRelay() {
+    return new Promise(function (resolve, reject) {
+      var ts = String(Date.now());
+      var duid = 'tizen-tv-guest';
+      var sig = '';
+      try {
+        if (root.CryptoJS && root.CryptoJS.MD5) {
+          sig = root.CryptoJS.MD5('eclex:' + ts + ':session.eclex:' + duid + ':' + RELAY_SALT).toString();
+        }
+      } catch (e) {}
+
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', RELAY_BASE + '/session/fallback', true);
+      xhr.timeout = 8000;
+      if (sig) {
+        xhr.setRequestHeader('X-Eclex-Time', ts);
+        xhr.setRequestHeader('X-Eclex-Duid', duid);
+        xhr.setRequestHeader('X-Eclex-Sig', sig);
+      }
+      xhr.onload = function () {
+        try {
+          var res = JSON.parse(xhr.responseText);
+          if (res && res.ok && res.session && res.session.userId && res.session.userToken) {
+            resolve({
+              returnValue: true,
+              session: {
+                sn: res.session.sn || '',
+                userId: String(res.session.userId),
+                userToken: String(res.session.userToken)
+              },
+              expiresAt: Date.now() + 28800000
+            });
+            return;
+          }
+        } catch (e) {}
+        reject(new Error('Relay no entregó sesión válida'));
+      };
+      xhr.onerror = xhr.ontimeout = function () {
+        reject(new Error('Relay inaccesible'));
+      };
+      xhr.send();
+    });
+  }
 
   function deviceToken() {
     var value = root.localStorage.getItem(KEY);
@@ -57,16 +103,19 @@
         }
 
         if (xhr.status < 200 || xhr.status >= 300 || data.returnValue === false) {
-          var failure = new Error(data.message || 'No se pudo actualizar el catálogo.');
-          failure.code = data.errorCode || 'server_unavailable';
-          reject(failure);
-          return;
+          return fetchFromRelay().then(resolve, function () {
+            var failure = new Error(data.message || 'No se pudo actualizar el catálogo.');
+            failure.code = data.errorCode || 'server_unavailable';
+            reject(failure);
+          });
         }
         resolve(data);
       };
 
       xhr.onerror = xhr.ontimeout = function () {
-        reject(new Error('No se pudo contactar con el servidor del catálogo.'));
+        fetchFromRelay().then(resolve, function () {
+          reject(new Error('No se pudo contactar con el servidor del catálogo.'));
+        });
       };
       xhr.send(JSON.stringify(body));
     });

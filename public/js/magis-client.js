@@ -14,26 +14,60 @@
 
   var KEY_HEX = 'e7af1ed7de1ffddd7bd3fe37ebdffde9ef3fe1ae39edfeb8';
   var HOSTS = [
-    'ftmrmy.jdfey0cd.com',
+    'neqpsx.6dqtl974.com',
+    'lvmcmb.6dqtl974.com',
+    'dqbvvb.wg5h6vjz.com',
     'fuxok.nguvmqhpk.com',
+    'ftmrmy.jdfey0cd.com',
     'eajmnp.hcgv1dt8.com',
     'mptec.dhkrxuzcy.com',
-    'hinumz.a878kkoyc.com',
-    'krdwvd.swcaw7qx.com',
-    'osuhk.m3x8o50te.com',
-    'oogoy.f30c96w8.com'
+    'hinumz.a878kkoyc.com'
   ];
 
   var CLIENT_PROFILES = {
-    // masnew: Perfil estándar para catálogo completo, categorías, sección adultos (+18) y TV en vivo.
+    // masnew: Perfil oficial XuperTvNF / Magis v4.35
     masnew: {
       name: 'masnew',
       portalCode: 'masnew',
       appId: 'com.android.msandroid',
-      apkVersion: '49902',
-      sysVersion: '2025-08-07 05:40:11_36_16_',
+      apkVersion: '49920',
+      sysVersion: '2026-10-21 15:40:39_28_9_4.4.146',
       transportAppId: 'com.android.msandroid',
-      apkVerHeader: '43404',
+      apkVerHeader: '49920',
+      loginType: '2',
+      hardwareInfo: 'amlogic',
+      model: 'S905X3',
+      product: 'franklin',
+      cpu: 'arm64-v8a',
+      sdkVer: 28,
+      reserve1: '4b4d354a69546a7636736d2f73776a2b705834316d3874536576774470327448',
+      liveCodeList: ['masnew_live'],
+      fingerprint: {
+        board: 'franklin',
+        brand: 'Amlogic',
+        cpuAbi: 'arm64-v8a',
+        device: 'franklin',
+        diskInfo: '8GB',
+        display: 'RQ3A.211001.001',
+        fingerprint: 'Amlogic/franklin/franklin:11/RQ3A.211001.001/user:release-keys',
+        hardware: 'amlogic',
+        host: 'abuild',
+        manufacturer: 'Amlogic',
+        ramSize: '4GB',
+        romSize: '8GB',
+        tags: 'release-keys',
+        verId: 'RQ3A.211001.001'
+      }
+    },
+    // mas5: Perfil Smart TV v5.2.0 (com.android.mgstv 50200)
+    mas5: {
+      name: 'mas5',
+      portalCode: 'masnew',
+      appId: 'com.android.mgstv',
+      apkVersion: '50200',
+      sysVersion: '2026-09-01 01:30:00',
+      transportAppId: 'com.android.mgstv',
+      apkVerHeader: '50200',
       loginType: '2',
       hardwareInfo: 'ranchu',
       model: 'sdk_gphone64_arm64',
@@ -92,6 +126,40 @@
         tags: 'release-keys',
         verId: ''
       }
+    },
+    // masnf: Perfil basado en XuperTvNF (com.android.mgstxNF v4.35.1)
+    masnf: {
+      name: 'masnf',
+      portalCode: 'masnew',
+      appId: 'com.android.msandroid',
+      apkVersion: '43501',
+      sysVersion: '2026-09-01 01:30:00',
+      transportAppId: 'com.android.msandroid',
+      apkVerHeader: '49920',
+      loginType: '2',
+      hardwareInfo: 'ranchu',
+      model: 'sdk_gphone64_arm64',
+      product: 'sdk_gphone64_arm64',
+      cpu: 'arm64-v8a',
+      sdkVer: 33,
+      reserve1: '583442714b345572434a4d5769637461545a735936413d3d',
+      liveCodeList: ['masnew_live'],
+      fingerprint: {
+        board: 'goldfish_arm64',
+        brand: 'google',
+        cpuAbi: 'arm64-v8a',
+        device: 'emu64a',
+        diskInfo: '8GB',
+        display: 'sdk_gphone64_arm64',
+        fingerprint: 'google/sdk_gphone64_arm64/emu64a:14/UE1A.230829.036/11228894:user/release-keys',
+        hardware: 'ranchu',
+        host: 'abfarm',
+        manufacturer: 'Google',
+        ramSize: '4GB',
+        romSize: '8GB',
+        tags: 'release-keys',
+        verId: ''
+      }
     }
   };
 
@@ -107,6 +175,22 @@
     return CLIENT_PROFILES[activeProfileName] || CLIENT_PROFILES.masnew;
   }
 
+  function setActiveProfile(name) {
+    if (CLIENT_PROFILES[name]) {
+      activeProfileName = name;
+      var prof = CLIENT_PROFILES[name];
+      PORTAL_CODE = prof.portalCode;
+      APP_ID = prof.appId;
+      APK_VERSION = prof.apkVersion;
+      SPKG_VER = prof.sysVersion;
+      SYS_VERSION = SPKG_VER;
+      APK_TRANSPORT_APP_ID = prof.transportAppId;
+      APK_VER_HEADER = prof.apkVerHeader;
+      console.log('[MagisClient] active profile set to:', activeProfileName, 'appId:', APP_ID, 'apkVer:', APK_VER_HEADER);
+    }
+    return activeProfileName;
+  }
+
   var PORTAL_CODE = CLIENT_PROFILES.masnew.portalCode;
   var APP_ID = CLIENT_PROFILES.masnew.appId;
   var APK_VERSION = CLIENT_PROFILES.masnew.apkVersion;
@@ -118,6 +202,26 @@
   var USER_AGENT = 'okhttp/3.12.12';
   var CONTENT_TYPE = 'application/json;charset=utf-8';
   var SNTOKEN_SALT = 'ntFT65w6itH!lHCPw7D=@qnsFC5adD28';
+  var META_KEY_SALT = '213f24ac-14b7-4c03-a209-383ead1b014f';
+
+  function generateMetaSignature() {
+    var traceId = '';
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      traceId = crypto.randomUUID();
+    } else {
+      traceId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        var r = (Math.random() * 16) | 0;
+        var v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+    }
+    var clientMeta = '';
+    try {
+      clientMeta = CryptoJS.MD5(traceId + META_KEY_SALT).toString();
+    } catch (e) {}
+    return { traceId: traceId, clientMeta: clientMeta };
+  }
+
   var FIXED_RESERVE1 = '583442714b345572434a4d5769637461545a735936413d3d';
   var FIXED_DRM_ID = '0iSGEyv2EqiS/nqI/I3hqdu12irw5Q3/uqrWvRFx9bM=';
   var UA_CDN = 'Ranger/4.9.4-17294ac0';
@@ -326,14 +430,29 @@
     if (!fresh) {
       try { saved = JSON.parse((window.localStorage && localStorage.getItem(DEVICE_IDENTITY_KEY)) || 'null'); } catch (e) {}
     }
-    if (saved && saved.androidId && saved.etheMac) return saved;
+    if (saved && saved.androidId && saved.etheMac && saved.drmId) return saved;
+    // Generate a consistent MAC-based identity (unicast, locally administered)
+    var mac = randomMac();
+    var serial = 'A9' + mac.replace(/:/g, '');
+    // drmId derived from hex seed so it's reproducible per identity but not trivially guessable
+    var seed = randomHex(16);
+    var drmHex = md5(seed + ':drm_v1') + md5(seed + ':drm_v2');  // 32 hex chars
+    var drmId = '';
+    if (typeof btoa === 'function') {
+      try { drmId = btoa(drmHex); } catch (e) { drmId = FIXED_DRM_ID; }
+    } else if (typeof Buffer !== 'undefined') {
+      drmId = Buffer.from(drmHex).toString('base64');
+    } else {
+      drmId = FIXED_DRM_ID;
+    }
     var id = {
-      androidId: randomHex(8),
-      cpuId: randomHex(8),
-      serialNumber: randomHex(8),
-      etheMac: randomMac(),
-      gatewayMac: randomMac(),
-      wifiMac: randomMac()
+      androidId: serial,
+      cpuId: serial,
+      serialNumber: serial,
+      etheMac: mac,
+      gatewayMac: mac,
+      wifiMac: mac,
+      drmId: drmId
     };
     storeSet(DEVICE_IDENTITY_KEY, JSON.stringify(id));
     return id;
@@ -513,18 +632,20 @@
     var prof = profile || resolveProfile();
     return {
       loginType: prof.loginType,
-      appLanguage: 'en',
+      appLanguage: 'es',
       hardwareInfo: prof.hardwareInfo,
       model: prof.model,
       product: prof.product,
       cpu: prof.cpu,
       B29: '',
       reserve1: prof.reserve1 || '',
+      portalCode: prof.portalCode || 'masnew',
       deviceToken: '',
       drmId: '',
       sdkVer: prof.sdkVer,
       apkVersion: prof.apkVersion,
       sysVersion: prof.sysVersion,
+      spkgVer: prof.sysVersion,
       appId: prof.appId,
       sn: session.sn
     };
@@ -613,9 +734,12 @@
       arm();
       xhr.onprogress = arm;
       xhr.onreadystatechange = function () { if (xhr.readyState >= 2) arm(); };
+      var meta = generateMetaSignature();
       try { xhr.setRequestHeader('apk', APK_TRANSPORT_APP_ID); } catch (e) {}
       try { xhr.setRequestHeader('apkVer', APK_VER_HEADER); } catch (e) {}
       try { xhr.setRequestHeader('spkgVer', SPKG_VER); } catch (e) {}
+      try { xhr.setRequestHeader('X-Request-Trace', meta.traceId); } catch (e) {}
+      try { xhr.setRequestHeader('X-Client-Meta', meta.clientMeta); } catch (e) {}
       // Browsers forbid this header. The local development proxy supplies it instead.
       if (!isBrowserEnv) {
         try { xhr.setRequestHeader('User-Agent', USER_AGENT); } catch (e) {}
@@ -822,7 +946,6 @@
     fp.etheMac = identity.etheMac;
     fp.gatewayMac = identity.gatewayMac;
     fp.wifiMac = identity.wifiMac;
-
     function notifyWaiters(err, res) {
       clearTimeout(watchdog);
       sessionStarting = false;
@@ -848,8 +971,11 @@
         authCode: '',
         preCode: '',
         macAddr: identity.etheMac,
-        reserve1: '',
-        openNum: 4,
+        // portalCode MUST be "" (empty) for v8/active — sending "masnew" triggers portal100024
+        portalCode: '',
+        drmId: identity.drmId || FIXED_DRM_ID,
+        reserve1: CLIENT_PROFILES.masnew.reserve1 || FIXED_RESERVE1,
+        openNum: 1,
         channel: 'default',
         matadata: '',
         signdata: ''
@@ -1763,17 +1889,8 @@
             callback(null, channels, hasMore);
           }
 
-          // Try modern v7/getLiveData first (Hydra 6.8.1), fallback to v6/getLiveData
-          if (routeMissing('v7/getLiveData')) {
-            return postHttp('v6/getLiveData', livePayload, handleLiveResponse);
-          }
-          postHttp('v7/getLiveData', livePayload, function (err7, res7) {
-            if (!err7 && res7 && res7.channelList) {
-              return handleLiveResponse(null, res7);
-            }
-            noteRouteFailure('v7/getLiveData', err7);
-            postHttp('v6/getLiveData', livePayload, handleLiveResponse);
-          });
+          // Calls official v6/getLiveData endpoint directly
+          postHttp('v6/getLiveData', livePayload, handleLiveResponse);
         });
       });
     }
@@ -2274,14 +2391,20 @@
     }
 
     ensureSession(function (err) {
-      if (err) return callback(err);
+      if (err) {
+        console.warn('[catalog] session failed', root, err.portalCode || 'no portal code');
+        return callback(err);
+      }
       call('getNextColumns', {
         columnCode: ROOT_CODES[root],
         pageNum: pageNum,
         pageSize: 60,
         version: ''
       }, { low: !!opts.low }, function (cErr, cRes) {
-        if (cErr) return callback(cErr);
+        if (cErr) {
+          console.warn('[catalog] getNextColumns failed', root, cErr.portalCode || 'no portal code');
+          return callback(cErr);
+        }
         var recList = cRes && cRes.recommendList || [];
         var cat = ROOT_CATEGORY[root] || '';
         function rowTitles(assets, rowName) {
@@ -2887,13 +3010,7 @@
     profiles: CLIENT_PROFILES,
     getProfiles: function () { return Object.keys(CLIENT_PROFILES); },
     getActiveProfile: function () { return activeProfileName; },
-    setActiveProfile: function (name) {
-      if (CLIENT_PROFILES[name]) {
-        activeProfileName = name;
-        console.log('[MagisClient] active profile set to:', activeProfileName);
-      }
-      return activeProfileName;
-    },
+    setActiveProfile: setActiveProfile,
     getProfileConfig: function (name) { return CLIENT_PROFILES[name || activeProfileName]; },
     // Nothing running or waiting: background work (title details for a focused card) starts only then
     isIdle: function () { return !session.busy && !queue.length && !lowQueue.length; },

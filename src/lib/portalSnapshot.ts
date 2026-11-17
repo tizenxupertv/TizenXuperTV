@@ -13,10 +13,18 @@ export function ensurePortalSnapshot(): Promise<void> {
       const script = document.createElement('script');
       // Relative to the page, so it comes from the installed package also when the app runs an update bundle
       script.src = 'data/portal.js';
-      script.onload = () => resolve();
-      script.onerror = () => resolve(); // missing or unreadable: callers go on without it
+      const finish = () => {
+        clearTimeout(timer);
+        script.onload = null;
+        script.onerror = null;
+        script.remove();
+        resolve();
+      };
+      const timer = setTimeout(finish, 8000);
+      script.onload = finish;
+      script.onerror = finish;
       document.head.appendChild(script);
-    });
+    }).then(() => { pending = null; });
   }
   return pending;
 }

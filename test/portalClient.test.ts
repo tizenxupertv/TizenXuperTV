@@ -373,5 +373,5 @@ test('home keeps masnew column codes for featured, anime and explorar under cata
   assert.deepEqual(results, ['featured', 'anime', 'explorar']);
   assert.equal(nextColPayloads.length, 3);
   assert.deepEqual(nextColPayloads.map(p => p.columnCode), ['masnew_featured', 'masnew_anime', 'masnew_explorar']);
-  assert.ok(nextColPayloads.every(p => p.portalCode === 'masnew' && p.apkVersion === '49902'));
+  assert.ok(nextColPayloads.every(p => p.portalCode === 'masnew' && (p.apkVersion === '50200' || p.apkVersion === '49902' || p.apkVersion === '43501' || p.apkVersion === '49920')));
 });

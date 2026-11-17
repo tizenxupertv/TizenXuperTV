@@ -5,6 +5,7 @@ import { collectPosterAlternates } from '../lib/searchArtwork.ts';
 import { getCachedTitleMeta, setCachedTitleMeta } from '../lib/titleMetaCache.ts';
 import { historyService } from './historyService.ts';
 import { catalogProvider } from './catalogProvider.ts';
+import { ensurePortalSnapshot } from '../lib/portalSnapshot.ts';
 
 declare global {
   interface Window {
@@ -151,6 +152,19 @@ function formatEpisodeDuration(raw: any): string {
 const LIVE_ROOTS = ['featured', 'movies', 'series', 'kids', 'anime', 'free', 'explorar'];
 let liveInFlight: Promise<any[]> | null = null;
 
+const CATALOG_WAIT_MS = 8000;
+
+function waitForCatalogRequest<T>(request: Promise<T>, fallback: T): Promise<T> {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(fallback), CATALOG_WAIT_MS);
+    const finish = (result: T) => {
+      clearTimeout(timer);
+      resolve(result);
+    };
+    request.then(finish, () => finish(fallback));
+  });
+}
+
 function homeRoot(root: string, low: boolean): Promise<any[]> {
   return catalogProvider.home(root, 1, { low }).then(res => res.items || []);
 }
@@ -173,15 +187,26 @@ function fetchCompositeHome(): Promise<any[]> {
 function fetchLiveCatalog(): Promise<any[]> {
   if (liveInFlight) return liveInFlight;
   const t0 = Date.now();
-  const roots = Promise.all([
+  const roots = waitForCatalogRequest<(any[] | null)[]>(Promise.all([
     ...LIVE_ROOTS.map(root => homeRoot(root, false).catch(() => null)),
     fetchCompositeHome()
-  ]);
-  liveInFlight = roots.then(lists => {
+  ]), []);
+  liveInFlight = roots.then(async lists => {
     const items = ([] as any[]).concat(...lists.map(l => l || []));
     const failed = lists.filter(l => l === null).length;
     console.log(`[catalog] live catalog: ${items.length} items in ${Date.now() - t0} ms${failed ? `, ${failed} roots failed` : ''}`);
-    if (items.length < 100) throw new Error(`live catalog too small (${items.length})`);
+    if (items.length < 100) {
+      // Si la API remota del portal falla o está intermitente, usar el snapshot de respaldo
+      try {
+        await ensurePortalSnapshot();
+        const fallbackItems = (window as any).XUPERTV_PORTAL?.items || [];
+        if (fallbackItems.length >= 100) {
+          console.log(`[catalog] Usando snapshot de catálogo empaquetado: ${fallbackItems.length} items.`);
+          return fallbackItems;
+        }
+      } catch (e) {}
+      throw new Error(`live catalog too small (${items.length})`);
+    }
     return items;
   });
   liveInFlight.then(() => { liveInFlight = null; }, () => { liveInFlight = null; });
@@ -244,7 +269,7 @@ class CatalogService {
 
     const [items, heroByTab] = await Promise.all([
       fetchLiveCatalog(),
-      fetchTabRecommends()
+      waitForCatalogRequest(fetchTabRecommends(), {})
     ]);
     return this.categorize(items.map((item, index) => normalizeItem(item, index)), heroByTab);
   }
