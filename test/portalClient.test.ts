@@ -5,18 +5,53 @@ import { loadPortalClient } from './helpers/portalClient.ts';
 
 const PORTAL_KEY_HEX = 'e7af1ed7de1ffddd7bd3fe37ebdffde9ef3fe1ae39edfeb8';
 
-function decodePortalBody(hex?: string): Record<string, any> | null {
-  if (!hex) return null;
-  let b64 = '';
-  for (let i = 0; i < hex.length; i += 2) {
-    b64 += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16));
+
+const SEC_KEY_HEX = 'd7a09729603a04efbdebfd4dc5ba37f0';
+const SEC_ALPHA = 'jWB7YtC3n9iXbEkUcJl1VxF4STpQoOIaRmh2M-efAgLwPqGr6uyD5vNsdH_Kz0Z8';
+const STD_B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+function b64Map(s: string, from: string, to: string, pad = false): string {
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const idx = from.indexOf(s[i]);
+    out += idx >= 0 ? to[idx] : s[i];
   }
-  const key = CryptoJS.enc.Hex.parse(PORTAL_KEY_HEX);
-  const dec = CryptoJS.TripleDES.decrypt(b64, key, {
-    mode: CryptoJS.mode.ECB,
+  if (pad) { while (out.length % 4) out += '='; }
+  else { out = out.replace(/=+$/, ''); }
+  return out;
+}
+
+function secUnwrap(str: string): string {
+  const b64 = b64Map(String(str).trim(), SEC_ALPHA, STD_B64, true);
+  const key = CryptoJS.enc.Hex.parse(SEC_KEY_HEX);
+  const dec = CryptoJS.AES.decrypt(b64, key, {
+    iv: key,
+    mode: CryptoJS.mode.CBC,
     padding: CryptoJS.pad.Pkcs7
   });
-  return JSON.parse(dec.toString(CryptoJS.enc.Utf8));
+  return dec.toString(CryptoJS.enc.Utf8);
+}
+
+function decodePortalBody(body?: string): Record<string, any> | null {
+  if (!body) return null;
+  try {
+    if (/^[0-9a-fA-F]+$/.test(body)) {
+      let b64 = '';
+      for (let i = 0; i < body.length; i += 2) {
+        b64 += String.fromCharCode(parseInt(body.slice(i, i + 2), 16));
+      }
+      const key = CryptoJS.enc.Hex.parse(PORTAL_KEY_HEX);
+      const dec = CryptoJS.TripleDES.decrypt(b64, key, {
+        mode: CryptoJS.mode.ECB,
+        padding: CryptoJS.pad.Pkcs7
+      });
+      return JSON.parse(dec.toString(CryptoJS.enc.Utf8));
+    }
+    const unwrapped = secUnwrap(body);
+    return JSON.parse(unwrapped);
+  } catch {
+    return null;
+  }
 }
 
 function createMockPortal(startPlayHandler: (payload: Record<string, any>) => any) {

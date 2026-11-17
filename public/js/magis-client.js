@@ -222,6 +222,56 @@
     return { traceId: traceId, clientMeta: clientMeta };
   }
 
+
+  var SEC_KEY_HEX = 'd7a09729603a04efbdebfd4dc5ba37f0';
+  var SEC_ALPHA = 'jWB7YtC3n9iXbEkUcJl1VxF4STpQoOIaRmh2M-efAgLwPqGr6uyD5vNsdH_Kz0Z8';
+  var SEC_S = 'QD3j1DsI6uZvjWDW38Oz1tLQawD45VOr4KC4K3Sv8hq-Qj';
+  var SEC_T = 'Hg6zqHL0i4GivJvSwZcOnoBPAMJJoWuMXkqtQRB5Ctb';
+  var STD_B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+  function b64Map(s, from, to, pad) {
+    var out = '';
+    for (var i = 0; i < s.length; i++) {
+      var idx = from.indexOf(s[i]);
+      out += idx >= 0 ? to[idx] : s[i];
+    }
+    if (pad) { while (out.length % 4) out += '='; }
+    else { out = out.replace(/=+$/, ''); }
+    return out;
+  }
+
+  function secWrap(str) {
+    if (!CryptoJS || !CryptoJS.AES) return str;
+    try {
+      var keyHex = CryptoJS.enc.Hex.parse(SEC_KEY_HEX);
+      var encrypted = CryptoJS.AES.encrypt(str, keyHex, {
+        iv: keyHex,
+        mode: CryptoJS.mode.CBC,
+        padding: CryptoJS.pad.Pkcs7
+      });
+      return b64Map(encrypted.toString(), STD_B64, SEC_ALPHA, false);
+    } catch (e) {
+      return str;
+    }
+  }
+
+  function secUnwrap(str) {
+    if (!CryptoJS || !CryptoJS.AES) return str;
+    try {
+      var b64 = b64Map(str.trim(), SEC_ALPHA, STD_B64, true);
+      var keyHex = CryptoJS.enc.Hex.parse(SEC_KEY_HEX);
+      var decrypted = CryptoJS.AES.decrypt(b64, keyHex, {
+        iv: keyHex,
+        mode: CryptoJS.mode.CBC,
+        padding: CryptoJS.pad.Pkcs7
+      });
+      var out = decrypted.toString(CryptoJS.enc.Utf8);
+      return out || str;
+    } catch (e) {
+      return str;
+    }
+  }
+
   var FIXED_RESERVE1 = '583442714b345572434a4d5769637461545a735936413d3d';
   var FIXED_DRM_ID = '0iSGEyv2EqiS/nqI/I3hqdu12irw5Q3/uqrWvRFx9bM=';
   var UA_CDN = 'Ranger/4.9.4-17294ac0';
@@ -675,9 +725,10 @@
 
   function postHttp(path, payload, done, opts) {
     opts = opts || {};
-    var bodyHex;
+    var payloadStr = JSON.stringify(payload);
+    var bodyToSend;
     try {
-      bodyHex = encryptBody(JSON.stringify(payload));
+      bodyToSend = isBrowserEnv ? encryptBody(payloadStr) : secWrap(payloadStr);
     } catch (e) {
       return done(new Error(path + ': error cifrando cuerpo: ' + e.message));
     }
@@ -705,8 +756,6 @@
 
       var xhr = new XMLHttpRequest();
       xhr.open('POST', url, true);
-      // The limit is 8 s without receiving anything, not 8 s for the whole answer: a ~1 MB answer on a slow
-      // connection was cut at 8 s and asked again from the next host, eight times over, with the queue waiting
       var settled = false;
       var idleTimer = null;
       var hardTimer = null;
@@ -734,29 +783,54 @@
       arm();
       xhr.onprogress = arm;
       xhr.onreadystatechange = function () { if (xhr.readyState >= 2) arm(); };
+
       var meta = generateMetaSignature();
       try { xhr.setRequestHeader('apk', APK_TRANSPORT_APP_ID); } catch (e) {}
       try { xhr.setRequestHeader('apkVer', APK_VER_HEADER); } catch (e) {}
       try { xhr.setRequestHeader('spkgVer', SPKG_VER); } catch (e) {}
       try { xhr.setRequestHeader('X-Request-Trace', meta.traceId); } catch (e) {}
       try { xhr.setRequestHeader('X-Client-Meta', meta.clientMeta); } catch (e) {}
-      // Browsers forbid this header. The local development proxy supplies it instead.
+
       if (!isBrowserEnv) {
         try { xhr.setRequestHeader('User-Agent', USER_AGENT); } catch (e) {}
+        try { xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded'); } catch (e) {}
+        try { xhr.setRequestHeader('Accept', '*/*'); } catch (e) {}
+        // Build secWrap headers Cookie required by direct Magis portal servers
+        var hdrLines = ["apk: " + APK_TRANSPORT_APP_ID, "apkVer: " + APK_VER_HEADER, "spkgVer: " + SPKG_VER, "Content-type: application/json;charset=utf-8", "Cache-Control: no-store", "X-Request-Trace: " + meta.traceId, "X-Client-Meta: " + meta.clientMeta, ""].join(String.fromCharCode(13, 10));
+        var cookieStr = 'd=' + secWrap(hdrLines) + '; s=' + SEC_S + '; t=' + SEC_T;
+        try { xhr.setRequestHeader('Cookie', cookieStr); } catch (e) {}
+      } else {
+        try { xhr.setRequestHeader('Content-Type', CONTENT_TYPE); } catch (e) {}
       }
-      try { xhr.setRequestHeader('Content-Type', CONTENT_TYPE); } catch (e) {}
 
       xhr.onload = function () {
         if (settled || finished) return;
         settled = true;
         disarm();
         if (xhr.status >= 200 && xhr.status < 300) {
+          var respText = xhr.responseText || '';
+          if (!isBrowserEnv && respText) {
+            try {
+              var unwrapped = secUnwrap(respText);
+              if (unwrapped && unwrapped.indexOf('{') >= 0) respText = unwrapped;
+            } catch (e) {}
+          }
           var resp;
           try {
-            resp = JSON.parse(xhr.responseText);
+            resp = JSON.parse(respText);
           } catch (e) {
             return tryHost();
           }
+          // Flatten nested .data object so top-level fields (like snToken, userId) are direct
+          if (resp && resp.returnCode === '0' && resp.data && typeof resp.data === 'object' && !Array.isArray(resp.data)) {
+            var dataObj = resp.data;
+            for (var dk in dataObj) {
+              if (Object.prototype.hasOwnProperty.call(dataObj, dk) && resp[dk] === undefined) {
+                resp[dk] = dataObj[dk];
+              }
+            }
+          }
+
           preferredHost = host;
           var pos = HOSTS.indexOf(host);
           if (pos > 0) {
@@ -781,7 +855,6 @@
               if (finished) return;
               if (dErr) return tryHost();
               finished = true;
-              // Timing per request (red = until the answer arrived, descifrado = worker), debug log
               console.log('[portal] ' + path + ' ' + kb + 'KB red=' + (tNet - tStart) + 'ms descifrado=' + (Date.now() - tNet) + 'ms' + (opts.low ? ' (fondo)' : ''));
               done(null, decData);
             }, !!opts.low);
@@ -810,7 +883,7 @@
         }
         tryHost();
       };
-      xhr.send(bodyHex);
+      xhr.send(bodyToSend);
     }
 
     tryHost();
