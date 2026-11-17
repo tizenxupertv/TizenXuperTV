@@ -410,7 +410,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
     const onKey = (e: KeyboardEvent) => {
       lastKeyAtRef.current = Date.now();
       const k = e.key;
-      const isBack = k === 'Escape' || k === 'Backspace' || e.keyCode === 10009;
+      const isBack = k === 'Escape' || k === 'Backspace' || k === 'Back' || k === 'Return' || e.keyCode === 10009 || e.keyCode === 461;
       if (selected || detailEvent) return;
 
       if (focusArea === 'sidebar') {

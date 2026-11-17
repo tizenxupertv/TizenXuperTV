@@ -426,7 +426,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       if (showMatchModal) return; // MatchDetailModal handles its own keys
       if (Date.now() - openedAtRef.current < 600 && (e.key === 'Enter' || e.key === 'ArrowUp')) return;
 
-      const isBack = e.key === 'Escape' || e.key === 'Backspace' || (e as any).keyCode === 10009;
+      const isBack = e.key === 'Escape' || e.key === 'Backspace' || e.key === 'Back' || e.key === 'Return' || (e as any).keyCode === 10009 || (e as any).keyCode === 461;
 
       // Any key while the next signal is about to be tried: the viewer chooses instead
       if (autoNextTimerRef.current) cancelAutoNext();

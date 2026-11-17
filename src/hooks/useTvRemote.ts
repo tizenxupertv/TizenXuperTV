@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { dropBack } from '../lib/backKey';
+import { dropBack } from '../lib/backKey.ts';
 
 export type TvKey =
   | 'up'
@@ -32,17 +32,15 @@ interface UseTvRemoteOptions {
 // Minimum interval between repeated keydown events (ms) to prevent event-queue saturation on Tizen
 const REPEAT_MIN_INTERVAL_MS = 65;
 
-export function mapKeyCode(code: number): TvKey {
+export function mapKeyCode(code: number, keyStr?: string): TvKey {
+  if (keyStr === 'Back' || keyStr === 'Return' || keyStr === 'Escape') return 'back';
+  if (code === 10009 || code === 27 || code === 461 || code === 8) return 'back';
   switch (code) {
     case 38: return 'up';
     case 40: return 'down';
     case 37: return 'left';
     case 39: return 'right';
     case 13: return 'enter';
-    case 10009:
-    case 27:
-    case 461:
-    case 8: return 'back';
     case 415: return 'play';
     case 19: return 'pause';
     case 10252: return 'playPause';
@@ -99,20 +97,21 @@ export function useTvRemote({ onKey, onKeyUp }: UseTvRemoteOptions) {
         lastRepeatTime = performance.now();
       }
 
-      const key = mapKeyCode(e.keyCode);
+      const key = mapKeyCode(e.keyCode, e.key);
       // One press of Back = one step (lib/backKey.ts): a held Back must not walk out of the app
       // (not while typing: Backspace held in a text field deletes as usual)
       const el = e.target as HTMLElement | null;
       const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
       if (key === 'back' && !typing) {
         const now = performance.now();
-        const drop = dropBack({ repeat: e.repeat || backRepeats, sinceLastMs: now - lastBackAt });
-        lastBackAt = now;
+        const drop = dropBack({ repeat: Boolean(e.repeat || backRepeats), sinceLastMs: now - lastBackAt });
+        backRepeats = false;
         if (drop) {
           e.preventDefault();
           e.stopPropagation();
           return;
         }
+        lastBackAt = now;
       }
       const consumed = onKeyRef.current(key, e);
       if (consumed !== false) {
@@ -123,12 +122,15 @@ export function useTvRemote({ onKey, onKeyUp }: UseTvRemoteOptions) {
 
     // The remote's own Back event, seen before the bridge re-sends it without `repeat`
     function noteRemoteBack(e: KeyboardEvent) {
-      if (e.keyCode === 10009) backRepeats = e.repeat;
+      if (e.keyCode === 10009 || e.key === 'Return') backRepeats = Boolean(e.repeat);
     }
 
     function handleKeyUp(e: KeyboardEvent) {
+      if (e.keyCode === 10009 || e.key === 'Return' || e.key === 'Back' || e.keyCode === 461) {
+        backRepeats = false;
+      }
       if (!onKeyUpRef.current) return;
-      const key = mapKeyCode(e.keyCode);
+      const key = mapKeyCode(e.keyCode, e.key);
       const consumed = onKeyUpRef.current(key, e);
       if (consumed !== false) {
         e.preventDefault();
