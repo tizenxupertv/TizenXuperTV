@@ -79,7 +79,6 @@ export function useTvRemote({ onKey, onKeyUp }: UseTvRemoteOptions) {
   useEffect(() => {
     let lastRepeatTime = 0;
     let lastBackAt = -Infinity;
-    let backRepeats = false;
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.defaultPrevented) return;
@@ -104,8 +103,7 @@ export function useTvRemote({ onKey, onKeyUp }: UseTvRemoteOptions) {
       const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
       if (key === 'back' && !typing) {
         const now = performance.now();
-        const drop = dropBack({ repeat: Boolean(e.repeat || backRepeats), sinceLastMs: now - lastBackAt });
-        backRepeats = false;
+        const drop = dropBack({ repeat: Boolean(e.repeat), sinceLastMs: now - lastBackAt });
         if (drop) {
           e.preventDefault();
           e.stopPropagation();
@@ -120,15 +118,7 @@ export function useTvRemote({ onKey, onKeyUp }: UseTvRemoteOptions) {
       }
     }
 
-    // The remote's own Back event, seen before the bridge re-sends it without `repeat`
-    function noteRemoteBack(e: KeyboardEvent) {
-      if (e.keyCode === 10009 || e.key === 'Return') backRepeats = Boolean(e.repeat);
-    }
-
     function handleKeyUp(e: KeyboardEvent) {
-      if (e.keyCode === 10009 || e.key === 'Return' || e.key === 'Back' || e.keyCode === 461) {
-        backRepeats = false;
-      }
       if (!onKeyUpRef.current) return;
       const key = mapKeyCode(e.keyCode, e.key);
       const consumed = onKeyUpRef.current(key, e);
@@ -138,11 +128,9 @@ export function useTvRemote({ onKey, onKeyUp }: UseTvRemoteOptions) {
       }
     }
 
-    window.addEventListener('keydown', noteRemoteBack, true);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
-      window.removeEventListener('keydown', noteRemoteBack, true);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
