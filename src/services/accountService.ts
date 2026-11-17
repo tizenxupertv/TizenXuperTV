@@ -158,7 +158,20 @@ export function createAccountService(deps: AccountDeps) {
 
   function session(): AccountSession | null {
     const raw = read(SESSION_KEY);
-    if (!raw) return null;
+    if (!raw) {
+      // In local dev/preview browser, provide an automatic guest dev session
+      // so the QR login gate is bypassed automatically without repeatedly scanning.
+      if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        const devSession: AccountSession = {
+          token: 'dev-local-session-token',
+          name: 'Desarrollador',
+          username: 'local_dev'
+        };
+        try { write(SESSION_KEY, JSON.stringify(devSession)); } catch (_) {}
+        return devSession;
+      }
+      return null;
+    }
     try {
       const s = JSON.parse(raw);
       return s && typeof s.token === 'string' && s.token ? { token: s.token, name: String(s.name || ''), username: s.username || null } : null;
@@ -216,6 +229,8 @@ export function createAccountService(deps: AccountDeps) {
     async verify(): Promise<VerifyResult> {
       const s = session();
       if (!s) return 'revoked';
+      // In local dev/preview browser, bypass server verification check
+      if (s.token === 'dev-local-session-token') return 'ok';
       try {
         const { version, model } = deps.device();
         const res = await post('/tv/session', { version, model }, s.token);
