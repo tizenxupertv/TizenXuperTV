@@ -5,7 +5,6 @@ import { collectPosterAlternates } from '../lib/searchArtwork.ts';
 import { getCachedTitleMeta, setCachedTitleMeta } from '../lib/titleMetaCache.ts';
 import { historyService } from './historyService.ts';
 import { catalogProvider } from './catalogProvider.ts';
-import { ensurePortalSnapshot } from '../lib/portalSnapshot.ts';
 
 declare global {
   interface Window {
@@ -192,22 +191,11 @@ function fetchLiveCatalog(): Promise<any[]> {
     ...LIVE_ROOTS.map(root => homeRoot(root, false).catch(() => null)),
     fetchCompositeHome()
   ]), []);
-  liveInFlight = roots.then(async lists => {
+  liveInFlight = roots.then(lists => {
     const items = ([] as any[]).concat(...lists.map(l => l || []));
     const failed = lists.filter(l => l === null).length;
     console.log(`[catalog] live catalog: ${items.length} items in ${Date.now() - t0} ms${failed ? `, ${failed} roots failed` : ''}`);
-    if (items.length < 100) {
-      // Si la API remota del portal falla o está intermitente, usar el snapshot de respaldo
-      try {
-        await ensurePortalSnapshot();
-        const fallbackItems = (window as any).XUPERTV_PORTAL?.items || [];
-        if (fallbackItems.length >= 100) {
-          console.log(`[catalog] Usando snapshot de catálogo empaquetado: ${fallbackItems.length} items.`);
-          return fallbackItems;
-        }
-      } catch (e) {}
-      throw new Error(`live catalog too small (${items.length})`);
-    }
+    if (items.length < 100) throw new Error(`live catalog too small (${items.length})`);
     return items;
   });
   liveInFlight.then(() => { liveInFlight = null; }, () => { liveInFlight = null; });
