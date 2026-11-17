@@ -13,10 +13,8 @@ const SEC_ALPHA = 'jWB7YtC3n9iXbEkUcJl1VxF4STpQoOIaRmh2M-efAgLwPqGr6uyD5vNsdH_Kz
 const SEC_S = 'QD3j1DsI6uZvjWDW38Oz1tLQawD45VOr4KC4K3Sv8hq-Qj';
 const SEC_T = 'Hg6zqHL0i4GivJvSwZcOnoBPAMJJoWuMXkqtQRB5Ctb';
 const SEC_META_SALT = '213f24ac-14b7-4c03-a209-383ead1b014f';
-const RELAY_SALT = 'EcLex_T1z3n_S3cur1ty_#2026_Xup3r';
 const DES3_KEY = Buffer.from('e7af1ed7de1ffddd7bd3fe37ebdffde9ef3fe1ae39edfeb8', 'hex');
 const STD_B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-const RELAY_HOST = 'proud-cherry-3cda.eclecticempire02.workers.dev';
 const PORTAL_HOSTS = ['neqpsx.6dqtl974.com', 'lvmcmb.6dqtl974.com', 'dqbvvb.wg5h6vjz.com'];
 
 function b64Map(s: string, from: string, to: string, pad = false): string {
