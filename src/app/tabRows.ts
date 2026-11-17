@@ -278,11 +278,11 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
         items: movieItems.slice(5, 20)
       });
 
-      const horrorItems = catalogRows['Horror'] || catalogRows['Se acerca Halloween'];
+      const horrorItems = catalogRows['Horror'] || catalogRows['Terror'] || catalogRows['Suspenso'];
       if (horrorItems && horrorItems.length > 0) {
         list.push({
           id: 'horror_movies',
-          title: 'Terror, Suspenso y Halloween',
+          title: 'Terror y Suspenso',
           type: 'vod',
           items: horrorItems
         });
@@ -475,7 +475,7 @@ export function rowHasSeeAll(row: ContentRowDef | undefined): boolean {
 
 // Row title words -> portal genre tag, so "Ver todo" opens already filtered
 const TITLE_TAGS: [RegExp, string][] = [
-  [/terror|miedo|halloween/i, 'Horror'],
+  [/terror|miedo|suspenso/i, 'Horror'],
   [/acci[oó]n/i, 'Action'],
   [/comedia|risa/i, 'Comedy'],
   [/romance|amor/i, 'Romance'],
