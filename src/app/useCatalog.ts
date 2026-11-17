@@ -36,6 +36,13 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let attempt = 0;
+    const isMockFailure = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('test') === 'catalog-failure';
+    if (isMockFailure) {
+      setCatalogError(true);
+      setCatalogLoading(true);
+      return;
+    }
+
     const load = () => {
       catalogService.fetchCatalog().then(catalog => {
         if (cancelled) return;
