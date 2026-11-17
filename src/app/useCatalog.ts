@@ -57,8 +57,9 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
         // Keep showing the loading state and only surface the error toast after sustained failure.
         if (attempt >= 2) {
           setCatalogError(true);
-          setCatalogLoading(false);
         }
+        // Keep skeleton visible while retrying so screen doesn't go pitch black
+        setCatalogLoading(true);
         retryTimer = setTimeout(load, catalogRetryDelayMs(attempt));
       });
     };

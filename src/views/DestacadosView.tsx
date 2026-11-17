@@ -219,16 +219,28 @@ export const DestacadosView: React.FC<DestacadosViewProps> = ({
         );
       })}
       {catalogLoading && (
-        <div className="content-section catalog-skeleton" role="status">
-          <div className="section-header">
-            <div className="section-title">Cargando catálogo…</div>
+        <>
+          <div className="content-section catalog-skeleton" role="status">
+            <div className="section-header">
+              <div className="hero-skeleton-title" style={{ width: 220, height: 26, marginBottom: 8 }} />
+            </div>
+            <div className="content-slider" aria-hidden="true">
+              {Array.from({ length: 8 }, (_, index) => (
+                <div key={index} className="poster-card apple-poster-card" />
+              ))}
+            </div>
           </div>
-          <div className="content-slider" aria-hidden="true">
-            {Array.from({ length: 10 }, (_, index) => (
-              <div key={index} className="poster-card apple-poster-card" />
-            ))}
+          <div className="content-section catalog-skeleton" role="status">
+            <div className="section-header">
+              <div className="hero-skeleton-title" style={{ width: 280, height: 26, marginBottom: 8 }} />
+            </div>
+            <div className="content-slider" aria-hidden="true">
+              {Array.from({ length: 8 }, (_, index) => (
+                <div key={index} className="poster-card apple-poster-card" />
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
       </div>
     </div>
