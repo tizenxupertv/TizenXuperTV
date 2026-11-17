@@ -30,24 +30,28 @@ export function useScreenKeys(onKey: (key: TvKey, e: KeyboardEvent) => void, act
       }
 
       let key: TvKey = 'other';
-      switch (e.keyCode) {
-        case 38: key = 'up'; break;
-        case 40: key = 'down'; break;
-        case 37: key = 'left'; break;
-        case 39: key = 'right'; break;
-        case 13: key = 'enter'; break;
-        case 403: key = 'colorRed'; break;
-        case 404: key = 'colorGreen'; break;
-        case 405: key = 'colorYellow'; break;
-        case 406: key = 'colorBlue'; break;
-        case 10009:
-        case 27:
-        case 461:
-        case 8:
-          key = 'back';
-          break;
-        default:
-          if (!/^[0-9]$/.test(e.key)) return;
+      if (e.key === 'Back' || e.key === 'Return' || e.key === 'Escape') {
+        key = 'back';
+      } else {
+        switch (e.keyCode) {
+          case 38: key = 'up'; break;
+          case 40: key = 'down'; break;
+          case 37: key = 'left'; break;
+          case 39: key = 'right'; break;
+          case 13: key = 'enter'; break;
+          case 403: key = 'colorRed'; break;
+          case 404: key = 'colorGreen'; break;
+          case 405: key = 'colorYellow'; break;
+          case 406: key = 'colorBlue'; break;
+          case 10009:
+          case 27:
+          case 461:
+          case 8:
+            key = 'back';
+            break;
+          default:
+            if (!/^[0-9]$/.test(e.key)) return;
+        }
       }
       e.preventDefault();
       e.stopImmediatePropagation();

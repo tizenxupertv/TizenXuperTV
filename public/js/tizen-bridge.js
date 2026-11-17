@@ -334,10 +334,24 @@
       if (e.keyCode === 10009 || e.key === 'Return') { // Return / Back on Samsung Remote
         e.preventDefault();
         e.stopImmediatePropagation();
-        if (window.__xuper && typeof window.__xuper.key === 'function') {
-          window.__xuper.key(461);
-        } else {
-          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Back', keyCode: 461, bubbles: true, cancelable: true }));
+        var ev;
+        try {
+          ev = new KeyboardEvent('keydown', { key: 'Back', keyCode: 461, which: 461, bubbles: true, cancelable: true });
+        } catch (_) {}
+        if (!ev) {
+          try {
+            ev = document.createEvent('KeyboardEvent');
+            ev.initKeyboardEvent('keydown', true, true, window, 'Back', 0, '', false, '');
+          } catch (_) {
+            ev = document.createEvent('Events');
+            ev.initEvent('keydown', true, true);
+          }
+        }
+        if (ev) {
+          try { Object.defineProperty(ev, 'keyCode', { value: 461, configurable: true }); } catch (_) {}
+          try { Object.defineProperty(ev, 'which', { value: 461, configurable: true }); } catch (_) {}
+          try { Object.defineProperty(ev, 'key', { value: 'Back', configurable: true }); } catch (_) {}
+          document.dispatchEvent(ev);
         }
       }
     }, true);
@@ -346,6 +360,25 @@
       if (e.keyCode === 10009 || e.key === 'Return') {
         e.preventDefault();
         e.stopImmediatePropagation();
+        var ev;
+        try {
+          ev = new KeyboardEvent('keyup', { key: 'Back', keyCode: 461, which: 461, bubbles: true, cancelable: true });
+        } catch (_) {}
+        if (!ev) {
+          try {
+            ev = document.createEvent('KeyboardEvent');
+            ev.initKeyboardEvent('keyup', true, true, window, 'Back', 0, '', false, '');
+          } catch (_) {
+            ev = document.createEvent('Events');
+            ev.initEvent('keyup', true, true);
+          }
+        }
+        if (ev) {
+          try { Object.defineProperty(ev, 'keyCode', { value: 461, configurable: true }); } catch (_) {}
+          try { Object.defineProperty(ev, 'which', { value: 461, configurable: true }); } catch (_) {}
+          try { Object.defineProperty(ev, 'key', { value: 'Back', configurable: true }); } catch (_) {}
+          document.dispatchEvent(ev);
+        }
       }
     }, true);
 

@@ -50,7 +50,7 @@ export const StreamSelectModal: React.FC<StreamSelectModalProps> = ({
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       const k = e.key;
-      const isBack = k === 'Escape' || k === 'Backspace' || (e as any).keyCode === 10009;
+      const isBack = k === 'Escape' || k === 'Backspace' || k === 'Back' || k === 'Return' || (e as any).keyCode === 10009 || (e as any).keyCode === 461;
       if (isBack) {
         e.preventDefault();
         e.stopImmediatePropagation();
