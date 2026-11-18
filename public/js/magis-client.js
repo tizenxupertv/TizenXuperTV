@@ -1816,48 +1816,126 @@
 
   var FALLBACK_39_CATEGORIES = [
     { id: 76182, name: 'Todos los canales' },
+    { id: 77970, name: 'Más popular' },
+    { id: 87034, name: 'Vivo gratis' },
     { id: 76206, name: 'Deportes en Vivo' },
-    { id: 76205, name: 'Cine & Series 24/7' },
+    { id: 76184, name: 'NBA PASS' },
+    { id: 76195, name: 'MLB PASS' },
+    { id: 76186, name: 'NFL PASS' },
+    { id: 76200, name: 'Eventos PPV' },
+    { id: 76205, name: 'Cine & Series' },
+    { id: 76189, name: 'Canales 24/7' },
+    { id: 77977, name: 'Full HD' },
+    { id: 76204, name: 'HD+ (H.265)' },
+    { id: 76198, name: 'PlayBack' },
     { id: 76188, name: 'Colombia' },
     { id: 76191, name: 'España' },
     { id: 76197, name: 'México' },
-    { id: 76190, name: 'Argentina' },
-    { id: 76195, name: 'Chile & Perú' },
-    { id: 76189, name: 'Venezuela' },
-    { id: 76192, name: 'Ecuador' },
-    { id: 76193, name: 'Bolivia' },
-    { id: 76194, name: 'Uruguay' },
-    { id: 76196, name: 'Paraguay' },
-    { id: 76198, name: 'Panamá' },
-    { id: 76199, name: 'Puerto Rico' },
-    { id: 76200, name: 'Costa Rica' },
-    { id: 76201, name: 'Estados Unidos' },
-    { id: 76202, name: 'República Dominicana' },
-    { id: 76203, name: 'Guatemala' },
-    { id: 76204, name: 'Honduras' },
-    { id: 76207, name: 'El Salvador' },
-    { id: 76208, name: 'Nicaragua' },
-    { id: 76209, name: 'Brasil' },
-    { id: 76210, name: 'Infantiles' },
-    { id: 76211, name: 'Noticias' },
-    { id: 76212, name: 'Música' },
-    { id: 76213, name: 'Documentales' },
-    { id: 76214, name: 'Religiosos' },
-    { id: 76215, name: 'Canales Premium' },
-    { id: 76216, name: 'Variedades' },
-    { id: 76217, name: 'Cultura y Ciencia' },
-    { id: 76218, name: 'Anime 24/7' },
-    { id: 76219, name: 'Retro TV' },
-    { id: 76220, name: 'Series Retro' },
-    { id: 76221, name: 'Cine Acción' },
-    { id: 76222, name: 'Cine Comedia' },
-    { id: 76223, name: 'Cine Terror' },
-    { id: 76224, name: 'Eventos PPV' },
-    { id: 'addons', name: '➕ Addons M3U', isAddon: true }
+    { id: 76207, name: 'Chile' },
+    { id: 76187, name: 'Perú' },
+    { id: 76190, name: 'Ecuador' },
+    { id: 77690, name: 'Venezuela' },
+    { id: 76202, name: 'Bolivia' },
+    { id: 76201, name: 'Uruguay' },
+    { id: 77688, name: 'Paraguay' },
+    { id: 77689, name: 'Panamá' },
+    { id: 77691, name: 'Costa Rica' },
+    { id: 77988, name: 'Puerto Rico' },
+    { id: 79147, name: 'República Dominicana' },
+    { id: 79134, name: 'Honduras' },
+    { id: 79145, name: 'El Salvador' },
+    { id: 79127, name: 'Centroamérica' },
+    { id: 76194, name: 'Estados Unidos' },
+    { id: 79146, name: 'Infantiles' },
+    { id: 76193, name: 'Noticias' },
+    { id: 76183, name: 'Música' },
+    { id: 76196, name: 'Cultura y Ciencia' },
+    { id: 79148, name: 'Religiosos' },
+    { id: 76192, name: 'Desde Internet' },
+    { id: 76208, name: '18+' }
   ];
 
+  var LIVE_CATS_STORAGE_KEY = 'xuper_live_cats_v2';
+
   function getLiveCategories(callback) {
-    callback(null, FALLBACK_39_CATEGORIES);
+    if (liveCategoriesCache && (Date.now() - liveCategoriesCache.at < LIVE_CATS_TTL)) {
+      return setTimeout(function () { callback(null, liveCategoriesCache.list); }, 0);
+    }
+    try {
+      var rawCats = window.localStorage && localStorage.getItem(LIVE_CATS_STORAGE_KEY);
+      if (rawCats) {
+        var parsedCats = JSON.parse(rawCats);
+        if (parsedCats && Array.isArray(parsedCats.list) && parsedCats.list.length > 5 && (Date.now() - (parsedCats.at || 0) < LIVE_CATS_TTL)) {
+          liveCategoriesCache = parsedCats;
+          return setTimeout(function () { callback(null, parsedCats.list); }, 0);
+        }
+      }
+    } catch (e) {}
+
+    if (relayMode === 'play-only' || relayMode === 'off') {
+      return setTimeout(function () { callback(null, FALLBACK_39_CATEGORIES); }, 0);
+    }
+
+    ensureSession(function (err) {
+      if (err) return callback(null, FALLBACK_39_CATEGORIES);
+      var allRaw = [];
+      var page = 1;
+      var pageSize = 20;
+
+      function fetchLiveCatPage() {
+        call('v3/getColumnContents', {
+          columnId: 76175,
+          isAv1: '0',
+          specialFlag: '1',
+          pageNum: page,
+          pageSize: pageSize
+        }, function (cErr, cRes) {
+          if (cErr) {
+            if (allRaw.length > 0) return finishLiveCats();
+            return callback(null, FALLBACK_39_CATEGORIES);
+          }
+          var raw = (cRes && cRes.childColumnList) || [];
+          for (var r = 0; r < raw.length; r++) allRaw.push(raw[r]);
+          var total = parseInt(cRes && cRes.totalSize, 10) || 0;
+          if (raw.length > 0 && total > allRaw.length && page < 10) {
+            page++;
+            fetchLiveCatPage();
+          } else {
+            finishLiveCats();
+          }
+        });
+      }
+
+      function finishLiveCats() {
+        var seen = {};
+        var list = [];
+        for (var i = 0; i < allRaw.length; i++) {
+          var c = allRaw[i];
+          if (!c || !c.id || seen[c.id]) continue;
+          seen[c.id] = true;
+          var name = text(c.name || c.alias);
+          if (!name) continue;
+          if (/^channellist$/i.test(name)) name = 'Todos los canales';
+          list.push({
+            id: c.id,
+            code: text(c.code),
+            name: name,
+            restricted: String(c.restricted) === '1',
+            sequence: parseInt(c.sequence, 10) || 999
+          });
+        }
+        if (!list.length) return callback(null, FALLBACK_39_CATEGORIES);
+        list.sort(function (a, b) { return a.sequence - b.sequence; });
+        var entry = { at: Date.now(), list: list };
+        liveCategoriesCache = entry;
+        try {
+          if (window.localStorage) localStorage.setItem(LIVE_CATS_STORAGE_KEY, JSON.stringify(entry));
+        } catch (e) {}
+        callback(null, list);
+      }
+
+      fetchLiveCatPage();
+    });
   }
 
   function getLiveChannels(columnId, pageNum, pageSize, callback) {
@@ -1972,17 +2050,7 @@
             callback(null, channels, hasMore);
           }
 
-          // Try modern v7/getLiveData first (Hydra 6.8.1), fallback to v6/getLiveData
-          if (routeMissing('v7/getLiveData')) {
-            return postHttp('v6/getLiveData', livePayload, handleLiveResponse);
-          }
-          postHttp('v7/getLiveData', livePayload, function (err7, res7) {
-            if (!err7 && res7 && res7.channelList) {
-              return handleLiveResponse(null, res7);
-            }
-            noteRouteFailure('v7/getLiveData', err7);
-            postHttp('v6/getLiveData', livePayload, handleLiveResponse);
-          });
+          postHttp('v6/getLiveData', livePayload, handleLiveResponse);
         });
       });
     }
