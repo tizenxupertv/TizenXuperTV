@@ -14,6 +14,14 @@ export function videoCodecRejected(data: any): string {
   return String(data.mimeType || name);
 }
 
+/** A direct (.m3u8) channel whose manifest hls.js could not load (typically CORS HTTP 0 on Tizen WebView) */
+export function directManifestBlocked(data: any, isDirect?: boolean): boolean {
+  if (!isDirect || !data || !data.fatal) return false;
+  if (data.details !== 'manifestLoadError' && data.details !== 'manifestLoadTimeOut') return false;
+  const code = data.response && typeof data.response.code === 'number' ? data.response.code : 0;
+  return code === 0 || code === 403;
+}
+
 export interface LiveAvPlayContext {
   /** The TV has webapis.avplay and the bridge (not a desktop browser) */
   hasAvPlay: boolean;
@@ -21,9 +29,12 @@ export interface LiveAvPlayContext {
   code: string;
   /** Channel already moved to AVPlay once: when AVPlay fails it comes back to hls.js, which must not move it again */
   triedCode: string;
+  /** Direct (unproxied) stream URL where AVPlay bypasses WebView CORS limits */
+  isDirect?: boolean;
 }
 
-/** Move this live channel from hls.js to AVPlay: its picture was dropped and AVPlay was not tried for it yet */
+/** Move this live channel from hls.js to AVPlay: its picture was dropped (or direct manifest blocked) and AVPlay was not tried yet */
 export function shouldMoveLiveToAvPlay(data: any, ctx: LiveAvPlayContext): boolean {
-  return !!videoCodecRejected(data) && ctx.hasAvPlay && !!ctx.code && ctx.triedCode !== ctx.code;
+  const reason = !!videoCodecRejected(data) || directManifestBlocked(data, ctx.isDirect);
+  return reason && ctx.hasAvPlay && !!ctx.code && ctx.triedCode !== ctx.code;
 }

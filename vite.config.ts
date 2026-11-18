@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
+import zlib from 'zlib';
 import { URL } from 'url';
 import { tvCompatPlugin } from './vite-tv-compat';
 
@@ -125,7 +126,7 @@ function streamProxyPlugin() {
       if (auth || license) {
         headers['User-Agent'] = 'Ranger/4.9.4-17294ac0';
         headers['App'] = 'com.android.msandroid';
-        headers['App-Version'] = '49902';
+        headers['App-Version'] = '49920';
         headers['X-Buffer'] = '0';
         if (auth) headers['Content-Auth'] = auth;
         if (license) headers['Content-License'] = license;
@@ -179,7 +180,16 @@ function streamProxyPlugin() {
             const chunks: Buffer[] = [];
             targetRes.on('data', (c) => chunks.push(c));
             targetRes.on('end', () => {
-              const text = Buffer.concat(chunks).toString('utf8');
+              let rawBuf = Buffer.concat(chunks);
+              const contentEncoding = String(targetRes.headers['content-encoding'] || '').toLowerCase();
+              if (contentEncoding.includes('gzip') || (rawBuf.length >= 2 && rawBuf[0] === 0x1f && rawBuf[1] === 0x8b)) {
+                try {
+                  rawBuf = zlib.gunzipSync(rawBuf);
+                } catch {
+                  // Keep raw buffer if decompression fails
+                }
+              }
+              const text = rawBuf.toString('utf8');
               const lines = text.split('\n');
               const rewritten = lines.map((line) => {
                 const trimmed = line.trim();
@@ -202,6 +212,7 @@ function streamProxyPlugin() {
           } else {
             res.statusCode = status;
             if (contentType) res.setHeader('Content-Type', contentType);
+            if (targetRes.headers['content-encoding']) res.setHeader('Content-Encoding', targetRes.headers['content-encoding']);
             if (targetRes.headers['content-length']) res.setHeader('Content-Length', targetRes.headers['content-length']);
             if (targetRes.headers['content-range']) res.setHeader('Content-Range', targetRes.headers['content-range']);
             if (targetRes.headers['accept-ranges']) res.setHeader('Accept-Ranges', targetRes.headers['accept-ranges']);
@@ -275,17 +286,9 @@ export default defineConfig({
         rewrite: (p: string) => p.replace(/^\/epic-api/, '')
       },
       '/api/portalCore': {
-        // Browser development needs one CORS-safe upstream. Keep it aligned with the
-        // primary authorized transport used by the working backup.
-        target: 'https://osuhk.m3x8o50te.com',
+        target: 'https://tizenxuper-relay.tizenxupertv.workers.dev',
         changeOrigin: true,
-        secure: false,
-        headers: {
-          'User-Agent': 'okhttp/3.12.12',
-          'apk': 'com.android.msandroid',
-          'apkVer': '43404',
-          'spkgVer': '2025-08-07 05:40:11_36_16_'
-        }
+        secure: true
       }
     }
   },
@@ -299,15 +302,9 @@ export default defineConfig({
         rewrite: (p: string) => p.replace(/^\/epic-api/, '')
       },
       '/api/portalCore': {
-        target: 'https://osuhk.m3x8o50te.com',
+        target: 'https://tizenxuper-relay.tizenxupertv.workers.dev',
         changeOrigin: true,
-        secure: false,
-        headers: {
-          'User-Agent': 'okhttp/3.12.12',
-          'apk': 'com.android.msandroid',
-          'apkVer': '43404',
-          'spkgVer': '2025-08-07 05:40:11_36_16_'
-        }
+        secure: true
       }
     }
   },

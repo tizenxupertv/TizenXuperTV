@@ -104,7 +104,7 @@ test('a session start that fails reports the error, and the next call starts ove
   advance(5000);
   assert.equal(first.length, 1, 'the caller gets an answer');
   assert.match(String(first[0] && first[0].message), /v3\/snToken: el portal no respondió/);
-  assert.equal(requests.length, 8, 'one try per host, and no second round for a network failure');
+  assert.equal(requests.length, 3, 'one try per host, and no second round for a network failure');
   assert.ok(requests.every(r => /\/api\/portalCore\/v3\/snToken$/.test(r.url)));
 
   // The app asks again later (the Wi-Fi is back, or not): a new attempt starts and answers too
@@ -112,7 +112,7 @@ test('a session start that fails reports the error, and the next call starts ove
   client.ensureSession((err: any) => second.push(err));
   advance(5000);
   assert.equal(second.length, 1, 'not left waiting for the first attempt');
-  assert.equal(requests.length, 16);
+  assert.equal(requests.length, 6);
 });
 
 test('callers that arrive while the session is starting all get the same answer', () => {
@@ -376,7 +376,7 @@ test('client identity and startPlayVOD payload send masmobile profile with 60291
 });
 
 test('home keeps masnew column codes for featured, anime and explorar under catalog profile', () => {
-  const nextColPayloads: Record<string, any>[] = [];
+  const colPayloads: Record<string, any>[] = [];
   const harness = loadPortalClient(req => {
     const endpoint = req.url.split('/api/portalCore/')[1] || '';
     if (endpoint === 'v3/snToken') {
@@ -387,10 +387,19 @@ test('home keeps masnew column codes for featured, anime and explorar under cata
       req.respond(200, JSON.stringify({ returnCode: '0', data: { userId: 'user_1', userToken: 'tok_secret_1' } }));
       return;
     }
-    if (endpoint === 'getNextColumns') {
+    if (endpoint === 'v3/getColumnContents') {
       const decoded = decodePortalBody(req.body);
-      if (decoded) nextColPayloads.push(decoded);
-      req.respond(200, JSON.stringify({ returnCode: '0', data: { recommendList: [] } }));
+      if (decoded) colPayloads.push(decoded);
+      req.respond(200, JSON.stringify({
+        returnCode: '0',
+        data: {
+          recommendList: [{
+            columnId: 1,
+            name: 'Row',
+            assetList: [{ contentId: 'c1', name: 'Item 1', programType: 'movie' }]
+          }]
+        }
+      }));
       return;
     }
     req.fail();
@@ -406,7 +415,7 @@ test('home keeps masnew column codes for featured, anime and explorar under cata
   for (let i = 0; i < 20; i++) harness.advance(300);
 
   assert.deepEqual(results, ['featured', 'anime', 'explorar']);
-  assert.equal(nextColPayloads.length, 3);
-  assert.deepEqual(nextColPayloads.map(p => p.columnCode), ['masnew_featured', 'masnew_anime', 'masnew_explorar']);
-  assert.ok(nextColPayloads.every(p => p.portalCode === 'masnew' && (p.apkVersion === '50200' || p.apkVersion === '49902' || p.apkVersion === '43501' || p.apkVersion === '49920')));
+  assert.equal(colPayloads.length, 3);
+  assert.deepEqual(colPayloads.map(p => p.columnId), [76176, 76180, 76784]);
+  assert.ok(colPayloads.every(p => p.portalCode === 'masnew' && (p.apkVersion === '50200' || p.apkVersion === '49902' || p.apkVersion === '43501' || p.apkVersion === '49920')));
 });

@@ -4,7 +4,7 @@ import { backBufferFor } from '../lib/tvMemory';
 import { normalizeChannel } from '../lib/channelKey';
 import { hostOf, isIspBlockPage, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSequenceFixer } from '../lib/mediaSequence';
-import { shouldMoveLiveToAvPlay, videoCodecRejected } from '../lib/liveVideoFallback';
+import { directManifestBlocked, shouldMoveLiveToAvPlay, videoCodecRejected } from '../lib/liveVideoFallback';
 import { unwrapPngTs } from '../lib/pngWrappedTs';
 import { isStaleLinkStatus } from '../lib/liveLink';
 import { directHlsPlayer, directStreamMeta } from '../lib/directLink';
@@ -742,7 +742,7 @@ class PlayerService {
     let effectiveUrl = url;
     const isEpic = url.includes('epictvparaiphone.top') || url.includes('playlatam.site');
     const isTeveo = url.includes('teveo.cu');
-    const hasSpecialHeaders = !!(streamMeta?.headers?.['Referer'] || streamMeta?.headers?.['referer'] || streamMeta?.headers?.['User-Agent'] || streamMeta?.headers?.['user-agent']);
+    const hasReferer = !!(streamMeta?.headers?.['Referer'] || streamMeta?.headers?.['referer']);
 
     if (url.startsWith('http') && !url.includes('/stream-proxy')) {
       const auth = streamMeta?.headers?.['Content-Auth'] || '';
@@ -753,7 +753,7 @@ class PlayerService {
 
       if (isBrowserEnv) {
         effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}&pulsera=${encodeURIComponent(pulsera)}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}`;
-      } else if (isEpic || isTeveo || hasSpecialHeaders) {
+      } else if (isEpic || isTeveo || hasReferer) {
         effectiveUrl = `${CLOUD_STREAM_PROXY}?url=${encodeURIComponent(url)}${pulsera ? `&pulsera=${encodeURIComponent(pulsera)}` : ''}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}`;
       }
     }
@@ -811,20 +811,29 @@ class PlayerService {
 
         const onHlsError = (event: any, data: any) => {
           console.error('[HLS error]', data.type, data.details, data.fatal);
-          // The TV refused the video codec: hls.js dropped the picture and plays the sound alone (Tizen 3-5)
+          // The TV refused the video codec, or a direct (iptv-org) manifest was CORS-blocked: move to AVPlay on TV
+          const isDirectUnproxied = !!(streamMeta && streamMeta.direct) && !currentSource.includes('/stream-proxy');
           const lostVideo = videoCodecRejected(data);
-          if (lostVideo) {
-            logPlayback({ kind: 'error', player: 'HLS.js', detail: `MSE sin video (${lostVideo.slice(0, 60)})`, host: hostOf(currentSource) });
+          const manifestBlocked = directManifestBlocked(data, isDirectUnproxied);
+          if (lostVideo || manifestBlocked) {
+            logPlayback({
+              kind: 'error',
+              player: 'HLS.js',
+              detail: lostVideo ? `MSE sin video (${lostVideo.slice(0, 60)})` : `CORS/manifiesto directo (${data.details})`,
+              host: hostOf(currentSource)
+            });
             const ctx = {
               hasAvPlay: !!(window.webapis && window.webapis.avplay && window.XuperAVPlay && window.XuperAVPlay.playPreview),
               code: code && code === this.activeChannelCode ? code : '',
-              triedCode: this.avTriedCode
+              triedCode: this.avTriedCode,
+              isDirect: isDirectUnproxied
             };
             if (window.__xuperPreviewHls === hls && shouldMoveLiveToAvPlay(data, ctx)) {
-              logPlayback({ kind: 'info', player: 'AVPlay', detail: 'el canal pasa a AVPlay' });
-              this.moveLiveToAvPlay(currentSource, videoEl, ctx.code);
+              logPlayback({ kind: 'info', player: 'AVPlay', detail: 'el canal pasa a AVPlay directo' });
+              this.moveLiveToAvPlay(manifestBlocked ? url : currentSource, videoEl, ctx.code);
+              return;
             }
-            return;
+            if (lostVideo) return;
           }
           const httpCode = data.response && data.response.code ? Number(data.response.code) : 0;
           const status = httpCode ? ` ${httpCode}` : '';
