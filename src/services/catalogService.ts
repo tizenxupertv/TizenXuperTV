@@ -92,12 +92,18 @@ function normalizeItem(raw: any, index: number): VodItem {
   );
 
   const rowName = String(raw.row || '');
+  const explicitMovie =
+    raw.kind === 'película' ||
+    raw.kind === 'pelicula' ||
+    raw.type === 'movie' ||
+    raw.type === 'film' ||
+    raw.category === 'pelicula';
   const isSeries = !!(
     raw.type === 'teleplay' || raw.type === 'series' || raw.kind === 'serie' ||
     (raw.category && raw.category.indexOf('serie') !== -1) ||
     (raw.episodes && raw.episodes.length > 0) ||
     (raw.seasons && raw.seasons.length > 0) ||
-    rowName.includes('Series') || rowName.includes('Dramas') || rowName.includes('Telenovelas')
+    (!explicitMovie && (rowName.includes('Series') || rowName.includes('Dramas') || rowName.includes('Telenovelas')))
   );
 
   return {

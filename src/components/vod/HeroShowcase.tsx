@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { VodItem } from '../../types/vod';
 import { historyService } from '../../services/historyService';
-import { enrichTitleMetaInBackground } from '../../services/catalogService';
 import { formatDuration, getResumeTarget } from '../../lib/vodResume';
 import { formatQualityTag, firstQuality } from '../../lib/subtitles';
 import { useTitleMeta } from '../../lib/titleMetaCache';
@@ -36,13 +35,6 @@ const HeroShowcaseComponent: React.FC<HeroShowcaseProps> = ({
   const rawActors = (item?.actors && item.actors !== '—' ? item.actors : '') || cachedMeta?.actors || '';
   const actorsStr = rawActors ? rawActors.split(',').slice(0, 3).map(s => s.trim()).filter(Boolean).join(', ') : '';
   const directorStr = (item?.director && item.director !== '—' ? item.director : '') || cachedMeta?.director || '';
-
-  useEffect(() => {
-    if (!item?.id) return;
-    if (!qualityTag || !hasCC || !year || !actorsStr || !cachedMeta?.backdrop) {
-      enrichTitleMetaInBackground(item, true);
-    }
-  }, [item?.id, qualityTag, hasCC, year, actorsStr, cachedMeta?.backdrop]);
 
   const historyEntry = useMemo(() => (item?.id ? historyService.getEntry(item.id) : null), [item?.id]);
   const resumeTarget = useMemo(

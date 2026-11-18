@@ -1,0 +1,43 @@
+name: Update Static Catalog & Live Channels
+
+on:
+  schedule:
+    - cron: '15 */4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Generate static catalog & live channels JSON
+        run: node tools/generate-static-catalog.mjs --out /tmp/static-data
+
+      - name: Push to catalog-data branch (tizenxupertv/TizenXuperTV)
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN || github.token }}
+        run: |
+          git config --global user.name "TizenXuper Bot"
+          git config --global user.email "bot@tizenxupertv.local"
+          rm -rf /tmp/pub-repo
+          git clone --depth 1 https://x-access-token:${GH_TOKEN}@github.com/tizenxupertv/TizenXuperTV.git /tmp/pub-repo || true
+          cd /tmp/pub-repo
+          git checkout catalog-data 2>/dev/null || git checkout --orphan catalog-data
+          git rm -rf . >/dev/null 2>&1 || true
+          cp /tmp/static-data/live-channels.json .
+          cp /tmp/static-data/portal-catalog.json .
+          git add live-channels.json portal-catalog.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(data): auto-update static catalog & live channels ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+            git push origin catalog-data --force
+          fi

@@ -30,6 +30,17 @@
   };
   var clockOffsetMs = 0;
   var relayMode = 'full';
+  var relayCooldownUntil = 0;
+  var DIRECT_HOSTS = [
+    'fuxok.nguvmqhpk.com',
+    'ftmrmy.jdfey0cd.com',
+    'mptec.dhkrxuzcy.com'
+  ];
+  var DIRECT_APK_VERSION = '49902';
+  var DIRECT_APK_VER_HEADER = '43404';
+  var DIRECT_SPKG_VER = '2024-09-10 06:25:30_33_13_';
+  var DIRECT_RESERVE1 = '583442714b345572434a4d5769637461545a735936413d3d';
+  var DIRECT_SESSION_KEY = 'xuper_magis_direct_v1';
   function isCatalogBrowseEndpoint(path) {
     return /(?:^|\/)(getColumnContents|getShelveData|getRecommends|filterByContent|filterGenre|getHome|getShortVideo)$/i.test(String(path || ''));
   }
@@ -135,11 +146,15 @@
   // This TV's identity for the portal (MACs and device ids), made up once and kept. Every install used to activate
   // with the same MAC, so to the portal they all looked like one device.
   var DEVICE_IDENTITY_KEY = 'xuper_magis_device_v1';
-  var isBrowserEnv = typeof window !== 'undefined' && (
+  var isLocalDevHost = typeof window !== 'undefined' && (
     window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '127.0.0.1'
+  );
+  var isBrowserEnv = typeof window !== 'undefined' && (
+    isLocalDevHost ||
     (typeof tizen === 'undefined' && typeof webOS === 'undefined')
   );
+  var canUseDirect43404 = !isBrowserEnv || isLocalDevHost;
 
   var RATE_MS = 40;
   // One host may go this long without sending a byte, and this long in all; a whole request, over every host, this long
@@ -655,6 +670,12 @@
     if (relayMode === 'play-only' && isCatalogBrowseEndpoint(path)) {
       return done(new Error('Relay in play-only mode'));
     }
+    if (relayCooldownUntil > Date.now()) {
+      var cdErr = new Error('El servicio está temporalmente saturado. Intenta de nuevo en unos minutos.');
+      cdErr.httpStatus = 429;
+      cdErr.isRelayCooldown = true;
+      return done(cdErr);
+    }
     var bodyStr;
     try {
       bodyStr = secWrap(JSON.stringify(payload), SEC.keyHex, SEC.alpha);
@@ -757,6 +778,15 @@
           return tryNextHost();
         }
 
+        if (xhr.status === 429) {
+          lastStatus = 429;
+          relayCooldownUntil = Date.now() + 180000;
+          finished = true;
+          var rlErr = httpError('El servicio está temporalmente saturado. Intenta de nuevo en unos minutos.');
+          rlErr.isRelayCooldown = true;
+          return done(rlErr);
+        }
+
         if (xhr.status === 403 && !clockRetried) {
           return syncRelayClock(function () {
             if (!finished) sendToHost(host, true);
@@ -825,6 +855,9 @@
       if (finished) return;
       if (idx >= hosts.length || Date.now() - tStart >= REQUEST_MAX_MS) {
         finished = true;
+        if (lastStatus === 0 && isBrowserEnv && typeof fetch === 'function') {
+          relayCooldownUntil = Date.now() + 90000;
+        }
         return done(httpError(path + ': el portal no respondió'));
       }
       sendToHost(hosts[idx++], false);
@@ -844,6 +877,266 @@
     return /aaa10002[0-9]|未登录|sesi[oó]n|login|token/i.test(err.portalCode + ' ' + (err.portalText || ''));
   }
 
+  var directSession = { ready: false, sn: '', snToken: '', userId: '', userToken: '', portalCode: 'masnew' };
+  var directSessionStarting = false;
+  var directSessionWaiters = [];
+
+  (function loadDirectSession() {
+    try {
+      var raw = window.localStorage && window.localStorage.getItem(DIRECT_SESSION_KEY);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (parsed && parsed.userId && parsed.userToken) {
+          directSession = {
+            ready: true,
+            sn: String(parsed.sn || ''),
+            snToken: String(parsed.snToken || ''),
+            userId: String(parsed.userId),
+            userToken: String(parsed.userToken),
+            portalCode: String(parsed.portalCode || 'masnew')
+          };
+        }
+      }
+    } catch (e) {}
+  })();
+
+  function saveDirectSession() {
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(DIRECT_SESSION_KEY, JSON.stringify({
+          sn: directSession.sn,
+          snToken: directSession.snToken,
+          userId: directSession.userId,
+          userToken: directSession.userToken,
+          portalCode: directSession.portalCode || 'masnew'
+        }));
+      }
+    } catch (e) {}
+  }
+
+  function clearDirectSession() {
+    directSession = { ready: false, sn: '', snToken: '', userId: '', userToken: '', portalCode: 'masnew' };
+    try { if (window.localStorage) window.localStorage.removeItem(DIRECT_SESSION_KEY); } catch (e) {}
+  }
+
+  function isRelayUnavailableError(err) {
+    if (relayMode === 'off') return true;
+    if (!err) return false;
+    return !!(err.isRelayCooldown || err.httpStatus === 429 || err.httpStatus === 503 || (isLocalDevHost && err.httpStatus === 0));
+  }
+
+  function postDirectHttp(path, payload, done, opts) {
+    opts = opts || {};
+    var directPath = (path === 'v5/startPlayLive') ? 'v4/startPlayLive' : path;
+    var bodyHex;
+    try {
+      bodyHex = encryptBody(JSON.stringify(payload));
+    } catch (e) {
+      return done(new Error(directPath + ': error cifrando cuerpo directo: ' + e.message));
+    }
+
+    var idx = 0;
+    var finished = false;
+    var tStart = Date.now();
+    var lastStatus = 0;
+
+    function tryHost() {
+      if (finished) return;
+      if (idx >= DIRECT_HOSTS.length || Date.now() - tStart >= REQUEST_MAX_MS) {
+        finished = true;
+        var e = new Error(directPath + ': el portal no respondió');
+        e.httpStatus = lastStatus;
+        return done(e);
+      }
+      var host = DIRECT_HOSTS[idx++];
+      var xhr = new XMLHttpRequest();
+      var directUrl = isLocalDevHost
+        ? ('/direct-43404/' + host + '/' + directPath)
+        : ('https://' + host + '/api/portalCore/' + directPath);
+      xhr.open('POST', directUrl, true);
+      var settled = false;
+      var idleTimer = null;
+      var hardTimer = null;
+      var disarm = function () {
+        clearTimeout(idleTimer);
+        clearTimeout(hardTimer);
+      };
+      var expire = function () {
+        if (settled || finished) return;
+        settled = true;
+        disarm();
+        try { xhr.abort(); } catch (e) {}
+        tryHost();
+      };
+      var arm = function () {
+        if (settled) return;
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(expire, HOST_IDLE_MS);
+      };
+      hardTimer = setTimeout(expire, HOST_MAX_MS);
+      arm();
+      xhr.onprogress = arm;
+      xhr.onreadystatechange = function () { if (xhr.readyState >= 2) arm(); };
+      try { xhr.setRequestHeader('Content-Type', 'application/json;charset=utf-8'); } catch (e) {}
+      try { xhr.setRequestHeader('apk', 'com.android.msandroid'); } catch (e) {}
+      try { xhr.setRequestHeader('apkVer', DIRECT_APK_VER_HEADER); } catch (e) {}
+      try { xhr.setRequestHeader('spkgVer', DIRECT_SPKG_VER); } catch (e) {}
+
+      xhr.onload = function () {
+        if (settled || finished) return;
+        settled = true;
+        disarm();
+        lastStatus = xhr.status;
+        if (xhr.status < 200 || xhr.status >= 300) return tryHost();
+        var resp;
+        try {
+          resp = JSON.parse(trim(xhr.responseText));
+        } catch (e) {
+          return tryHost();
+        }
+        var code = (resp.returnCode === undefined || resp.returnCode === null) ? '' : String(resp.returnCode);
+        if (code !== '' && code !== '0') {
+          var pErr = new Error(directPath + ' -> ' + code + ' ' + text(resp.errorMessage));
+          pErr.portalCode = code;
+          pErr.portalText = text(resp.errorMessage);
+          finished = true;
+          return done(pErr);
+        }
+        if (typeof resp.data === 'string' && resp.data !== '') {
+          decryptData(resp.data, function (dErr, decData) {
+            if (finished) return;
+            if (dErr) return tryHost();
+            finished = true;
+            console.log('[portal-direct-43404] ' + directPath + ' host=' + host + ' (' + (Date.now() - tStart) + 'ms)');
+            done(null, decData);
+          }, !!opts.low);
+          return;
+        }
+        finished = true;
+        done(null, resp.data !== undefined && resp.data !== null ? resp.data : resp);
+      };
+      xhr.onerror = xhr.ontimeout = function () {
+        if (settled || finished) return;
+        settled = true;
+        disarm();
+        tryHost();
+      };
+      xhr.send(bodyHex);
+    }
+
+    tryHost();
+  }
+
+  function ensureDirectSession(callback) {
+    callback = callback || function () {};
+    if (directSession.ready && directSession.userId && directSession.userToken) {
+      return callback(null, directSession);
+    }
+    directSessionWaiters.push(callback);
+    if (directSessionStarting) return;
+    directSessionStarting = true;
+
+    function finishDirect(err, res) {
+      directSessionStarting = false;
+      var list = directSessionWaiters.slice(0);
+      directSessionWaiters = [];
+      for (var i = 0; i < list.length; i++) {
+        try { list[i](err, res); } catch (e) {}
+      }
+    }
+
+    var identity = deviceIdentity(false);
+    var snPayload = {
+      appId: 'com.android.msandroid',
+      apkVersion: DIRECT_APK_VERSION,
+      loginType: '2',
+      appLanguage: 'es',
+      hardwareInfo: 'ranchu',
+      model: 'sdk_gphone64_arm64',
+      product: 'sdk_gphone64_arm64',
+      cpu: 'arm64-v8a',
+      B29: '',
+      reserve1: DIRECT_RESERVE1,
+      deviceToken: '',
+      drmId: identity.drmId || '',
+      sdkVer: 33,
+      sn: identity.serialNumber || identity.androidId || '0000111122223333'
+    };
+
+    postDirectHttp('v3/snToken', snPayload, function (err, res) {
+      if (err) return finishDirect(err);
+      var snToken = trim(res && res.snToken);
+      if (!snToken) return finishDirect(new Error('Direct v3/snToken: missing snToken'));
+      var snMd5 = String(md5(snToken + SNTOKEN_SALT)).toLowerCase();
+      var activePayload = {
+        appId: 'com.android.msandroid',
+        apkVersion: DIRECT_APK_VERSION,
+        loginType: '2',
+        appLanguage: 'es',
+        hardwareInfo: 'ranchu',
+        model: 'sdk_gphone64_arm64',
+        product: 'sdk_gphone64_arm64',
+        cpu: 'arm64-v8a',
+        B29: '',
+        reserve1: DIRECT_RESERVE1,
+        deviceToken: '',
+        drmId: identity.drmId || '',
+        sdkVer: 33,
+        sn: snMd5,
+        snToken: snToken,
+        portalCode: 'masnew',
+        macAddr: identity.etheMac,
+        wlanMac: identity.wifiMac
+      };
+      postDirectHttp('v8/active', activePayload, function (aErr, aRes) {
+        if (aErr) return finishDirect(aErr);
+        var uId = trim(aRes && (aRes.userId || aRes.id || (aRes.userInfo && aRes.userInfo.userId)));
+        var uTok = trim(aRes && (aRes.userToken || aRes.token || (aRes.userInfo && aRes.userInfo.userToken)));
+        if (!uId || !uTok) return finishDirect(new Error('Direct v8/active: missing userId/userToken'));
+        directSession = {
+          ready: true,
+          sn: snMd5,
+          snToken: snToken,
+          userId: uId,
+          userToken: uTok,
+          portalCode: trim(aRes && aRes.portalCode) || 'masnew'
+        };
+        saveDirectSession();
+        console.log('[MagisClient] Direct 43404 session established');
+        finishDirect(null, directSession);
+      });
+    });
+  }
+
+  function callDirect43404(endpoint, payload, opts, callback) {
+    ensureDirectSession(function (sErr, ds) {
+      if (sErr) return callback(sErr);
+      var baseProf = resolveProfile('masnew');
+      var dev = deviceDict(baseProf);
+      var fullPayload = {
+        portalCode: ds.portalCode || 'masnew',
+        userId: ds.userId,
+        userToken: ds.userToken
+      };
+      for (var k in dev) {
+        if (Object.prototype.hasOwnProperty.call(dev, k)) fullPayload[k] = dev[k];
+      }
+      fullPayload.apkVersion = DIRECT_APK_VERSION;
+      fullPayload.reserve1 = DIRECT_RESERVE1;
+      for (var p in payload) {
+        if (Object.prototype.hasOwnProperty.call(payload, p)) fullPayload[p] = payload[p];
+      }
+      postDirectHttp(endpoint, fullPayload, function (err, res) {
+        if (isSessionError(err) && !opts._directRetried) {
+          clearDirectSession();
+          opts._directRetried = true;
+          return callDirect43404(endpoint, payload, opts, callback);
+        }
+        callback(err, res);
+      }, opts);
+    });
+  }
+
   function call(endpoint, payload, opts, callback) {
     if (typeof opts === 'function') {
       callback = opts;
@@ -852,44 +1145,73 @@
     opts = opts || {};
     var prof = resolveProfile(opts.profile);
 
-    enqueue(function (release) {
-      var fullPayload = {};
-      if (opts.baseFields !== false) {
-        fullPayload.portalCode = prof.portalCode;
-        fullPayload.userId = session.userId;
-        fullPayload.userToken = session.userToken;
-      }
-      if (opts.deviceFields !== false) {
-        var dev = deviceDict(prof);
-        for (var k in dev) {
-          if (Object.prototype.hasOwnProperty.call(dev, k)) fullPayload[k] = dev[k];
+    function callViaRelay() {
+      enqueue(function (release) {
+        var fullPayload = {};
+        if (opts.baseFields !== false) {
+          fullPayload.portalCode = prof.portalCode;
+          fullPayload.userId = session.userId;
+          fullPayload.userToken = session.userToken;
         }
-      }
-      for (var p in payload) {
-        if (Object.prototype.hasOwnProperty.call(payload, p)) fullPayload[p] = payload[p];
-      }
+        if (opts.deviceFields !== false) {
+          var dev = deviceDict(prof);
+          for (var k in dev) {
+            if (Object.prototype.hasOwnProperty.call(dev, k)) fullPayload[k] = dev[k];
+          }
+        }
+        for (var p in payload) {
+          if (Object.prototype.hasOwnProperty.call(payload, p)) fullPayload[p] = payload[p];
+        }
 
-      var released = false;
-      function releaseOnce() {
-        if (released) return;
-        released = true;
-        release();
-      }
-      postHttp(endpoint, fullPayload, function (err, res) {
-        releaseOnce();
-        // Not for the two requests that start the session: their retry would wait for the very session start that
-        // is waiting for them, and every later portal call hung until the app was restarted
-        if (isSessionError(err) && !opts._retried && !opts.sessionStart) {
-          clearSession();
-          return ensureSession(function (sErr) {
-            if (sErr) return callback(err);
-            opts._retried = true;
-            call(endpoint, payload, opts, callback);
-          });
+        var released = false;
+        function releaseOnce() {
+          if (released) return;
+          released = true;
+          release();
         }
-        callback(err, res);
-      }, { onNet: releaseOnce, low: !!opts.low });
-    }, !!opts.low);
+        postHttp(endpoint, fullPayload, function (err, res) {
+          releaseOnce();
+          if (isRelayUnavailableError(err) && canUseDirect43404 && !opts.sessionStart) {
+            console.warn('[MagisClient] relay unavailable for ' + endpoint + ', falling back to direct 43404');
+            return callDirect43404(endpoint, payload, opts, callback);
+          }
+          // Not for the two requests that start the session: their retry would wait for the very session start that
+          // is waiting for them, and every later portal call hung until the app was restarted
+          if (isSessionError(err) && !opts._retried && !opts.sessionStart) {
+            clearSession();
+            return ensureSession(function (sErr) {
+              if (sErr) return callback(err);
+              opts._retried = true;
+              call(endpoint, payload, opts, callback);
+            });
+          }
+          callback(err, res);
+        }, { onNet: releaseOnce, low: !!opts.low });
+      }, !!opts.low);
+    }
+
+    if (canUseDirect43404 && !opts.sessionStart && !opts.forceRelay && !session.forceRelay) {
+      return enqueue(function (release) {
+        callDirect43404(endpoint, payload, opts, function (dErr, dRes) {
+          release();
+          if (!dErr) return callback(null, dRes);
+          if (relayMode !== 'off' && relayCooldownUntil <= Date.now() && dErr.httpStatus !== 0) {
+            console.warn('[MagisClient] direct 43404 failed for ' + endpoint + ', falling back to relay');
+            session.forceRelay = true;
+            if (!session.userId || !session.userToken) {
+              return ensureSession(function (sErr) {
+                if (sErr) return callback(dErr);
+                callViaRelay();
+              });
+            }
+            return callViaRelay();
+          }
+          callback(dErr);
+        });
+      }, !!opts.low);
+    }
+
+    callViaRelay();
   }
 
   var sessionStarting = false;
@@ -942,43 +1264,74 @@
    */
   function ensureSession(callback) {
     callback = callback || function () {};
-    if (relayMode === 'off') {
-      return callback(new Error('Relay disabled (off)'));
+    function startRelaySession() {
+      if (relayMode === 'off') {
+        return callback(new Error('Relay disabled (off)'));
+      }
+      startSession(false, function (err, res) {
+        if (!err) {
+          session.directOnly = false;
+          return callback(null, res);
+        }
+        function fallbackServer() {
+          var server = window.XuperCatalogSession;
+          if (!server || typeof server.acquire !== 'function') return callback(err);
+          console.warn('[MagisClient] own session failed, asking the catalog server: ' + (err.portalCode || err.message || err));
+          server.acquire(rejectedServerToken || undefined).then(function (grant) {
+            session.sn = String(grant.sn || '').toLowerCase();
+            session.userId = String(grant.userId || '');
+            session.userToken = String(grant.userToken || '');
+            session.viaServer = true;
+            session.directOnly = false;
+            session.ready = !!(session.sn && session.userId && session.userToken);
+            if (!session.ready) {
+              session.viaServer = false;
+              return callback(new Error('La sesión de catálogo no contiene los datos requeridos.'));
+            }
+            rejectedServerToken = '';
+            callback(null, session);
+          }, function () {
+            // The portal's own reason is the one worth showing
+            callback(err);
+          });
+        }
+        if (err && err.portalCode) {
+          return acquireRelayFallbackSession(function (fbErr, fbSess) {
+            if (!fbErr && fbSess) {
+              session.directOnly = false;
+              return callback(null, fbSess);
+            }
+            fallbackServer();
+          });
+        }
+        fallbackServer();
+      });
     }
+
+    if (canUseDirect43404 && !session.forceRelay) {
+      if (session.ready && session.directOnly && directSession.ready) {
+        return callback(null, directSession);
+      }
+      return ensureDirectSession(function (dErr, ds) {
+        if (!dErr) {
+          session.directOnly = true;
+          session.ready = true;
+          return callback(null, ds);
+        }
+        if (dErr.httpStatus === 0 && !dErr.portalCode) {
+          return callback(dErr);
+        }
+        console.warn('[MagisClient] direct 43404 session failed, falling back to relay');
+        session.forceRelay = true;
+        session.directOnly = false;
+        startRelaySession();
+      });
+    }
+
     if (session.ready && session.userId && session.userToken) {
       return callback(null, session);
     }
-    startSession(false, function (err, res) {
-      if (!err) return callback(null, res);
-      function fallbackServer() {
-        var server = window.XuperCatalogSession;
-        if (!server || typeof server.acquire !== 'function') return callback(err);
-        console.warn('[MagisClient] own session failed, asking the catalog server: ' + (err.portalCode || err.message || err));
-        server.acquire(rejectedServerToken || undefined).then(function (grant) {
-          session.sn = String(grant.sn || '').toLowerCase();
-          session.userId = String(grant.userId || '');
-          session.userToken = String(grant.userToken || '');
-          session.viaServer = true;
-          session.ready = !!(session.sn && session.userId && session.userToken);
-          if (!session.ready) {
-            session.viaServer = false;
-            return callback(new Error('La sesión de catálogo no contiene los datos requeridos.'));
-          }
-          rejectedServerToken = '';
-          callback(null, session);
-        }, function () {
-          // The portal's own reason is the one worth showing
-          callback(err);
-        });
-      }
-      if (err && err.portalCode) {
-        return acquireRelayFallbackSession(function (fbErr, fbSess) {
-          if (!fbErr && fbSess) return callback(null, fbSess);
-          fallbackServer();
-        });
-      }
-      fallbackServer();
-    });
+    startRelaySession();
   }
 
   function startSession(freshIdentity, callback) {
@@ -1856,8 +2209,98 @@
   ];
 
   var LIVE_CATS_STORAGE_KEY = 'xuper_live_cats_v2';
+  var STATIC_DATA_BASES = [
+    'https://tizenxuper-tv.pages.dev/data',
+    'https://cdn.jsdelivr.net/gh/tizenxupertv/TizenXuperTV@catalog-data',
+    'https://raw.githubusercontent.com/tizenxupertv/TizenXuperTV/catalog-data'
+  ];
+  var staticLiveData = null;
+  var staticLiveInflight = null;
+  var staticLiveFailedAt = 0;
+
+  function fetchStaticJson(filename, callback) {
+    if (window.__XUPER_SKIP_STATIC_CATALOG__ || typeof fetch !== 'function') {
+      return callback(new Error('static disabled'));
+    }
+    var idx = 0;
+    function tryNext() {
+      if (idx >= STATIC_DATA_BASES.length) {
+        return callback(new Error('all static mirrors failed'));
+      }
+      var url = STATIC_DATA_BASES[idx++] + '/' + filename;
+      var done = false;
+      var timer = setTimeout(function () {
+        if (done) return;
+        done = true;
+        tryNext();
+      }, 6000);
+      try {
+        fetch(url, { method: 'GET', cache: 'no-cache' }).then(function (res) {
+          if (!res || !res.ok) throw new Error('HTTP ' + (res && res.status));
+          return res.json();
+        }).then(function (data) {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          callback(null, data);
+        }).catch(function () {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          tryNext();
+        });
+      } catch (e) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        tryNext();
+      }
+    }
+    tryNext();
+  }
+
+  function ensureLiveSnapshot(callback) {
+    if (staticLiveData) return callback(null, staticLiveData);
+    if (staticLiveFailedAt && Date.now() - staticLiveFailedAt < 120000) {
+      return callback(new Error('static live snapshot cooldown'));
+    }
+    if (staticLiveInflight) {
+      staticLiveInflight.push(callback);
+      return;
+    }
+    staticLiveInflight = [callback];
+    fetchStaticJson('live-channels.json', function (err, data) {
+      var waiters = staticLiveInflight || [];
+      staticLiveInflight = null;
+      if (!err && data && Array.isArray(data.categories) && data.categories.length && data.channelsByCategory) {
+        staticLiveData = { at: Date.now(), categories: data.categories, channelsByCategory: data.channelsByCategory };
+        for (var cid in data.channelsByCategory) {
+          if (Object.prototype.hasOwnProperty.call(data.channelsByCategory, cid)) {
+            var chList = data.channelsByCategory[cid] || [];
+            for (var ci = 0; ci < chList.length; ci++) {
+              if (chList[ci] && chList[ci].channelCode) {
+                liveChannelCache[chList[ci].channelCode] = { at: Date.now(), channel: chList[ci] };
+              }
+            }
+          }
+        }
+        var catEntry = { at: Date.now(), list: data.categories };
+        liveCategoriesCache = catEntry;
+        try {
+          if (window.localStorage) localStorage.setItem(LIVE_CATS_STORAGE_KEY, JSON.stringify(catEntry));
+        } catch (e) {}
+        for (var w = 0; w < waiters.length; w++) waiters[w](null, staticLiveData);
+      } else {
+        staticLiveFailedAt = Date.now();
+        for (var w2 = 0; w2 < waiters.length; w2++) waiters[w2](err || new Error('invalid live snapshot'));
+      }
+    });
+  }
 
   function getLiveCategories(callback) {
+    if (staticLiveData && staticLiveData.categories && staticLiveData.categories.length) {
+      return setTimeout(function () { callback(null, staticLiveData.categories); }, 0);
+    }
     if (liveCategoriesCache && (Date.now() - liveCategoriesCache.at < LIVE_CATS_TTL)) {
       return setTimeout(function () { callback(null, liveCategoriesCache.list); }, 0);
     }
@@ -1872,69 +2315,74 @@
       }
     } catch (e) {}
 
-    if (relayMode === 'play-only' || relayMode === 'off') {
-      return setTimeout(function () { callback(null, FALLBACK_39_CATEGORIES); }, 0);
-    }
-
-    ensureSession(function (err) {
-      if (err) return callback(null, FALLBACK_39_CATEGORIES);
-      var allRaw = [];
-      var page = 1;
-      var pageSize = 20;
-
-      function fetchLiveCatPage() {
-        call('v3/getColumnContents', {
-          columnId: 76175,
-          isAv1: '0',
-          specialFlag: '1',
-          pageNum: page,
-          pageSize: pageSize
-        }, function (cErr, cRes) {
-          if (cErr) {
-            if (allRaw.length > 0) return finishLiveCats();
-            return callback(null, FALLBACK_39_CATEGORIES);
-          }
-          var raw = (cRes && cRes.childColumnList) || [];
-          for (var r = 0; r < raw.length; r++) allRaw.push(raw[r]);
-          var total = parseInt(cRes && cRes.totalSize, 10) || 0;
-          if (raw.length > 0 && total > allRaw.length && page < 10) {
-            page++;
-            fetchLiveCatPage();
-          } else {
-            finishLiveCats();
-          }
-        });
+    ensureLiveSnapshot(function (snapErr, snap) {
+      if (!snapErr && snap && snap.categories && snap.categories.length) {
+        return callback(null, snap.categories);
+      }
+      if (relayMode === 'play-only' || relayMode === 'off') {
+        return callback(null, FALLBACK_39_CATEGORIES);
       }
 
-      function finishLiveCats() {
-        var seen = {};
-        var list = [];
-        for (var i = 0; i < allRaw.length; i++) {
-          var c = allRaw[i];
-          if (!c || !c.id || seen[c.id]) continue;
-          seen[c.id] = true;
-          var name = text(c.name || c.alias);
-          if (!name) continue;
-          if (/^channellist$/i.test(name)) name = 'Todos los canales';
-          list.push({
-            id: c.id,
-            code: text(c.code),
-            name: name,
-            restricted: String(c.restricted) === '1',
-            sequence: parseInt(c.sequence, 10) || 999
+      ensureSession(function (err) {
+        if (err) return callback(null, FALLBACK_39_CATEGORIES);
+        var allRaw = [];
+        var page = 1;
+        var pageSize = 20;
+
+        function fetchLiveCatPage() {
+          call('v3/getColumnContents', {
+            columnId: 76175,
+            isAv1: '0',
+            specialFlag: '1',
+            pageNum: page,
+            pageSize: pageSize
+          }, function (cErr, cRes) {
+            if (cErr) {
+              if (allRaw.length > 0) return finishLiveCats();
+              return callback(null, FALLBACK_39_CATEGORIES);
+            }
+            var raw = (cRes && cRes.childColumnList) || [];
+            for (var r = 0; r < raw.length; r++) allRaw.push(raw[r]);
+            var total = parseInt(cRes && cRes.totalSize, 10) || 0;
+            if (raw.length > 0 && total > allRaw.length && page < 10) {
+              page++;
+              fetchLiveCatPage();
+            } else {
+              finishLiveCats();
+            }
           });
         }
-        if (!list.length) return callback(null, FALLBACK_39_CATEGORIES);
-        list.sort(function (a, b) { return a.sequence - b.sequence; });
-        var entry = { at: Date.now(), list: list };
-        liveCategoriesCache = entry;
-        try {
-          if (window.localStorage) localStorage.setItem(LIVE_CATS_STORAGE_KEY, JSON.stringify(entry));
-        } catch (e) {}
-        callback(null, list);
-      }
 
-      fetchLiveCatPage();
+        function finishLiveCats() {
+          var seen = {};
+          var list = [];
+          for (var i = 0; i < allRaw.length; i++) {
+            var c = allRaw[i];
+            if (!c || !c.id || seen[c.id]) continue;
+            seen[c.id] = true;
+            var name = text(c.name || c.alias);
+            if (!name) continue;
+            if (/^channellist$/i.test(name)) name = 'Todos los canales';
+            list.push({
+              id: c.id,
+              code: text(c.code),
+              name: name,
+              restricted: String(c.restricted) === '1',
+              sequence: parseInt(c.sequence, 10) || 999
+            });
+          }
+          if (!list.length) return callback(null, FALLBACK_39_CATEGORIES);
+          list.sort(function (a, b) { return a.sequence - b.sequence; });
+          var entry = { at: Date.now(), list: list };
+          liveCategoriesCache = entry;
+          try {
+            if (window.localStorage) localStorage.setItem(LIVE_CATS_STORAGE_KEY, JSON.stringify(entry));
+          } catch (e) {}
+          callback(null, list);
+        }
+
+        fetchLiveCatPage();
+      });
     });
   }
 
@@ -2130,30 +2578,50 @@
    * once while the rest downloads; the last call always carries the whole list.
    */
   function getAllLiveChannels(columnId, callback, opts) {
-    var progressive = !!(opts && opts.progressive);
-    var all = [];
-    var seen = {};
-    var page = 1;
-    function next() {
-      getLiveChannels(columnId, page, 50, function (err, list, hasMore) {
-        if (err) return page === 1 ? callback(err) : callback(null, all);
-        list = list || [];
-        for (var i = 0; i < list.length; i++) {
-          var code = list[i] && list[i].channelCode;
-          if (code && !seen[code]) {
-            seen[code] = true;
-            all.push(list[i]);
+    var colKey = String(columnId || 76182);
+    var forceRelay = !!(opts && opts.forceRelay);
+    if (!forceRelay) {
+      if (staticLiveData && staticLiveData.channelsByCategory && Array.isArray(staticLiveData.channelsByCategory[colKey]) && staticLiveData.channelsByCategory[colKey].length) {
+        return setTimeout(function () { callback(null, staticLiveData.channelsByCategory[colKey]); }, 0);
+      }
+      if (!window.__XUPER_SKIP_STATIC_CATALOG__ && typeof fetch === 'function') {
+        return ensureLiveSnapshot(function (snapErr, snap) {
+          if (!snapErr && snap && snap.channelsByCategory && Array.isArray(snap.channelsByCategory[colKey]) && snap.channelsByCategory[colKey].length) {
+            return callback(null, snap.channelsByCategory[colKey]);
           }
-        }
-        if (hasMore && list.length && page < LIVE_MAX_PAGES) {
-          if (progressive && page === 1) callback(null, all.slice(0));
-          page++;
-          return next();
-        }
-        callback(null, all);
-      });
+          fetchAllFromPortal();
+        });
+      }
     }
-    next();
+
+    function fetchAllFromPortal() {
+      var progressive = !!(opts && opts.progressive);
+      var all = [];
+      var seen = {};
+      var page = 1;
+      function next() {
+        getLiveChannels(columnId, page, 50, function (err, list, hasMore) {
+          if (err) return page === 1 ? callback(err) : callback(null, all);
+          list = list || [];
+          for (var i = 0; i < list.length; i++) {
+            var code = list[i] && list[i].channelCode;
+            if (code && !seen[code]) {
+              seen[code] = true;
+              all.push(list[i]);
+            }
+          }
+          if (hasMore && list.length && page < LIVE_MAX_PAGES) {
+            if (progressive && page === 1) callback(null, all.slice(0));
+            page++;
+            return next();
+          }
+          callback(null, all);
+        });
+      }
+      next();
+    }
+
+    fetchAllFromPortal();
   }
 
   // opts.fresh: the link just handed out stopped working (401/403, stream dropped): ask the portal again. Without it
@@ -2591,6 +3059,46 @@
     document.head.appendChild(script);
   }
 
+  var staticPortalCatalog = null;
+  var staticPortalInflight = null;
+  var staticPortalFailedAt = 0;
+  function ensurePortalCatalogJson(callback) {
+    if (staticPortalCatalog) return callback(null, staticPortalCatalog);
+    if (staticPortalFailedAt && Date.now() - staticPortalFailedAt < 120000) {
+      return callback(new Error('static portal catalog cooldown'));
+    }
+    if (staticPortalInflight) {
+      staticPortalInflight.push(callback);
+      return;
+    }
+    staticPortalInflight = [callback];
+    fetchStaticJson('portal-catalog.json', function (err, data) {
+      var waiters = staticPortalInflight || [];
+      staticPortalInflight = null;
+      if (!err && data && data.itemsByRoot) {
+        staticPortalCatalog = data;
+        if (!window.XUPERTV_PORTAL && Array.isArray(data.items)) {
+          window.XUPERTV_PORTAL = { generatedAt: data.generatedAt, source: data.source, items: data.items };
+        }
+        for (var rKey in data.itemsByRoot) {
+          if (Object.prototype.hasOwnProperty.call(data.itemsByRoot, rKey)) {
+            var rItems = data.itemsByRoot[rKey] || [];
+            if (rItems.length) {
+              var ck = rKey + ':1';
+              treeCache[ck] = { at: Date.now(), items: rItems };
+              saveHomeSessionCache(ck, rItems);
+              for (var ri = 0; ri < rItems.length; ri++) remember(rItems[ri]);
+            }
+          }
+        }
+        for (var w = 0; w < waiters.length; w++) waiters[w](null, staticPortalCatalog);
+      } else {
+        staticPortalFailedAt = Date.now();
+        for (var w2 = 0; w2 < waiters.length; w2++) waiters[w2](err || new Error('invalid portal catalog'));
+      }
+    });
+  }
+
   // opts.low: background refresh, waits behind every other request
   function home(root, pageNum, callback, opts) {
     if (typeof pageNum === 'function') {
@@ -2615,80 +3123,90 @@
       return callback(null, { root: root, pageNum: pageNum, items: ssHit.items, cached: true });
     }
 
-    function serveFallback(errReason) {
-      ensurePortalJs(function () {
-        var cat = ROOT_CATEGORY[root] || '';
-        var pool = (window.XUPERTV_PORTAL && window.XUPERTV_PORTAL.items) || (window.XUPERTV_CATALOG && window.XUPERTV_CATALOG.items) || [];
-        var staticItems = [];
-        for (var si = 0; si < pool.length; si++) {
-          var item = pool[si];
-          if (!item) continue;
-          var itemCat = item.category || '';
-          if (
-            !cat ||
-            cat === 'explorar' ||
-            itemCat.indexOf(cat) !== -1 ||
-            (cat === 'pelicula' && (item.type === 'movie' || item.kind === 'película')) ||
-            (cat === 'serie' && (item.type === 'series' || item.kind === 'serie'))
-          ) {
-            remember(item);
-            staticItems.push(item);
-          }
+    if (pageNum === 1 && !opts.forceRelay && !window.__XUPER_SKIP_STATIC_CATALOG__ && typeof fetch === 'function') {
+      return ensurePortalCatalogJson(function (snapErr, snap) {
+        if (!snapErr && snap && snap.itemsByRoot && Array.isArray(snap.itemsByRoot[root]) && snap.itemsByRoot[root].length) {
+          return callback(null, { root: root, pageNum: pageNum, items: snap.itemsByRoot[root], cached: true, fromStatic: true });
         }
-        if (staticItems.length > 0) {
-          return callback(null, { root: root, pageNum: pageNum, items: staticItems, cached: false, fromStatic: true });
-        }
-        return callback(errReason);
+        fetchHomeFromRelay();
       });
     }
 
-    if (relayMode === 'off' || relayMode === 'play-only') {
-      return serveFallback(new Error('Relay mode: ' + relayMode));
-    }
+    function fetchHomeFromRelay() {
+      function serveFallback(errReason) {
+        ensurePortalJs(function () {
+          var cat = ROOT_CATEGORY[root] || '';
+          var pool = (window.XUPERTV_PORTAL && window.XUPERTV_PORTAL.items) || (window.XUPERTV_CATALOG && window.XUPERTV_CATALOG.items) || [];
+          var staticItems = [];
+          for (var si = 0; si < pool.length; si++) {
+            var item = pool[si];
+            if (!item) continue;
+            var itemCat = item.category || '';
+            if (
+              !cat ||
+              cat === 'explorar' ||
+              itemCat.indexOf(cat) !== -1 ||
+              (cat === 'pelicula' && (item.type === 'movie' || item.kind === 'película')) ||
+              (cat === 'serie' && (item.type === 'series' || item.kind === 'serie'))
+            ) {
+              remember(item);
+              staticItems.push(item);
+            }
+          }
+          if (staticItems.length > 0) {
+            return callback(null, { root: root, pageNum: pageNum, items: staticItems, cached: false, fromStatic: true });
+          }
+          return callback(errReason);
+        });
+      }
 
-    ensureSession(function (err) {
-      if (err) return serveFallback(err);
       if (relayMode === 'off' || relayMode === 'play-only') {
         return serveFallback(new Error('Relay mode: ' + relayMode));
       }
-      call('v3/getColumnContents', {
-        columnId: ROOT_IDS[root] || ROOT_IDS.movies,
-        isAv1: '0',
-        specialFlag: '0',
-        pageNum: pageNum,
-        pageSize: 20
-      }, { low: !!opts.low }, function (cErr, cRes) {
-        if (cErr) return serveFallback(cErr);
 
-        var cat = ROOT_CATEGORY[root] || '';
-        function rowTitles(assets, rowName) {
-          var out = [];
-          for (var j = 0; j < assets.length; j++) {
-            var it = itemFromAsset(assets[j], cat, null);
-            if (it) {
-              it.row = rowName;
-              out.push(it);
-            }
-          }
-          return out;
+      ensureSession(function (err) {
+        if (err) return serveFallback(err);
+        if (relayMode === 'off' || relayMode === 'play-only') {
+          return serveFallback(new Error('Relay mode: ' + relayMode));
         }
+        call('v3/getColumnContents', {
+          columnId: ROOT_IDS[root] || ROOT_IDS.movies,
+          isAv1: '0',
+          specialFlag: '0',
+          pageNum: pageNum,
+          pageSize: 20
+        }, { low: !!opts.low }, function (cErr, cRes) {
+          if (cErr) return serveFallback(cErr);
 
-        var recList = cRes && cRes.recommendList || [];
-        if (recList.length > 0) {
-          var rows = [];
-          for (var i = 0; i < recList.length; i++) {
-            var col = recList[i];
-            var name = text(col && col.name);
-            var row = { col: col, name: name, titles: rowTitles(col && col.assetList || [], name), tiles: [] };
-            var agg = col && col.aggregationList || [];
-            for (var g = 0; g < agg.length; g++) {
-              var tile = collectionFromColumn(agg[g], cat);
-              if (tile) row.tiles.push(tile);
+          var cat = ROOT_CATEGORY[root] || '';
+          function rowTitles(assets, rowName) {
+            var out = [];
+            for (var j = 0; j < assets.length; j++) {
+              var it = itemFromAsset(assets[j], cat, null);
+              if (it) {
+                it.row = rowName;
+                out.push(it);
+              }
             }
-            rows.push(row);
+            return out;
           }
 
-          function doneRec() {
+          var recList = cRes && cRes.recommendList || [];
+          if (recList.length > 0) {
+            var rows = [];
+            for (var i = 0; i < recList.length; i++) {
+              var col = recList[i];
+              var name = text(col && col.name);
+              var row = { col: col, name: name, titles: rowTitles(col && col.assetList || [], name), tiles: [] };
+              var agg = col && col.aggregationList || [];
+              for (var g = 0; g < agg.length; g++) {
+                var tile = collectionFromColumn(agg[g], cat);
+                if (tile) row.tiles.push(tile);
+              }
+              rows.push(row);
+            }
+
+            function doneRec() {
             var items = [];
             for (var r = 0; r < rows.length; r++) items = items.concat(rows[r].titles, rows[r].tiles);
             saveHomeSessionCache(cacheKey, items);
@@ -2751,6 +3269,9 @@
         }
       });
     });
+    }
+
+    fetchHomeFromRelay();
   }
 
   // Root column ids for the full listings (v3/getColumnContents of the portal tree)
@@ -3121,29 +3642,41 @@
     if (recommendCache[cacheKey] && Date.now() - recommendCache[cacheKey].at < RECOMMEND_TTL) {
       return callback(null, recommendCache[cacheKey].items);
     }
-    var cat = ROOT_CATEGORY[root] || '';
-    getRecommends(codes, function (err, recList) {
-      if (err) return callback(err);
-      var items = [];
-      var seen = {};
-      for (var i = 0; i < recList.length; i++) {
-        var group = recList[i];
-        var contents = (group && group.contentList) || [];
-        for (var j = 0; j < contents.length; j++) {
-          var c = contents[j];
-          if (!c || !c.contentId || seen[c.contentId]) continue;
-          seen[c.contentId] = true;
-          var kind = c.type === '1' ? 'serie' : 'película';
-          var it = itemFromAsset(c, cat, kind);
-          if (it) {
-            if (c.viewPoint) it.tagline = trim(c.viewPoint);
-            items.push(it);
+    if (!window.__XUPER_SKIP_STATIC_CATALOG__ && typeof fetch === 'function') {
+      return ensurePortalCatalogJson(function (snapErr, snap) {
+        if (!snapErr && snap && snap.recommends && Array.isArray(snap.recommends[root]) && snap.recommends[root].length) {
+          recommendCache[cacheKey] = { at: Date.now(), items: snap.recommends[root] };
+          return callback(null, snap.recommends[root]);
+        }
+        fetchTabRecommendsFromRelay();
+      });
+    }
+    function fetchTabRecommendsFromRelay() {
+      var cat = ROOT_CATEGORY[root] || '';
+      getRecommends(codes, function (err, recList) {
+        if (err) return callback(err);
+        var items = [];
+        var seen = {};
+        for (var i = 0; i < recList.length; i++) {
+          var group = recList[i];
+          var contents = (group && group.contentList) || [];
+          for (var j = 0; j < contents.length; j++) {
+            var c = contents[j];
+            if (!c || !c.contentId || seen[c.contentId]) continue;
+            seen[c.contentId] = true;
+            var kind = c.type === '1' ? 'serie' : 'película';
+            var it = itemFromAsset(c, cat, kind);
+            if (it) {
+              if (c.viewPoint) it.tagline = trim(c.viewPoint);
+              items.push(it);
+            }
           }
         }
-      }
-      recommendCache[cacheKey] = { at: Date.now(), items: items };
-      callback(null, items);
-    });
+        recommendCache[cacheKey] = { at: Date.now(), items: items };
+        callback(null, items);
+      });
+    }
+    fetchTabRecommendsFromRelay();
   }
 
   function getPerson(contentId, callback) {

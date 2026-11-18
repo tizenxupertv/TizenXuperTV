@@ -247,15 +247,67 @@ function streamProxyPlugin() {
     }
   };
 
+  const DIRECT_43404_HOSTS = new Set([
+    'fuxok.nguvmqhpk.com',
+    'ftmrmy.jdfey0cd.com',
+    'mptec.dhkrxuzcy.com',
+    'eajmnp.hcgv1dt8.com'
+  ]);
+
+  const direct43404Handler = (req: any, res: any) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    if (req.method === 'OPTIONS') {
+      res.statusCode = 204;
+      return res.end();
+    }
+    const cleanUrl = String(req.url || '').replace(/^\/+/, '');
+    const slashIdx = cleanUrl.indexOf('/');
+    const targetHost = slashIdx > 0 ? cleanUrl.slice(0, slashIdx) : '';
+    const portalPath = slashIdx > 0 ? cleanUrl.slice(slashIdx + 1) : '';
+    if (!DIRECT_43404_HOSTS.has(targetHost) || !portalPath) {
+      res.statusCode = 400;
+      return res.end('Invalid direct-43404 target');
+    }
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json;charset=utf-8',
+      'apk': String(req.headers['apk'] || 'com.android.msandroid'),
+      'apkVer': String(req.headers['apkver'] || '43404'),
+      'spkgVer': String(req.headers['spkgver'] || '2024-09-10 06:25:30_33_13_'),
+      'User-Agent': 'okhttp/3.12.12'
+    };
+    const upstreamReq = https.request({
+      hostname: targetHost,
+      port: 443,
+      path: '/api/portalCore/' + portalPath,
+      method: 'POST',
+      headers,
+      timeout: 15000
+    }, (upstreamRes) => {
+      res.statusCode = upstreamRes.statusCode || 200;
+      res.setHeader('Content-Type', String(upstreamRes.headers['content-type'] || 'application/json'));
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      upstreamRes.pipe(res);
+    });
+    upstreamReq.on('error', (err) => {
+      res.statusCode = 502;
+      res.end(err.message);
+    });
+    req.pipe(upstreamReq);
+  };
+
   return {
     name: 'magis-stream-proxy',
     configureServer(server: any) {
       server.middlewares.use('/epic-api', epicApiHandler);
       server.middlewares.use('/stream-proxy', handler);
+      server.middlewares.use('/direct-43404', direct43404Handler);
     },
     configurePreviewServer(server: any) {
       server.middlewares.use('/epic-api', epicApiHandler);
       server.middlewares.use('/stream-proxy', handler);
+      server.middlewares.use('/direct-43404', direct43404Handler);
     }
   };
 }

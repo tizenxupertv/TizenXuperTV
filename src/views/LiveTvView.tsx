@@ -653,7 +653,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             tune(replacement);
           }
         }
-      }, { progressive: false });
+      }, { progressive: false, forceRelay: true });
     };
     window.addEventListener('xuper-channel-code-expired', handleExpired);
     return () => window.removeEventListener('xuper-channel-code-expired', handleExpired);
