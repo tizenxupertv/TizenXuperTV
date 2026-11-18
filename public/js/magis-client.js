@@ -446,9 +446,15 @@
     var savedSess = window.localStorage && localStorage.getItem(SESSION_STORAGE_KEY);
     if (savedSess) {
       var parsedSess = JSON.parse(savedSess);
-      // A session without snToken was borrowed from the old third-party seeds list, not created by
-      // this device: drop it so the device registers its own
-      if (parsedSess && parsedSess.userId && parsedSess.userToken && !parsedSess.snToken) {
+      // A session without snToken, or one of the old single shared fallback sessions (992886748 / 993292208),
+      // is dropped so this TV receives its own dedicated session
+      var isOldShared = parsedSess && (
+        String(parsedSess.userId) === '992886748' ||
+        String(parsedSess.userId) === '993292208' ||
+        String(parsedSess.sn || '').toLowerCase() === 'a28ecfe517d35868a67ab41905f212e3' ||
+        String(parsedSess.sn || '').toLowerCase() === '509cb291ef75b6d8fc5bfaa5d410985c'
+      );
+      if (parsedSess && ((parsedSess.userId && parsedSess.userToken && !parsedSess.snToken) || isOldShared)) {
         localStorage.removeItem(SESSION_STORAGE_KEY);
         parsedSess = null;
       }
@@ -2002,28 +2008,14 @@
         for (var j = 0; j < uList.length; j++) {
           var u = uList[j];
           var urlStr = u && u.url || '';
-          if (u.sign_type === 'cfl' || urlStr.indexOf('sign_type=cfl') !== -1) {
+          if (u.sign_type === 'cfl' || urlStr.indexOf('sign_type=cfl') !== -1 || urlStr.indexOf('link=cf') !== -1) {
             addCdn(c.main_addr, urlStr);
             if (c.spared_addr) addCdn(c.spared_addr, urlStr);
           }
         }
       }
     }
-    for (var d = 0; d < list.length; d++) {
-      var f = list[d];
-      if (f && f.tag === 'live') {
-        var mList = f.url_list || [];
-        for (var p = 0; p < mList.length; p++) {
-          var v = mList[p];
-          var hUrl = v && v.url || '';
-          if (hUrl && hUrl.indexOf('token=') !== -1) {
-            addCdn(f.main_addr, hUrl);
-            if (f.spared_addr) addCdn(f.spared_addr, hUrl);
-          }
-        }
-      }
-    }
-    // Fallback: accept any live CDN with CFL sign_type (v15/getSlbInfo)
+    // Fallback 1: accept any live CDN with CFL sign_type / link=cf (v15/getSlbInfo)
     if (!cdns.length) {
       for (var k = 0; k < list.length; k++) {
         var anyCdn = list[k];
@@ -2032,9 +2024,26 @@
           for (var m = 0; m < aList.length; m++) {
             var au = aList[m];
             var aStr = au && au.url || '';
-            if (au.sign_type === 'cfl' || aStr.indexOf('sign_type=cfl') !== -1) {
+            if (au.sign_type === 'cfl' || aStr.indexOf('sign_type=cfl') !== -1 || aStr.indexOf('link=cf') !== -1) {
               addCdn(anyCdn.main_addr, aStr);
               if (anyCdn.spared_addr) addCdn(anyCdn.spared_addr, aStr);
+            }
+          }
+        }
+      }
+    }
+    // Fallback 2: only if no CFL CDN exists at all, fall back to token-bearing live CDNs
+    if (!cdns.length) {
+      for (var d = 0; d < list.length; d++) {
+        var f = list[d];
+        if (f && f.tag === 'live') {
+          var mList = f.url_list || [];
+          for (var p = 0; p < mList.length; p++) {
+            var v = mList[p];
+            var hUrl = v && v.url || '';
+            if (hUrl && hUrl.indexOf('token=') !== -1) {
+              addCdn(f.main_addr, hUrl);
+              if (f.spared_addr) addCdn(f.spared_addr, hUrl);
             }
           }
         }
