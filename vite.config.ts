@@ -131,9 +131,9 @@ function streamProxyPlugin() {
         if (auth) headers['Content-Auth'] = auth;
         if (license) headers['Content-License'] = license;
       } else if (isEpic) {
-        headers['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)';
-        headers['Referer'] = 'https://epictvparaiphone.top/';
-        if (resolvedPulsera) headers['X-Pulsera'] = resolvedPulsera;
+        headers['User-Agent'] = 'Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)';
+        headers['X-Llave'] = '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq';
+        headers['X-Aparato'] = 'a1b2c3d4';
       } else {
         headers['User-Agent'] = ua || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
         if (referer) {
