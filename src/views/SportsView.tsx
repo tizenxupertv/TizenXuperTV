@@ -256,7 +256,7 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
       const m = new Map<string, Score>();
       events.forEach(e => {
         if (!isVersus(e)) return;
-        const sc = scoreboardService.findScore(e.home, e.away) as Score | null;
+        const sc = (scoreboardService.findScore(e.home, e.away) || e.score) as Score | null;
         if (sc) m.set(e.id, sc);
       });
       setScores(m);
@@ -291,21 +291,29 @@ export const SportsView: React.FC<Props> = ({ isFocusActive, paused = false, onF
   const lines: Line[] = useMemo(() => {
     const live = filtered.filter(e => e.status === 'live').sort(plusFirst);
     const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
-    const rest = filtered.filter(e => e.status === 'scheduled' || (e.status === 'finished' && e.startMillis >= todayStart))
+    const scheduled = filtered.filter(e => e.status === 'scheduled')
       .sort((a, b) => (dayLabel(a.startMillis) === dayLabel(b.startMillis)
-        ? (a.status === 'finished' ? 1 : 0) - (b.status === 'finished' ? 1 : 0) || plusFirst(a, b)
+        ? plusFirst(a, b)
         : a.startMillis - b.startMillis));
+    const finished = filtered.filter(e => e.status === 'finished' && e.startMillis >= todayStart)
+      .sort(plusFirst);
+
     const out: Line[] = [];
     if (live.length) out.push({ kind: 'live', events: live });
+
     let day = '';
-    for (let i = 0; i < rest.length; i += 0) {
-      const d = dayLabel(rest[i].startMillis);
+    for (let i = 0; i < scheduled.length; i += 0) {
+      const d = dayLabel(scheduled[i].startMillis);
       const sameDay: SportsEvent[] = [];
-      while (i < rest.length && dayLabel(rest[i].startMillis) === d) sameDay.push(rest[i++]);
+      while (i < scheduled.length && dayLabel(scheduled[i].startMillis) === d) sameDay.push(scheduled[i++]);
       for (let j = 0; j < sameDay.length; j += GRID_COLS) {
         out.push({ kind: 'grid', events: sameDay.slice(j, j + GRID_COLS), header: j === 0 && d !== day ? d : undefined });
       }
       day = d;
+    }
+
+    for (let j = 0; j < finished.length; j += GRID_COLS) {
+      out.push({ kind: 'grid', events: finished.slice(j, j + GRID_COLS), header: j === 0 ? 'Finalizados' : undefined });
     }
     return out;
   }, [filtered]);

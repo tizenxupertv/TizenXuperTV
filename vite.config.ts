@@ -59,15 +59,12 @@ function streamProxyPlugin() {
       return res.end(JSON.stringify({ ok: true, numero: token.split('.')[0], token }));
     }
     const headers: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
-      'Referer': 'https://epictvparaiphone.top/iphone/',
-      'Origin': 'https://epictvparaiphone.top',
+      'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)',
+      'X-Llave': '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq',
+      'X-Aparato': 'a1b2c3d4',
+      'X-Pulsera': '1',
       'Accept': 'application/json, text/plain, */*'
     };
-    if (token) {
-      headers['X-Pulsera'] = token;
-      headers['Cookie'] = `__Host-pulsera=${token}`;
-    }
     const upstreamReq = https.request({
       hostname: 'epictvparaiphone.top',
       port: 443,
@@ -78,7 +75,8 @@ function streamProxyPlugin() {
     }, (upstreamRes) => {
       res.statusCode = upstreamRes.statusCode || 200;
       for (const [k, v] of Object.entries(upstreamRes.headers)) {
-        if (k.toLowerCase() !== 'content-security-policy') {
+        const lower = k.toLowerCase();
+        if (lower !== 'content-security-policy' && lower !== 'www-authenticate') {
           if (v) res.setHeader(k, v);
         }
       }
@@ -134,6 +132,7 @@ function streamProxyPlugin() {
         headers['User-Agent'] = 'Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)';
         headers['X-Llave'] = '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq';
         headers['X-Aparato'] = 'a1b2c3d4';
+        headers['X-Pulsera'] = '1';
       } else {
         headers['User-Agent'] = ua || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
         if (referer) {

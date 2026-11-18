@@ -90,7 +90,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
     sportsService.prepareStreams(streams.slice(currentStreamIdx + 1, currentStreamIdx + 3));
   }, [streams, currentStreamIdx]);
   const versus = !!event.away && event.away.trim().toLowerCase() !== event.home.trim().toLowerCase();
-  const score = versus ? scoreboardService.findScore(event.home, event.away) : null;
+  const score = versus ? (scoreboardService.findScore(event.home, event.away) || event.score || null) : null;
 
   const osdVisibleRef = useRef(true);
   const hideOsd = useCallback(() => {
@@ -169,7 +169,8 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       if (streams.length > 1) {
         const next = nextSignal(streams.length, currentStreamIdx, failed);
         if (next >= 0 && next !== currentStreamIdx) {
-          setFailed(prev => new Set(prev).add(currentStreamIdx));
+          if (currentStream?.url) sportsService.markStreamDead(currentStream.url);
+    setFailed(prev => new Set(prev).add(currentStreamIdx));
           setCurrentStreamIdx(next);
           return;
         }
@@ -399,6 +400,7 @@ export const SportsPlayerFullscreen: React.FC<SportsPlayerFullscreenProps> = ({
       setRouteIdx(routeIdx + 1);
       return;
     }
+    if (currentStream?.url) sportsService.markStreamDead(currentStream.url);
     setFailed(prev => new Set(prev).add(currentStreamIdx));
     if (streams.length > 1) {
       const next = nextSignal(streams.length, currentStreamIdx, failed);

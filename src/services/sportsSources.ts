@@ -4,15 +4,19 @@ import { EPIC_LINKS_PREFIX } from '../lib/epicMenu';
 import { sportsService } from './sportsService.ts';
 import { epicAgendaService } from './epicAgendaService';
 
+/** Toggle to re-enable the legacy main sports agenda alongside EPIC+ when needed */
+const ENABLE_MAIN_SPORTS_AGENDA = true;
+
 /**
- * What Deportes shows: the main agenda plus EPIC+'s agenda as the "Fútbol+" category. Either can fail alone (the
- * other still shows); an error only when both do.
+ * What Deportes shows: currently EPIC+'s agenda only (set ENABLE_MAIN_SPORTS_AGENDA = true to restore the main agenda).
  */
 export const deportesSource: SportsSource = {
   peekEvents(): SportsEvent[] {
+    if (!ENABLE_MAIN_SPORTS_AGENDA) return epicAgendaService.peekEvents();
     return [...sportsService.peekEvents(), ...epicAgendaService.peekEvents()];
   },
   async getEvents(force = false): Promise<SportsEvent[]> {
+    if (!ENABLE_MAIN_SPORTS_AGENDA) return epicAgendaService.getEvents(force);
     const [main, plus] = await Promise.allSettled([sportsService.getEvents(force), epicAgendaService.getEvents(force)]);
     if (main.status === 'rejected' && plus.status === 'rejected') throw main.reason;
     return [...(main.status === 'fulfilled' ? main.value : []), ...(plus.status === 'fulfilled' ? plus.value : [])];

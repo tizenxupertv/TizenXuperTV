@@ -221,6 +221,134 @@ async function main() {
   const portalPath = path.join(OUT_DIR, 'portal-catalog.json');
   fs.writeFileSync(portalPath, JSON.stringify(portalOut));
   console.log(`   Wrote ${portalPath} (${Math.round(fs.statSync(portalPath).size / 1024)} KB)`);
+
+  console.log('4. Fetching Epic+ Perelman channels...');
+  try {
+    const epicRes = await fetch('https://epictvparaiphone.top/canales', {
+      headers: {
+        'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)',
+        'X-Llave': '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq',
+        'X-Aparato': 'a1b2c3d4',
+        'X-Pulsera': '1',
+        'Accept': 'application/json'
+      }
+    });
+    if (epicRes.ok) {
+      const epicRaw = await epicRes.json();
+      const LOGO_BASE = 'https://epictvparaiphone.top';
+      const logoById = {
+        'epic-espn': `${LOGO_BASE}/logos/canales/ESPN_color.png?v=18`,
+        'epic-espn2': `${LOGO_BASE}/logos/canales/ESPN_2_color.png?v=18`,
+        'epic-espn3': `${LOGO_BASE}/logos/canales/ESPN_3_color.png?v=18`,
+        'epic-espn4': `${LOGO_BASE}/logos/canales/ESPN_4_color.png?v=18`,
+        'epic-espn5': `${LOGO_BASE}/logos/canales/ESPN_5_color.png?v=18`,
+        'epic-espn6': `${LOGO_BASE}/logos/canales/ESPN_6_color.png?v=18`,
+        'epic-espn7': `${LOGO_BASE}/logos/canales/ESPN_7_color.png?v=18`,
+        'epic-dsportsperu': `${LOGO_BASE}/logos/canales/dsports_color.png?v=18`,
+        'epic-dsports2': `${LOGO_BASE}/logos/canales/dsports_2_color.png?v=18`,
+        'epic-dsportsplus': `${LOGO_BASE}/logos/canales/dsports_plus_color.png?v=18`,
+        'epic-winsportsplus': `${LOGO_BASE}/logos/canales/win_sports_plus_color.png?v=18`,
+        'epic-winsports': `${LOGO_BASE}/logos/canales/win_sports_color.png?v=18`,
+        'epic-l1max': `${LOGO_BASE}/logos/canales/L1_max_color.png?v=18`,
+        'epic-l1': `${LOGO_BASE}/logos/canales/l1_color.png?v=18`,
+        'epic-zappingsports': `${LOGO_BASE}/logos/canales/zapping_sports_color.png?v=18`,
+        'epic-zappingsportsplus': `${LOGO_BASE}/logos/canales/zapping_sports_plus_color.png?v=18`,
+        'epic-dtvcplus': `${LOGO_BASE}/logos/canales/deportes_tvc_color.png?v=18`,
+        'epic-bicolorpremium': `${LOGO_BASE}/logos/canales/Bicolor_plus_premium_color.png?v=18`,
+        'epic-bicolorpremium2': `${LOGO_BASE}/logos/canales/Bicolor_plus_premium_2_color.png?v=18`,
+        'epic-bicolorplus': `${LOGO_BASE}/logos/canales/Bicolor_plus_color.png?v=18`,
+        'epic-entelgol': `${LOGO_BASE}/logos/canales/entel_gol_color.png?v=18`,
+        'epic-entelgolplus': `${LOGO_BASE}/logos/canales/entel_gol_plus_color_liviano.png?v=18`,
+        'epic-futbolcanal': `${LOGO_BASE}/logos/canales/futbol_canal_color.png?v=18`,
+        'epic-unitel': `${LOGO_BASE}/logos/canales/unitel_color.png?v=18`,
+        'epic-unitelscz': `${LOGO_BASE}/logos/canales/unitel_color.png?v=18`,
+        'epic-reduno': `${LOGO_BASE}/logos/canales/red_uno_color_liviano.png?v=18`,
+        'epic-bolivision': `${LOGO_BASE}/logos/canales/bolivision_color.png?v=18`,
+        'epic-atb': `${LOGO_BASE}/logos/canales/atb_color.png?v=18`,
+        'epic-boliviatv': `${LOGO_BASE}/logos/canales/bolivia_tv_color.png?v=18`,
+        'epic-teleamazonas': `${LOGO_BASE}/logos/canales/teleamazonas_color.png?v=18`,
+        'epic-antena3': `${LOGO_BASE}/logos/canales/antena_3_color.png?v=18`,
+        'epic-cuatro': `${LOGO_BASE}/logos/canales/cuatro_color.png?v=18`,
+        'epic-americatv': `${LOGO_BASE}/logos/canales/america_tv_color.png?v=18`,
+        'epic-lasexta': `${LOGO_BASE}/logos/canales/lasexta_color.png?v=18`,
+        'epic-telecinco': `${LOGO_BASE}/logos/canales/telecinco_color.png?v=18`
+      };
+      const nameOverrides = {
+        'epic-espn': 'ESPN',
+        'epic-dsportsperu': 'DSports',
+        'epic-dsports2': 'DSports 2',
+        'epic-dsportsplus': 'DSports+'
+      };
+      const normalizeRegion = (c) => {
+        const f = String(c.folder || '').trim();
+        return (!f || f.includes(',') || f.toLowerCase() === 'otros') ? 'Latinoamérica' : f;
+      };
+      const regionOrder = (r) => r === 'Latinoamérica' ? '0' : r === 'Colombia' ? '1' : '2' + r.toLowerCase();
+      const latamOrder = (n) => {
+        const l = n.toLowerCase();
+        return l.startsWith('espn') ? '0' + l : l.startsWith('dsports') ? '1' + l : '2' + l;
+      };
+
+      const seenEpic = new Set();
+      const channels = [];
+      for (const c of (Array.isArray(epicRaw) ? epicRaw : [])) {
+        if (!c || c.fuente !== 'perelman' || typeof c.url !== 'string') continue;
+        const rawId = String(c.id || '').replace(/^pere-/, '');
+        const id = `epic-${rawId}`;
+        if (!rawId || seenEpic.has(id)) continue;
+        seenEpic.add(id);
+        const streamUrl = c.url.startsWith('http')
+          ? (c.url.endsWith('.m3u8') ? c.url : `${c.url}.m3u8`)
+          : `${LOGO_BASE}/perelman/${rawId}.m3u8`;
+        const cleanName = String(c.name || c.nombre || rawId).replace(/\s*·\s*[^·]+$/, '').trim();
+        channels.push({
+          id,
+          code: id,
+          name: nameOverrides[id] || cleanName,
+          categoryName: normalizeRegion(c),
+          time: 'EN VIVO',
+          url: streamUrl,
+          logo: c.logo ? (c.logo.startsWith('http') ? c.logo : `${LOGO_BASE}${c.logo}`) : (logoById[id] || '')
+        });
+      }
+      channels.sort((a, b) => {
+        const ra = regionOrder(a.categoryName);
+        const rb = regionOrder(b.categoryName);
+        if (ra !== rb) return ra.localeCompare(rb, 'es');
+        if (a.categoryName === 'Latinoamérica') return latamOrder(a.name).localeCompare(latamOrder(b.name), 'es');
+        return a.name.localeCompare(b.name, 'es');
+      });
+
+      const epicPath = path.join(OUT_DIR, 'epic-channels.json');
+      fs.writeFileSync(epicPath, JSON.stringify({ generatedAt: new Date().toISOString(), channels }));
+      console.log(`   Wrote ${epicPath} (${channels.length} channels, ${Math.round(fs.statSync(epicPath).size / 1024)} KB)`);
+    }
+  } catch (e) {
+    console.warn(`   Epic+ channels FAILED: ${e.message}`);
+  }
+
+  console.log('5. Fetching Epic+ agenda fallback snapshot...');
+  try {
+    const agendaRes = await fetch('https://epictvparaiphone.top/menu?all=1&recetas=aparte&agenda=propia&v=800&tz=America%2FBogota&idioma=es', {
+      headers: {
+        'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)',
+        'X-Llave': '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq',
+        'X-Aparato': 'a1b2c3d4',
+        'X-Pulsera': '1',
+        'Accept': 'application/json'
+      }
+    });
+    if (agendaRes.ok) {
+      const agendaTxt = await agendaRes.text();
+      if (agendaTxt && agendaTxt.trim().startsWith('{')) {
+        const agendaPath = path.join(OUT_DIR, 'epic-agenda.json');
+        fs.writeFileSync(agendaPath, agendaTxt);
+        console.log(`   Wrote ${agendaPath} (${Math.round(fs.statSync(agendaPath).size / 1024)} KB)`);
+      }
+    }
+  } catch (e) {
+    console.warn(`   Epic+ agenda FAILED: ${e.message}`);
+  }
 }
 
 main().catch((err) => {
