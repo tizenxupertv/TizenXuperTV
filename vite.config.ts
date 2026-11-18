@@ -7,16 +7,22 @@ import https from 'https';
 import { URL } from 'url';
 import { tvCompatPlugin } from './vite-tv-compat';
 
-let cachedEpicToken = '';
+let cachedEpicToken = '01b53ec6.gente.1794262791.5db6ac9d1f51d4d84252ca9939f9e0beaa86a0e399ca3f1dabba6b2c2672ea4c';
 function getEpicToken(): Promise<string> {
   if (cachedEpicToken) return Promise.resolve(cachedEpicToken);
   return new Promise((resolve) => {
     const req = https.request({
-      hostname: 'playlatam.site',
+      hostname: 'epictvparaiphone.top',
       port: 443,
       path: '/iphone/pulsera',
       method: 'POST',
-      headers: { 'Accept': 'application/json' },
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+        'Referer': 'https://epictvparaiphone.top/iphone/',
+        'Origin': 'https://epictvparaiphone.top',
+        'X-Pulsera': '1'
+      },
       timeout: 5000
     }, (res) => {
       const cookies = res.headers['set-cookie'] || [];
@@ -28,9 +34,9 @@ function getEpicToken(): Promise<string> {
           return resolve(cachedEpicToken);
         }
       }
-      resolve('');
+      resolve('01b53ec6.gente.1794262791.5db6ac9d1f51d4d84252ca9939f9e0beaa86a0e399ca3f1dabba6b2c2672ea4c');
     });
-    req.on('error', () => resolve(''));
+    req.on('error', () => resolve('01b53ec6.gente.1794262791.5db6ac9d1f51d4d84252ca9939f9e0beaa86a0e399ca3f1dabba6b2c2672ea4c'));
     req.end();
   });
 }
@@ -52,16 +58,17 @@ function streamProxyPlugin() {
       return res.end(JSON.stringify({ ok: true, numero: token.split('.')[0], token }));
     }
     const headers: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
-      'Referer': 'https://playlatam.site/',
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+      'Referer': 'https://epictvparaiphone.top/iphone/',
+      'Origin': 'https://epictvparaiphone.top',
       'Accept': 'application/json, text/plain, */*'
     };
     if (token) {
-      headers['X-Pulsera'] = token;
+      headers['X-Pulsera'] = '1';
       headers['Cookie'] = `__Host-pulsera=${token}`;
     }
     const upstreamReq = https.request({
-      hostname: 'playlatam.site',
+      hostname: 'epictvparaiphone.top',
       port: 443,
       path: targetPath,
       method: req.method || 'GET',
@@ -138,6 +145,10 @@ function streamProxyPlugin() {
         } else if (targetUrl.includes('wedd48c') || targetUrl.includes('daddylive') || targetUrl.includes('premium')) {
           headers['Referer'] = 'https://daddylive.sx/';
           headers['Origin'] = 'https://daddylive.sx';
+        } else if (targetUrl.includes('teveo.cu')) {
+          headers['Referer'] = 'https://teveo.cu/';
+          headers['Origin'] = 'https://teveo.cu';
+          headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
         }
       }
       if (req.headers.range) headers['Range'] = req.headers.range;
@@ -283,7 +294,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/epic-api': {
-        target: 'https://playlatam.site',
+        target: 'https://epictvparaiphone.top',
         changeOrigin: true,
         rewrite: (p: string) => p.replace(/^\/epic-api/, '')
       },

@@ -11,6 +11,7 @@ export interface LiveChannel {
   colId?: string | number;
   categoryName?: string;
   badge?: string;
+  headers?: Record<string, string>;
 }
 
 export interface LiveCategory {

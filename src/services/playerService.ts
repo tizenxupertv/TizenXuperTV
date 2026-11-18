@@ -45,7 +45,11 @@ const segCache = new Map<string, { buffer?: ArrayBuffer; promise?: Promise<Array
 
 function resolveSegmentUrl(uri: string, baseUrl: string): string {
   try {
-    return new URL(uri, baseUrl).href;
+    const origin = typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost';
+    const absoluteBase = baseUrl.startsWith('http://') || baseUrl.startsWith('https://')
+      ? baseUrl
+      : new URL(baseUrl.startsWith('/') ? baseUrl : `/${baseUrl}`, origin).href;
+    return new URL(uri, absoluteBase).href;
   } catch {
     const base = baseUrl.slice(0, baseUrl.lastIndexOf('/') + 1);
     return base + uri;
@@ -587,12 +591,13 @@ class PlayerService {
       }
 
       if (channel.url.includes('.m3u8')) {
-        this.streamHls(channel.url, videoEl, undefined, code);
+        const streamMeta = channel.headers ? { url: channel.url, headers: channel.headers } : undefined;
+        this.streamHls(channel.url, videoEl, streamMeta, code);
       } else if (fullscreen && window.XuperAVPlay && window.XuperAVPlay.playStream) {
-        this.playLiveStream(channel.url, null, videoEl);
+        this.playLiveStream(channel.url, channel.headers || null, videoEl);
       } else if (window.XuperAVPlay && window.XuperAVPlay.playPreview) {
         // A direct link has no headers of its own: do not reuse the last portal channel's
-        window.__xuperCurrentStreamMeta = null;
+        window.__xuperCurrentStreamMeta = channel.headers ? { url: channel.url, headers: channel.headers } : null;
         this.playAvPreview(channel.url, videoEl);
       } else {
         videoEl.src = channel.url;
@@ -710,7 +715,8 @@ class PlayerService {
       const auth = streamMeta?.headers?.['Content-Auth'] || '';
       const license = streamMeta?.headers?.['Content-License'] || '';
       const pulsera = streamMeta?.headers?.['X-Pulsera'] || '';
-      effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}&pulsera=${encodeURIComponent(pulsera)}`;
+      const ref = streamMeta?.headers?.['Referer'] || streamMeta?.headers?.['referer'] || '';
+      effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}&pulsera=${encodeURIComponent(pulsera)}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}`;
     }
 
     if (window.__xuperCreateHls || (window.Hls && window.Hls.isSupported())) {
