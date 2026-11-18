@@ -652,7 +652,10 @@ class PlayerService {
             return;
           }
           if (err && /aaa10002/i.test(err.portalCode || err.message || '')) {
-            try { localStorage.removeItem('xuper_magis_session_v1'); } catch (e) {}
+            try {
+              localStorage.removeItem('xuper_magis_session_v1');
+              localStorage.removeItem('xuper_magis_session_v2');
+            } catch (e) {}
             setTimeout(() => {
               if (this.activeChannelCode === code) {
                 window.MagisClient?.resolveLive(code, (rErr: any, rMeta: any) => {
@@ -806,7 +809,7 @@ class PlayerService {
         });
 
         let selfHealingAuth = false;
-        /** Last 401/403 token refresh: within a minute of it, another 401/403 is a real error (geo or ISP block) */
+        /** Last 401/403/409 token refresh: allow recovery every 8s if a session/SLB token rotated */
         let lastAuthRefreshAt = 0;
 
         const onHlsError = (event: any, data: any) => {
@@ -839,7 +842,7 @@ class PlayerService {
           const status = httpCode ? ` ${httpCode}` : '';
 
           // Self-healing token refresh when the link is refused, taken or gone (401/403/409/410)
-          if (isStaleLinkStatus(httpCode) && code && !selfHealingAuth && Date.now() - lastAuthRefreshAt > 60000 &&
+          if (isStaleLinkStatus(httpCode) && code && !selfHealingAuth && Date.now() - lastAuthRefreshAt > 8000 &&
             window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
             selfHealingAuth = true;
             lastAuthRefreshAt = Date.now();
