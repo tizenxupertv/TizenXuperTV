@@ -96,10 +96,19 @@ class EpicSportsService {
 
   private async fetchNewToken(): Promise<string> {
     try {
+      // On TV (Tizen) the request goes directly to epictvparaiphone.top — must
+      // simulate an iPhone browser or the server returns 403.
+      const extraHeaders: Record<string, string> = isBrowser ? {} : {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+        'Referer': 'https://epictvparaiphone.top/iphone/',
+        'Origin': 'https://epictvparaiphone.top',
+        'X-Requested-With': 'XMLHttpRequest',
+      };
       const res = await fetchWithTimeout(PULSERA_URL, {
         method: 'POST',
         headers: {
-          'Accept': 'application/json, text/plain, */*'
+          'Accept': 'application/json, text/plain, */*',
+          ...extraHeaders,
         }
       });
       if (!res.ok) {

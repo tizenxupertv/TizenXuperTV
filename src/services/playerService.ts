@@ -592,6 +592,24 @@ class PlayerService {
 
       if (channel.url.includes('.m3u8')) {
         const streamMeta = channel.headers ? { url: channel.url, headers: channel.headers } : undefined;
+        // On Tizen, HLS.js cannot inject CORS-unsafe headers (e.g. Referer).
+        // Route those streams through AVPlay which supports custom HTTP headers natively.
+        const isTizen = typeof (window as any).tizen !== 'undefined';
+        const needsNativePlayer = isTizen &&
+          channel.headers &&
+          (channel.headers['Referer'] || channel.headers['referer'] || channel.headers['User-Agent'] || channel.headers['user-agent']);
+        if (needsNativePlayer && window.XuperAVPlay) {
+          window.__xuperCurrentStreamMeta = streamMeta || null;
+          if (fullscreen && window.XuperAVPlay.playStream) {
+            this.playLiveStream(channel.url, channel.headers || null, videoEl);
+          } else if (window.XuperAVPlay.playPreview) {
+            this.playAvPreview(channel.url, videoEl);
+          } else {
+            // Fallback: try HLS.js anyway
+            this.streamHls(channel.url, videoEl, streamMeta, code);
+          }
+          return;
+        }
         this.streamHls(channel.url, videoEl, streamMeta, code);
       } else if (fullscreen && window.XuperAVPlay && window.XuperAVPlay.playStream) {
         this.playLiveStream(channel.url, channel.headers || null, videoEl);
