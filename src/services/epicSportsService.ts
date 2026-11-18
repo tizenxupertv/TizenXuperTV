@@ -2,19 +2,19 @@ import { LiveChannel } from '../types/channel';
 import { fetchWithTimeout } from '../lib/fetchTimeout';
 import { placeExtraChannels } from '../lib/extraChannels';
 
-const DOMAINS = ['https://playlatam.site', 'https://epictvparaiphone.top', 'https://epicplustv.com'];
+const DOMAINS = ['https://epictvparaiphone.top', 'https://playlatam.site', 'https://epicplustv.com'];
 // Browser development goes through the Vite proxy: the source does not allow cross-origin requests
 const isBrowser = typeof window !== 'undefined' && (
   window.location.hostname === 'localhost' ||
   window.location.hostname === '127.0.0.1' ||
   (typeof (window as any).tizen === 'undefined' && typeof (window as any).webOS === 'undefined')
 );
-export const EPIC_API_BASE = isBrowser ? '/epic-api' : 'https://playlatam.site';
+export const EPIC_API_BASE = isBrowser ? '/epic-api' : 'https://epictvparaiphone.top';
 const PULSERA_URL = `${EPIC_API_BASE}/iphone/pulsera`;
 const CANALES_URL = `${EPIC_API_BASE}/iphone/canales`;
-const LOGO_BASE = 'https://playlatam.site';
+const LOGO_BASE = 'https://epictvparaiphone.top';
 
-const STORAGE_KEY = 'xuper_epic_pulsera_v1';
+const STORAGE_KEY = 'xuper_epic_pulsera_v2';
 const TOKEN_TTL_MS = 20 * 60 * 60 * 1000; // 20 hours
 
 interface PulseraCache {
@@ -64,7 +64,7 @@ export const EXTRA_CHANNELS: LiveChannel[] = [
   { id: 'extra-espnu', code: 'extra-espnu', name: 'ESPN U HD', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'http://85.237.89.160:9590/usa-s/ESPN-U-HD/index.m3u8', logo: 'http://schedulesdirect-api20141201-logos.s3.dualstack.us-east-1.amazonaws.com/stationLogos/s45654_dark_360w_270h.png' },
 ];
 
-const DEFAULT_TOKEN = '14940f62.gente.1794265432.09cc2c3cae6f0ee370aa074bd28b68644471ce22fb58eb9866061b30ec6ae953';
+const DEFAULT_TOKEN = '01b53ec6.gente.1794262791.5db6ac9d1f51d4d84252ca9939f9e0beaa86a0e399ca3f1dabba6b2c2672ea4c';
 
 class EpicSportsService {
   private inMemoryToken: string = DEFAULT_TOKEN;
@@ -96,10 +96,19 @@ class EpicSportsService {
 
   private async fetchNewToken(): Promise<string> {
     try {
+      // On TV (Tizen) the request goes directly to epictvparaiphone.top — must
+      // simulate an iPhone browser or the server returns 403.
+      const extraHeaders: Record<string, string> = isBrowser ? {} : {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+        'Referer': 'https://epictvparaiphone.top/iphone/',
+        'Origin': 'https://epictvparaiphone.top',
+        'X-Requested-With': 'XMLHttpRequest',
+      };
       const res = await fetchWithTimeout(PULSERA_URL, {
         method: 'POST',
         headers: {
-          'Accept': 'application/json, text/plain, */*'
+          'Accept': 'application/json, text/plain, */*',
+          ...extraHeaders,
         }
       });
       if (!res.ok) {

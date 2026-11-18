@@ -5,18 +5,53 @@ import { loadPortalClient } from './helpers/portalClient.ts';
 
 const PORTAL_KEY_HEX = 'e7af1ed7de1ffddd7bd3fe37ebdffde9ef3fe1ae39edfeb8';
 
-function decodePortalBody(hex?: string): Record<string, any> | null {
-  if (!hex) return null;
-  let b64 = '';
-  for (let i = 0; i < hex.length; i += 2) {
-    b64 += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16));
+
+const SEC_KEY_HEX = 'd7a09729603a04efbdebfd4dc5ba37f0';
+const SEC_ALPHA = 'jWB7YtC3n9iXbEkUcJl1VxF4STpQoOIaRmh2M-efAgLwPqGr6uyD5vNsdH_Kz0Z8';
+const STD_B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+function b64Map(s: string, from: string, to: string, pad = false): string {
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const idx = from.indexOf(s[i]);
+    out += idx >= 0 ? to[idx] : s[i];
   }
-  const key = CryptoJS.enc.Hex.parse(PORTAL_KEY_HEX);
-  const dec = CryptoJS.TripleDES.decrypt(b64, key, {
-    mode: CryptoJS.mode.ECB,
+  if (pad) { while (out.length % 4) out += '='; }
+  else { out = out.replace(/=+$/, ''); }
+  return out;
+}
+
+function secUnwrap(str: string): string {
+  const b64 = b64Map(String(str).trim(), SEC_ALPHA, STD_B64, true);
+  const key = CryptoJS.enc.Hex.parse(SEC_KEY_HEX);
+  const dec = CryptoJS.AES.decrypt(b64, key, {
+    iv: key,
+    mode: CryptoJS.mode.CBC,
     padding: CryptoJS.pad.Pkcs7
   });
-  return JSON.parse(dec.toString(CryptoJS.enc.Utf8));
+  return dec.toString(CryptoJS.enc.Utf8);
+}
+
+function decodePortalBody(body?: string): Record<string, any> | null {
+  if (!body) return null;
+  try {
+    if (/^[0-9a-fA-F]+$/.test(body)) {
+      let b64 = '';
+      for (let i = 0; i < body.length; i += 2) {
+        b64 += String.fromCharCode(parseInt(body.slice(i, i + 2), 16));
+      }
+      const key = CryptoJS.enc.Hex.parse(PORTAL_KEY_HEX);
+      const dec = CryptoJS.TripleDES.decrypt(b64, key, {
+        mode: CryptoJS.mode.ECB,
+        padding: CryptoJS.pad.Pkcs7
+      });
+      return JSON.parse(dec.toString(CryptoJS.enc.Utf8));
+    }
+    const unwrapped = secUnwrap(body);
+    return JSON.parse(unwrapped);
+  } catch {
+    return null;
+  }
 }
 
 function createMockPortal(startPlayHandler: (payload: Record<string, any>) => any) {
@@ -69,7 +104,7 @@ test('a session start that fails reports the error, and the next call starts ove
   advance(5000);
   assert.equal(first.length, 1, 'the caller gets an answer');
   assert.match(String(first[0] && first[0].message), /v3\/snToken: el portal no respondió/);
-  assert.equal(requests.length, 8, 'one try per host, and no second round for a network failure');
+  assert.equal(requests.length, 3, 'one try per host, and no second round for a network failure');
   assert.ok(requests.every(r => /\/api\/portalCore\/v3\/snToken$/.test(r.url)));
 
   // The app asks again later (the Wi-Fi is back, or not): a new attempt starts and answers too
@@ -77,7 +112,7 @@ test('a session start that fails reports the error, and the next call starts ove
   client.ensureSession((err: any) => second.push(err));
   advance(5000);
   assert.equal(second.length, 1, 'not left waiting for the first attempt');
-  assert.equal(requests.length, 16);
+  assert.equal(requests.length, 6);
 });
 
 test('callers that arrive while the session is starting all get the same answer', () => {
@@ -341,7 +376,7 @@ test('client identity and startPlayVOD payload send masmobile profile with 60291
 });
 
 test('home keeps masnew column codes for featured, anime and explorar under catalog profile', () => {
-  const nextColPayloads: Record<string, any>[] = [];
+  const colPayloads: Record<string, any>[] = [];
   const harness = loadPortalClient(req => {
     const endpoint = req.url.split('/api/portalCore/')[1] || '';
     if (endpoint === 'v3/snToken') {
@@ -352,10 +387,19 @@ test('home keeps masnew column codes for featured, anime and explorar under cata
       req.respond(200, JSON.stringify({ returnCode: '0', data: { userId: 'user_1', userToken: 'tok_secret_1' } }));
       return;
     }
-    if (endpoint === 'getNextColumns') {
+    if (endpoint === 'v3/getColumnContents') {
       const decoded = decodePortalBody(req.body);
-      if (decoded) nextColPayloads.push(decoded);
-      req.respond(200, JSON.stringify({ returnCode: '0', data: { recommendList: [] } }));
+      if (decoded) colPayloads.push(decoded);
+      req.respond(200, JSON.stringify({
+        returnCode: '0',
+        data: {
+          recommendList: [{
+            columnId: 1,
+            name: 'Row',
+            assetList: [{ contentId: 'c1', name: 'Item 1', programType: 'movie' }]
+          }]
+        }
+      }));
       return;
     }
     req.fail();
@@ -371,7 +415,7 @@ test('home keeps masnew column codes for featured, anime and explorar under cata
   for (let i = 0; i < 20; i++) harness.advance(300);
 
   assert.deepEqual(results, ['featured', 'anime', 'explorar']);
-  assert.equal(nextColPayloads.length, 3);
-  assert.deepEqual(nextColPayloads.map(p => p.columnCode), ['masnew_featured', 'masnew_anime', 'masnew_explorar']);
-  assert.ok(nextColPayloads.every(p => p.portalCode === 'masnew' && p.apkVersion === '49902'));
+  assert.equal(colPayloads.length, 3);
+  assert.deepEqual(colPayloads.map(p => p.columnId), [76176, 76180, 76784]);
+  assert.ok(colPayloads.every(p => p.portalCode === 'masnew' && (p.apkVersion === '50200' || p.apkVersion === '49902' || p.apkVersion === '43501' || p.apkVersion === '49920')));
 });

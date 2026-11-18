@@ -96,7 +96,7 @@ export const VOD_CATEGORIES: CategoryDef[] = [
     matcher: it => {
       const row = (it.row || '').toLowerCase();
       const genres = (it.genres || []).map(g => g.toLowerCase());
-      return row.includes('horror') || row.includes('halloween') || row.includes('suspenso') || row.includes('terror') || genres.some(g => /horror|terror|thriller|suspenso/.test(g));
+      return row.includes('horror') || row.includes('suspenso') || row.includes('terror') || genres.some(g => /horror|terror|thriller|suspenso/.test(g));
     }
   },
   {
@@ -230,7 +230,7 @@ export function resolveCategoryIdForRow(titleOrRow: string): string {
   if (t.includes('disney')) return 'disney';
   if (t.includes('prime') || t.includes('paramount')) return 'prime_paramount';
   if (t.includes('apple') || t.includes('hulu')) return 'apple_hulu';
-  if (t.includes('terror') || t.includes('horror') || t.includes('halloween') || t.includes('suspenso')) return 'horror';
+  if (t.includes('terror') || t.includes('horror') || t.includes('suspenso')) return 'horror';
   if (t.includes('acción') || t.includes('accion') || t.includes('aventura')) return 'action';
   if (t.includes('comedia')) return 'comedy';
   if (t.includes('drama') || t.includes('telenovela')) return 'drama';

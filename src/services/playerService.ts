@@ -4,10 +4,13 @@ import { backBufferFor } from '../lib/tvMemory';
 import { normalizeChannel } from '../lib/channelKey';
 import { hostOf, isIspBlockPage, logPlayback, setPlaybackContext } from '../lib/playbackLog';
 import { createSequenceFixer } from '../lib/mediaSequence';
-import { shouldMoveLiveToAvPlay, videoCodecRejected } from '../lib/liveVideoFallback';
+import { directManifestBlocked, shouldMoveLiveToAvPlay, videoCodecRejected } from '../lib/liveVideoFallback';
 import { unwrapPngTs } from '../lib/pngWrappedTs';
 import { isStaleLinkStatus } from '../lib/liveLink';
+import { directHlsPlayer, directStreamMeta } from '../lib/directLink';
 import { epicSportsService } from './epicSportsService';
+
+const CLOUD_STREAM_PROXY = 'https://tizenxuper-bot.tizenxupertv.workers.dev/stream-proxy';
 
 declare global {
   interface Window {
@@ -45,7 +48,11 @@ const segCache = new Map<string, { buffer?: ArrayBuffer; promise?: Promise<Array
 
 function resolveSegmentUrl(uri: string, baseUrl: string): string {
   try {
-    return new URL(uri, baseUrl).href;
+    const origin = typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost';
+    const absoluteBase = baseUrl.startsWith('http://') || baseUrl.startsWith('https://')
+      ? baseUrl
+      : new URL(baseUrl.startsWith('/') ? baseUrl : `/${baseUrl}`, origin).href;
+    return new URL(uri, absoluteBase).href;
   } catch {
     const base = baseUrl.slice(0, baseUrl.lastIndexOf('/') + 1);
     return base + uri;
@@ -574,10 +581,19 @@ class PlayerService {
       if (channel.url.includes('epictvparaiphone.top') || channel.url.includes('playlatam.site')) {
         epicSportsService.getPulseraToken().then(token => {
           if (this.activeChannelCode !== code) return;
+          const headers: Record<string, string> = {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+            'Referer': 'https://epictvparaiphone.top/iphone/',
+            'Cookie': `__Host-pulsera=${token}`,
+            'X-Pulsera': token
+          };
           window.__xuperCurrentStreamMeta = {
             url: channel.url,
-            headers: { 'X-Pulsera': token }
+            headers
           };
+
+          // Epic Sports channels MUST use HLS.js because video chunks are .image (PNG-wrapped TS)
+          // that require unwrapPngTs in JavaScript. AVPlay hardware decoder cannot unwrap them.
           this.streamHls(channel.url!, videoEl, window.__xuperCurrentStreamMeta, code);
         }).catch(() => {
           if (this.activeChannelCode !== code) return;
@@ -586,13 +602,31 @@ class PlayerService {
         return;
       }
 
+      // A direct link has its own headers or none: never the last portal channel's (lib/directLink)
+      const directMeta = directStreamMeta(channel.url, channel.headers);
+      window.__xuperCurrentStreamMeta = directMeta;
+
       if (channel.url.includes('.m3u8')) {
-        this.streamHls(channel.url, videoEl, undefined, code);
+        const streamMeta = directMeta;
+        const onTv = typeof (window as any).tizen !== 'undefined' && !!window.XuperAVPlay;
+        const isTeveo = channel.url.includes('teveo.cu');
+        // teveo.cu requires Referer which AVPlay cannot send: route to HLS.js with proxy
+        if (!isTeveo && directHlsPlayer(channel.headers, onTv) === 'avplay') {
+          if (fullscreen && window.XuperAVPlay.playStream) {
+            this.playLiveStream(channel.url, channel.headers || null, videoEl);
+          } else if (window.XuperAVPlay.playPreview) {
+            this.playAvPreview(channel.url, videoEl);
+          } else {
+            // Fallback: try HLS.js anyway
+            this.streamHls(channel.url, videoEl, streamMeta, code);
+          }
+          return;
+        }
+        this.streamHls(channel.url, videoEl, streamMeta, code);
+        return;
       } else if (fullscreen && window.XuperAVPlay && window.XuperAVPlay.playStream) {
-        this.playLiveStream(channel.url, null, videoEl);
+        this.playLiveStream(channel.url, channel.headers || null, videoEl);
       } else if (window.XuperAVPlay && window.XuperAVPlay.playPreview) {
-        // A direct link has no headers of its own: do not reuse the last portal channel's
-        window.__xuperCurrentStreamMeta = null;
         this.playAvPreview(channel.url, videoEl);
       } else {
         videoEl.src = channel.url;
@@ -706,11 +740,22 @@ class PlayerService {
     );
 
     let effectiveUrl = url;
-    if (isBrowserEnv && url.startsWith('http') && !url.includes('/stream-proxy')) {
+    const isEpic = url.includes('epictvparaiphone.top') || url.includes('playlatam.site');
+    const isTeveo = url.includes('teveo.cu');
+    const hasReferer = !!(streamMeta?.headers?.['Referer'] || streamMeta?.headers?.['referer']);
+
+    if (url.startsWith('http') && !url.includes('/stream-proxy')) {
       const auth = streamMeta?.headers?.['Content-Auth'] || '';
       const license = streamMeta?.headers?.['Content-License'] || '';
       const pulsera = streamMeta?.headers?.['X-Pulsera'] || '';
-      effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}&pulsera=${encodeURIComponent(pulsera)}`;
+      const ref = streamMeta?.headers?.['Referer'] || streamMeta?.headers?.['referer'] || '';
+      const ua = streamMeta?.headers?.['User-Agent'] || streamMeta?.headers?.['user-agent'] || '';
+
+      if (isBrowserEnv) {
+        effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}&pulsera=${encodeURIComponent(pulsera)}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}`;
+      } else if (isEpic || isTeveo || hasReferer) {
+        effectiveUrl = `${CLOUD_STREAM_PROXY}?url=${encodeURIComponent(url)}${pulsera ? `&pulsera=${encodeURIComponent(pulsera)}` : ''}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}`;
+      }
     }
 
     if (window.__xuperCreateHls || (window.Hls && window.Hls.isSupported())) {
@@ -766,20 +811,29 @@ class PlayerService {
 
         const onHlsError = (event: any, data: any) => {
           console.error('[HLS error]', data.type, data.details, data.fatal);
-          // The TV refused the video codec: hls.js dropped the picture and plays the sound alone (Tizen 3-5)
+          // The TV refused the video codec, or a direct (iptv-org) manifest was CORS-blocked: move to AVPlay on TV
+          const isDirectUnproxied = !!(streamMeta && streamMeta.direct) && !currentSource.includes('/stream-proxy');
           const lostVideo = videoCodecRejected(data);
-          if (lostVideo) {
-            logPlayback({ kind: 'error', player: 'HLS.js', detail: `MSE sin video (${lostVideo.slice(0, 60)})`, host: hostOf(currentSource) });
+          const manifestBlocked = directManifestBlocked(data, isDirectUnproxied);
+          if (lostVideo || manifestBlocked) {
+            logPlayback({
+              kind: 'error',
+              player: 'HLS.js',
+              detail: lostVideo ? `MSE sin video (${lostVideo.slice(0, 60)})` : `CORS/manifiesto directo (${data.details})`,
+              host: hostOf(currentSource)
+            });
             const ctx = {
               hasAvPlay: !!(window.webapis && window.webapis.avplay && window.XuperAVPlay && window.XuperAVPlay.playPreview),
               code: code && code === this.activeChannelCode ? code : '',
-              triedCode: this.avTriedCode
+              triedCode: this.avTriedCode,
+              isDirect: isDirectUnproxied
             };
             if (window.__xuperPreviewHls === hls && shouldMoveLiveToAvPlay(data, ctx)) {
-              logPlayback({ kind: 'info', player: 'AVPlay', detail: 'el canal pasa a AVPlay' });
-              this.moveLiveToAvPlay(currentSource, videoEl, ctx.code);
+              logPlayback({ kind: 'info', player: 'AVPlay', detail: 'el canal pasa a AVPlay directo' });
+              this.moveLiveToAvPlay(manifestBlocked ? url : currentSource, videoEl, ctx.code);
+              return;
             }
-            return;
+            if (lostVideo) return;
           }
           const httpCode = data.response && data.response.code ? Number(data.response.code) : 0;
           const status = httpCode ? ` ${httpCode}` : '';

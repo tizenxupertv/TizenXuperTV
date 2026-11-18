@@ -48,7 +48,7 @@ export const IPTV_CATEGORY_PREFIX = 'iptv:';
 export const IPTV_CATEGORY_LABEL = 'TV abierta · ';
 
 const SETTINGS_KEY = 'xuper_iptv_lists_v1';
-const CACHE_PREFIX = 'xuper_iptv_list_v1_';
+const CACHE_PREFIX = 'xuper_iptv_list_v2_';
 const FRESH_MS = 12 * 60 * 60 * 1000;
 const DOWNLOAD_TIMEOUT_MS = 20000;
 
@@ -73,7 +73,7 @@ export function parseM3u(text: string): LiveChannel[] {
   const out: LiveChannel[] = [];
   const seen: Record<string, boolean> = {};
   const attrRe = /([\w-]+)="([^"]*)"/g;
-  let info: { name: string; logo: string; group: string; tvgId: string } | null = null;
+  let info: { name: string; logo: string; group: string; tvgId: string; referrer?: string; userAgent?: string } | null = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
@@ -93,7 +93,26 @@ export function parseM3u(text: string): LiveChannel[] {
           break;
         }
       }
-      info = { name: name || attrs['tvg-name'] || '', logo: attrs['tvg-logo'] || '', group: attrs['group-title'] || '', tvgId: attrs['tvg-id'] || '' };
+      info = {
+        name: name || attrs['tvg-name'] || '',
+        logo: attrs['tvg-logo'] || '',
+        group: attrs['group-title'] || '',
+        tvgId: attrs['tvg-id'] || '',
+        referrer: attrs['http-referrer'] || attrs['referrer'] || '',
+        userAgent: attrs['http-user-agent'] || attrs['user-agent'] || ''
+      };
+      continue;
+    }
+    // Parse VLC options such as #EXTVLCOPT:http-referrer=https://teveo.cu/
+    if (line.indexOf('#EXTVLCOPT:') === 0 && info) {
+      const opt = line.slice(11).trim();
+      const eqIdx = opt.indexOf('=');
+      if (eqIdx !== -1) {
+        const optKey = opt.slice(0, eqIdx).trim().toLowerCase();
+        const optVal = opt.slice(eqIdx + 1).trim();
+        if (optKey === 'http-referrer' || optKey === 'referrer') info.referrer = optVal;
+        if (optKey === 'http-user-agent' || optKey === 'user-agent') info.userAgent = optVal;
+      }
       continue;
     }
     if (line.charAt(0) === '#') continue;
@@ -106,18 +125,33 @@ export function parseM3u(text: string): LiveChannel[] {
 
     const rawName = (meta && meta.name) || 'Canal';
     const geo = /\[geo-blocked\]/i.test(rawName);
+    const not247 = /\[not 24\/7\]/i.test(rawName);
     const name = rawName.replace(/\s*\(\d{3,4}[pi]\)/gi, '').replace(/\s*\[[^\]]*\]/g, '').trim() || 'Canal';
     const groups = ((meta && meta.group) || '').split(';').map(g => GROUP_LABELS[g.trim().toLowerCase()]).filter(Boolean);
     const id = `${IPTV_CATEGORY_PREFIX}${(meta && meta.tvgId) || url}`;
+
+    const headers: Record<string, string> = {};
+    if (meta?.referrer) headers['Referer'] = meta.referrer;
+    if (meta?.userAgent) headers['User-Agent'] = meta.userAgent;
+    // Auto-detect teveo.cu streams which require referer if missing
+    if (url.includes('teveo.cu') && !headers['Referer']) {
+      headers['Referer'] = 'https://teveo.cu/';
+    }
+
     out.push({
       id,
       code: id,
       name,
       url,
       logo: (meta && meta.logo) || '',
-      now: [groups.join(' · ') || 'Señal abierta', geo ? 'Puede estar bloqueado en tu región' : ''].filter(Boolean).join(' · '),
+      now: [
+        groups.join(' · ') || 'Señal abierta',
+        not247 ? 'Emisión periódica (No 24/7)' : '',
+        geo ? 'Puede requerir IP local' : ''
+      ].filter(Boolean).join(' · '),
       next: 'Programación en directo',
-      time: 'EN VIVO'
+      time: 'EN VIVO',
+      headers: Object.keys(headers).length ? headers : undefined
     });
   }
   return out;

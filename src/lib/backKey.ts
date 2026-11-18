@@ -1,8 +1,7 @@
 /**
  * One physical press of Back = one step back.
  *
- * On a TV the bridge (public/js/tizen-bridge.js) re-sends the remote's Back as a new key event, which loses `repeat`:
- * a Back held a moment arrived as many separate presses. From a fullscreen channel that is hide the bar, leave
+ * A Back held a moment, or a bouncing remote, arrives as many presses. From a fullscreen channel that is leave
  * fullscreen, go to the header, "press again to exit", exit: the app closed instead of going back to the list.
  * No relative imports, so tests can load this file in Node.
  */

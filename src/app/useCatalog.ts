@@ -36,6 +36,13 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let attempt = 0;
+    const isMockFailure = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('test') === 'catalog-failure';
+    if (isMockFailure) {
+      setCatalogError(true);
+      setCatalogLoading(true);
+      return;
+    }
+
     const load = () => {
       catalogService.fetchCatalog().then(catalog => {
         if (cancelled) return;
@@ -57,8 +64,9 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
         // Keep showing the loading state and only surface the error toast after sustained failure.
         if (attempt >= 2) {
           setCatalogError(true);
-          setCatalogLoading(false);
         }
+        // Keep skeleton visible while retrying so screen doesn't go pitch black
+        setCatalogLoading(true);
         retryTimer = setTimeout(load, catalogRetryDelayMs(attempt));
       });
     };

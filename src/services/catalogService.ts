@@ -151,6 +151,20 @@ function formatEpisodeDuration(raw: any): string {
 const LIVE_ROOTS = ['featured', 'movies', 'series', 'kids', 'anime', 'free', 'explorar'];
 let liveInFlight: Promise<any[]> | null = null;
 
+// The TV needs a catalog session (up to 12 s) before the portal roots: 8 s cut cold starts off and showed the snapshot
+const CATALOG_WAIT_MS = 25000;
+
+function waitForCatalogRequest<T>(request: Promise<T>, fallback: T): Promise<T> {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(fallback), CATALOG_WAIT_MS);
+    const finish = (result: T) => {
+      clearTimeout(timer);
+      resolve(result);
+    };
+    request.then(finish, () => finish(fallback));
+  });
+}
+
 function homeRoot(root: string, low: boolean): Promise<any[]> {
   return catalogProvider.home(root, 1, { low }).then(res => res.items || []);
 }
@@ -173,10 +187,10 @@ function fetchCompositeHome(): Promise<any[]> {
 function fetchLiveCatalog(): Promise<any[]> {
   if (liveInFlight) return liveInFlight;
   const t0 = Date.now();
-  const roots = Promise.all([
+  const roots = waitForCatalogRequest<(any[] | null)[]>(Promise.all([
     ...LIVE_ROOTS.map(root => homeRoot(root, false).catch(() => null)),
     fetchCompositeHome()
-  ]);
+  ]), []);
   liveInFlight = roots.then(lists => {
     const items = ([] as any[]).concat(...lists.map(l => l || []));
     const failed = lists.filter(l => l === null).length;
@@ -244,7 +258,7 @@ class CatalogService {
 
     const [items, heroByTab] = await Promise.all([
       fetchLiveCatalog(),
-      fetchTabRecommends()
+      waitForCatalogRequest(fetchTabRecommends(), {})
     ]);
     return this.categorize(items.map((item, index) => normalizeItem(item, index)), heroByTab);
   }

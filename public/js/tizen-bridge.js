@@ -330,57 +330,9 @@
       } catch(e) {}
     }
 
-    document.addEventListener('keydown', function (e) {
-      if (e.keyCode === 10009 || e.key === 'Return') { // Return / Back on Samsung Remote
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        var ev;
-        try {
-          ev = new KeyboardEvent('keydown', { key: 'Back', keyCode: 461, which: 461, bubbles: true, cancelable: true });
-        } catch (_) {}
-        if (!ev) {
-          try {
-            ev = document.createEvent('KeyboardEvent');
-            ev.initKeyboardEvent('keydown', true, true, window, 'Back', 0, '', false, '');
-          } catch (_) {
-            ev = document.createEvent('Events');
-            ev.initEvent('keydown', true, true);
-          }
-        }
-        if (ev) {
-          try { Object.defineProperty(ev, 'keyCode', { value: 461, configurable: true }); } catch (_) {}
-          try { Object.defineProperty(ev, 'which', { value: 461, configurable: true }); } catch (_) {}
-          try { Object.defineProperty(ev, 'key', { value: 'Back', configurable: true }); } catch (_) {}
-          document.dispatchEvent(ev);
-        }
-      }
-    }, true);
-
-    document.addEventListener('keyup', function (e) {
-      if (e.keyCode === 10009 || e.key === 'Return') {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        var ev;
-        try {
-          ev = new KeyboardEvent('keyup', { key: 'Back', keyCode: 461, which: 461, bubbles: true, cancelable: true });
-        } catch (_) {}
-        if (!ev) {
-          try {
-            ev = document.createEvent('KeyboardEvent');
-            ev.initKeyboardEvent('keyup', true, true, window, 'Back', 0, '', false, '');
-          } catch (_) {
-            ev = document.createEvent('Events');
-            ev.initEvent('keyup', true, true);
-          }
-        }
-        if (ev) {
-          try { Object.defineProperty(ev, 'keyCode', { value: 461, configurable: true }); } catch (_) {}
-          try { Object.defineProperty(ev, 'which', { value: 461, configurable: true }); } catch (_) {}
-          try { Object.defineProperty(ev, 'key', { value: 'Back', configurable: true }); } catch (_) {}
-          document.dispatchEvent(ev);
-        }
-      }
-    }, true);
+    // The remote's Back (keyCode 10009) reaches the app as it is: every key handler maps it itself. It used to be
+    // swallowed here and re-sent as a synthetic 461 event. Live TV depended on that copy, and Back was reported
+    // dead there on Tizen 4.0 / 5.0 while screens that read the original event kept working.
 
     // On the first home tab app.js calls window.webOSTV.platformBack()
     window.webOSTV = {
@@ -1582,7 +1534,10 @@
 
         self._safeStopAndClose();
 
-        var isSecureRequired = String(url).indexOf(':443') !== -1 || (typeof headers !== 'undefined' && headers && (headers['Referer'] || headers['referer'] || headers['Origin']));
+        var meta = window.__xuperCurrentStreamMeta || {};
+        var h = meta.headers;
+        // Direct channels (lib/directLink) keep their own https: many of those servers have no plain http
+        var isSecureRequired = String(url).indexOf(':443') !== -1 || !!meta.direct || (h && (h['Referer'] || h['referer'] || h['Origin'] || h['X-Pulsera'] || h['Cookie']));
         var cleanUrl = isSecureRequired ? String(url) : String(url).replace(/^https:\/\//i, 'http://');
         self._lastPreviewUrl = cleanUrl;
         webapis.avplay.open(cleanUrl);
@@ -1590,7 +1545,6 @@
         // Never stretch the preview: a channel that is not 16:9 gets bars instead
         webapis.avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX');
 
-        var meta = window.__xuperCurrentStreamMeta || {};
         self._applyHeaders(meta.headers);
 
         try {

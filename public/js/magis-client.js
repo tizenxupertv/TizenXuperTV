@@ -14,15 +14,25 @@
 
   var KEY_HEX = 'e7af1ed7de1ffddd7bd3fe37ebdffde9ef3fe1ae39edfeb8';
   var HOSTS = [
-    'ftmrmy.jdfey0cd.com',
-    'fuxok.nguvmqhpk.com',
-    'eajmnp.hcgv1dt8.com',
-    'mptec.dhkrxuzcy.com',
-    'hinumz.a878kkoyc.com',
-    'krdwvd.swcaw7qx.com',
-    'osuhk.m3x8o50te.com',
-    'oogoy.f30c96w8.com'
+    'neqpsx.6dqtl974.com',
+    'lvmcmb.6dqtl974.com',
+    'dqbvvb.wg5h6vjz.com'
   ];
+
+  var RELAY_URL = 'https://tizenxuper-relay.tizenxupertv.workers.dev';
+  var RELAY_SECRET = 'T1z3nXup3r_S3cur1ty_#2026_T1z3nTV_P0rt4l';
+  var SEC = {
+    keyHex: 'd7a09729603a04efbdebfd4dc5ba37f0',
+    s: 'QD3j1DsI6uZvjWDW38Oz1tLQawD45VOr4KC4K3Sv8hq-Qj',
+    t: 'Hg6zqHL0i4GivJvSwZcOnoBPAMJJoWuMXkqtQRB5Ctb',
+    metaSalt: '213f24ac-14b7-4c03-a209-383ead1b014f',
+    alpha: 'jWB7YtC3n9iXbEkUcJl1VxF4STpQoOIaRmh2M-efAgLwPqGr6uyD5vNsdH_Kz0Z8'
+  };
+  var clockOffsetMs = 0;
+  var relayMode = 'full';
+  function isCatalogBrowseEndpoint(path) {
+    return /(?:^|\/)(getColumnContents|getShelveData|getRecommends|filterByContent|filterGenre|getHome|getShortVideo)$/i.test(String(path || ''));
+  }
 
   var CLIENT_PROFILES = {
     // masnew: Perfil estándar para catálogo completo, categorías, sección adultos (+18) y TV en vivo.
@@ -30,17 +40,17 @@
       name: 'masnew',
       portalCode: 'masnew',
       appId: 'com.android.msandroid',
-      apkVersion: '49902',
-      sysVersion: '2025-08-07 05:40:11_36_16_',
+      apkVersion: '49920',
+      sysVersion: '2026-10-21 15:40:39_28_9_4.4.146',
       transportAppId: 'com.android.msandroid',
-      apkVerHeader: '43404',
+      apkVerHeader: '49920',
       loginType: '2',
-      hardwareInfo: 'ranchu',
-      model: 'sdk_gphone64_arm64',
-      product: 'sdk_gphone64_arm64',
+      hardwareInfo: 'amlogic',
+      model: 'S905X3',
+      product: 'franklin',
       cpu: 'arm64-v8a',
-      sdkVer: 36,
-      reserve1: '',
+      sdkVer: 28,
+      reserve1: '4b4d354a69546a7636736d2f73776a2b705834316d3874536576774470327448',
       liveCodeList: ['masnew_live'],
       fingerprint: {
         board: 'goldfish_arm64',
@@ -67,7 +77,7 @@
       apkVersion: '60291',
       sysVersion: '15',
       transportAppId: 'com.android.msandroid',
-      apkVerHeader: '43404',
+      apkVerHeader: '49920',
       loginType: '3',
       hardwareInfo: 'exynos2100',
       model: 'SM-G998B',
@@ -121,7 +131,7 @@
   var FIXED_RESERVE1 = '583442714b345572434a4d5769637461545a735936413d3d';
   var FIXED_DRM_ID = '0iSGEyv2EqiS/nqI/I3hqdu12irw5Q3/uqrWvRFx9bM=';
   var UA_CDN = 'Ranger/4.9.4-17294ac0';
-  var SESSION_STORAGE_KEY = 'xuper_magis_session_v1';
+  var SESSION_STORAGE_KEY = 'xuper_magis_session_v2';
   // This TV's identity for the portal (MACs and device ids), made up once and kept. Every install used to activate
   // with the same MAC, so to the portal they all looked like one device.
   var DEVICE_IDENTITY_KEY = 'xuper_magis_device_v1';
@@ -131,7 +141,7 @@
     (typeof tizen === 'undefined' && typeof webOS === 'undefined')
   );
 
-  var RATE_MS = 250;
+  var RATE_MS = 40;
   // One host may go this long without sending a byte, and this long in all; a whole request, over every host, this long
   var HOST_IDLE_MS = 8000;
   var HOST_MAX_MS = 30000;
@@ -198,6 +208,43 @@
       padding: CryptoJS.pad.Pkcs7
     });
     return dec.toString(CryptoJS.enc.Utf8);
+  }
+
+  var STD_B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  function b64Map(s, from, to, pad) {
+    var out = '';
+    for (var i = 0; i < s.length; i++) {
+      var idx = from.indexOf(s.charAt(i));
+      out += idx >= 0 ? to.charAt(idx) : s.charAt(i);
+    }
+    if (pad) {
+      while (out.length % 4) out += '=';
+    } else {
+      out = out.replace(/=+$/, '');
+    }
+    return out;
+  }
+
+  function secWrap(str, keyHex, alpha) {
+    alpha = alpha || SEC.alpha;
+    var kw = CryptoJS.enc.Hex.parse(keyHex || SEC.keyHex);
+    var b64 = CryptoJS.AES.encrypt(String(str), kw, {
+      iv: kw,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
+    }).toString();
+    return b64Map(b64.replace(/=+$/, ''), STD_B64, alpha, false);
+  }
+
+  function secUnwrap(str, keyHex, alpha) {
+    alpha = alpha || SEC.alpha;
+    var b64 = b64Map(String(str).trim(), alpha, STD_B64, true);
+    var kw = CryptoJS.enc.Hex.parse(keyHex || SEC.keyHex);
+    return CryptoJS.AES.decrypt(b64, kw, {
+      iv: kw,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
+    }).toString(CryptoJS.enc.Utf8);
   }
 
   // Decrypt in workers (js/magis-worker.js). TripleDES-ECB blocks are independent, so a big answer
@@ -326,14 +373,21 @@
     if (!fresh) {
       try { saved = JSON.parse((window.localStorage && localStorage.getItem(DEVICE_IDENTITY_KEY)) || 'null'); } catch (e) {}
     }
-    if (saved && saved.androidId && saved.etheMac) return saved;
+    if (saved && saved.androidId && saved.etheMac && saved.drmId && saved.shortHash) return saved;
+    var mac = randomMac();
+    var serial = 'A9' + mac.replace(/:/g, '');
+    var sh = randomHex(4);
+    var drmHex = md5(serial + ':drm_v1');
+    var drmId = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(drmHex));
     var id = {
-      androidId: randomHex(8),
-      cpuId: randomHex(8),
-      serialNumber: randomHex(8),
-      etheMac: randomMac(),
-      gatewayMac: randomMac(),
-      wifiMac: randomMac()
+      androidId: serial,
+      cpuId: serial,
+      serialNumber: serial,
+      etheMac: mac,
+      gatewayMac: mac,
+      wifiMac: mac,
+      drmId: drmId,
+      shortHash: sh
     };
     storeSet(DEVICE_IDENTITY_KEY, JSON.stringify(id));
     return id;
@@ -475,6 +529,8 @@
   var queue = [];
   var lowQueue = []; // background work (catalog refresh): runs only when nothing else waits
   var lastCallAt = 0;
+  var activeCount = 0;
+  var MAX_CONCURRENT = 4;
 
   function enqueue(fn, low) {
     (low ? lowQueue : queue).push(fn);
@@ -482,30 +538,28 @@
   }
 
   function drain() {
-    if (!session.busy && (queue.length || lowQueue.length)) {
-      var delay = lastCallAt + RATE_MS - Date.now();
-      if (delay > 0) {
-        session.busy = true;
-        setTimeout(function () {
-          session.busy = false;
-          drain();
-        }, delay);
-        return;
-      }
+    while (activeCount < MAX_CONCURRENT && (queue.length || lowQueue.length)) {
       var task = queue.length ? queue.shift() : lowQueue.shift();
-      session.busy = true;
+      activeCount++;
+      session.busy = activeCount > 0;
       lastCallAt = Date.now();
-      try {
-        task(function () {
-          session.busy = false;
-          drain();
-        });
-      } catch (e) {
-        // A task that throws must not leave the queue marked busy for good
-        console.error('[MagisClient] queued task failed:', e);
-        session.busy = false;
-        setTimeout(drain, 0);
-      }
+      (function (t) {
+        var doneOnce = false;
+        function release() {
+          if (doneOnce) return;
+          doneOnce = true;
+          activeCount--;
+          session.busy = activeCount > 0;
+          setTimeout(drain, 0);
+        }
+        try {
+          t(release);
+        } catch (e) {
+          // A task that throws must not leave the queue marked busy for good
+          console.error('[MagisClient] queued task failed:', e);
+          release();
+        }
+      })(task);
     }
   }
 
@@ -513,7 +567,7 @@
     var prof = profile || resolveProfile();
     return {
       loginType: prof.loginType,
-      appLanguage: 'en',
+      appLanguage: 'es',
       hardwareInfo: prof.hardwareInfo,
       model: prof.model,
       product: prof.product,
@@ -521,7 +575,7 @@
       B29: '',
       reserve1: prof.reserve1 || '',
       deviceToken: '',
-      drmId: '',
+      drmId: deviceIdentity(false).drmId || '',
       sdkVer: prof.sdkVer,
       apkVersion: prof.apkVersion,
       sysVersion: prof.sysVersion,
@@ -544,7 +598,7 @@
   // moves on while the worker decrypts; opts.low: decrypt in the background worker
   // Routes the portal answered 404 for: a newer version is tried first and, once it turns out not to exist,
   // it is skipped for the rest of the session instead of failing before every working request
-  var missingRoutes = {};
+  var missingRoutes = { 'v7/getLiveData': true };
   function routeMissing(path) {
     return missingRoutes[path] === true;
   }
@@ -552,11 +606,52 @@
     if (err && err.httpStatus === 404) missingRoutes[path] = true;
   }
 
+  function relayAuthHeaders(host, duid) {
+    var ts = String(Math.round(Date.now() + clockOffsetMs));
+    var devId = duid || session.sn || 'tizen-tv-guest';
+    var sig = md5('eclex:' + ts + ':' + host + ':' + devId + ':' + RELAY_SECRET);
+    return {
+      'X-Target-Host': host,
+      'X-Tizen-Time': ts,
+      'X-Tizen-Duid': devId,
+      'X-Tizen-Sig': sig
+    };
+  }
+
+  function syncRelayClock(callback) {
+    var xhrTime = new XMLHttpRequest();
+    xhrTime.open('GET', RELAY_URL + '/time', true);
+    xhrTime.timeout = 5000;
+    xhrTime.onload = function () {
+      try {
+        var j = JSON.parse(xhrTime.responseText || '{}');
+        var srv = Number(j.serverTime);
+        if (isFinite(srv) && srv > 1500000000000) {
+          clockOffsetMs = srv - Date.now();
+        }
+        if (j.relayMode === 'full' || j.relayMode === 'play-only' || j.relayMode === 'off') {
+          relayMode = j.relayMode;
+        }
+      } catch (e) {}
+      callback();
+    };
+    xhrTime.onerror = xhrTime.ontimeout = function () {
+      callback();
+    };
+    xhrTime.send();
+  }
+
   function postHttp(path, payload, done, opts) {
     opts = opts || {};
-    var bodyHex;
+    if (relayMode === 'off') {
+      return done(new Error('Relay disabled (off)'));
+    }
+    if (relayMode === 'play-only' && isCatalogBrowseEndpoint(path)) {
+      return done(new Error('Relay in play-only mode'));
+    }
+    var bodyStr;
     try {
-      bodyHex = encryptBody(JSON.stringify(payload));
+      bodyStr = secWrap(JSON.stringify(payload), SEC.keyHex, SEC.alpha);
     } catch (e) {
       return done(new Error(path + ': error cifrando cuerpo: ' + e.message));
     }
@@ -573,19 +668,30 @@
       return e;
     }
 
-    function tryHost() {
+    function sendToHost(host, clockRetried) {
       if (finished) return;
-      if (idx >= hosts.length || Date.now() - tStart >= REQUEST_MAX_MS) {
-        finished = true;
-        return done(httpError(path + ': el portal no respondió'));
-      }
-      var host = hosts[idx++];
-      var url = isBrowserEnv ? ('/api/portalCore/' + path) : ('https://' + host + '/api/portalCore/' + path);
+      var url = RELAY_URL + '/api/portalCore/' + path;
+      var traceId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16 | 0;
+        var v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+      var clientMeta = md5(traceId + SEC.metaSalt);
+      var hdrLines = [
+        'apk: ' + APK_TRANSPORT_APP_ID,
+        'apkVer: ' + APK_VER_HEADER,
+        'spkgVer: ' + SPKG_VER,
+        'Content-type: application/json;charset=utf-8',
+        'Cache-Control: no-store',
+        'X-Request-Trace: ' + traceId,
+        'X-Client-Meta: ' + clientMeta
+      ];
+      var dVal = secWrap(hdrLines.join('\r\n') + '\r\n', SEC.keyHex, SEC.alpha);
+      var cookieStr = 'd=' + dVal + '; s=' + SEC.s + '; t=' + SEC.t;
+      var rAuth = relayAuthHeaders(host, session.sn);
 
       var xhr = new XMLHttpRequest();
       xhr.open('POST', url, true);
-      // The limit is 8 s without receiving anything, not 8 s for the whole answer: a ~1 MB answer on a slow
-      // connection was cut at 8 s and asked again from the next host, eight times over, with the queue waiting
       var settled = false;
       var idleTimer = null;
       var hardTimer = null;
@@ -598,11 +704,7 @@
         settled = true;
         disarm();
         try { xhr.abort(); } catch (e) {}
-        if (isBrowserEnv) {
-          finished = true;
-          return done(new Error(path + ': timeout en navegador local.'));
-        }
-        tryHost();
+        tryNextHost();
       };
       var arm = function () {
         if (settled) return;
@@ -613,25 +715,58 @@
       arm();
       xhr.onprogress = arm;
       xhr.onreadystatechange = function () { if (xhr.readyState >= 2) arm(); };
-      try { xhr.setRequestHeader('apk', APK_TRANSPORT_APP_ID); } catch (e) {}
-      try { xhr.setRequestHeader('apkVer', APK_VER_HEADER); } catch (e) {}
-      try { xhr.setRequestHeader('spkgVer', SPKG_VER); } catch (e) {}
-      // Browsers forbid this header. The local development proxy supplies it instead.
-      if (!isBrowserEnv) {
-        try { xhr.setRequestHeader('User-Agent', USER_AGENT); } catch (e) {}
-      }
-      try { xhr.setRequestHeader('Content-Type', CONTENT_TYPE); } catch (e) {}
+
+      try { xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded'); } catch (e) {}
+      try { xhr.setRequestHeader('X-Cookie', cookieStr); } catch (e) {}
+      try { xhr.setRequestHeader('X-Target-Host', rAuth['X-Target-Host']); } catch (e) {}
+      try { xhr.setRequestHeader('X-Tizen-Time', rAuth['X-Tizen-Time']); } catch (e) {}
+      try { xhr.setRequestHeader('X-Tizen-Duid', rAuth['X-Tizen-Duid']); } catch (e) {}
+      try { xhr.setRequestHeader('X-Tizen-Sig', rAuth['X-Tizen-Sig']); } catch (e) {}
 
       xhr.onload = function () {
         if (settled || finished) return;
         settled = true;
         disarm();
+
+        try {
+          var exposedHdrs = xhr.getAllResponseHeaders ? xhr.getAllResponseHeaders() : '';
+          if (exposedHdrs && /x-relay-mode/i.test(exposedHdrs)) {
+            var hdrMode = trim(xhr.getResponseHeader('X-Relay-Mode')).toLowerCase();
+            if (hdrMode === 'full' || hdrMode === 'play-only' || hdrMode === 'off') {
+              relayMode = hdrMode;
+            }
+          }
+        } catch (e) {}
+
+        if (xhr.status === 503) {
+          lastStatus = 503;
+          try {
+            var mJson = JSON.parse(xhr.responseText || '{}');
+            if (mJson && (mJson.relayMode === 'play-only' || mJson.relayMode === 'off')) {
+              relayMode = mJson.relayMode;
+              finished = true;
+              return done(httpError('Relay mode: ' + relayMode));
+            }
+          } catch (e) {}
+          return tryNextHost();
+        }
+
+        if (xhr.status === 403 && !clockRetried) {
+          return syncRelayClock(function () {
+            if (!finished) sendToHost(host, true);
+          });
+        }
+
         if (xhr.status >= 200 && xhr.status < 300) {
+          var rawTxt = trim(xhr.responseText);
           var resp;
           try {
-            resp = JSON.parse(xhr.responseText);
+            if (rawTxt && rawTxt.charAt(0) !== '{') {
+              rawTxt = secUnwrap(rawTxt, SEC.keyHex, SEC.alpha);
+            }
+            resp = JSON.parse(rawTxt);
           } catch (e) {
-            return tryHost();
+            return tryNextHost();
           }
           preferredHost = host;
           var pos = HOSTS.indexOf(host);
@@ -655,9 +790,8 @@
             var kb = Math.round(resp.data.length / 2048);
             decryptData(resp.data, function (dErr, decData) {
               if (finished) return;
-              if (dErr) return tryHost();
+              if (dErr) return tryNextHost();
               finished = true;
-              // Timing per request (red = until the answer arrived, descifrado = worker), debug log
               console.log('[portal] ' + path + ' ' + kb + 'KB red=' + (tNet - tStart) + 'ms descifrado=' + (Date.now() - tNet) + 'ms' + (opts.low ? ' (fondo)' : ''));
               done(null, decData);
             }, !!opts.low);
@@ -668,11 +802,7 @@
           return done(null, resp.data !== undefined && resp.data !== null ? resp.data : resp);
         } else {
           lastStatus = xhr.status;
-          if (isBrowserEnv) {
-            finished = true;
-            return done(httpError(path + ': respuesta HTTP ' + xhr.status + ' en navegador local'));
-          }
-          tryHost();
+          tryNextHost();
         }
       };
 
@@ -680,16 +810,21 @@
         if (settled || finished) return;
         settled = true;
         disarm();
-        if (isBrowserEnv) {
-          finished = true;
-          return done(new Error(path + ': CORS restringido en navegador de escritorio. Usando catálogo local.'));
-        }
-        tryHost();
+        tryNextHost();
       };
-      xhr.send(bodyHex);
+      xhr.send(bodyStr);
     }
 
-    tryHost();
+    function tryNextHost() {
+      if (finished) return;
+      if (idx >= hosts.length || Date.now() - tStart >= REQUEST_MAX_MS) {
+        finished = true;
+        return done(httpError(path + ': el portal no respondió'));
+      }
+      sendToHost(hosts[idx++], false);
+    }
+
+    tryNextHost();
   }
 
   /**
@@ -761,36 +896,82 @@
     return session.viaServer ? '02:00:00:00:00:00' : deviceIdentity(false).etheMac;
   }
 
+  function acquireRelayFallbackSession(callback) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', RELAY_URL + '/session/fallback', true);
+    xhr.timeout = 8000;
+    var rAuth = relayAuthHeaders(HOSTS[0] || 'neqpsx.6dqtl974.com', session.sn || 'tizen-tv-guest');
+    try { xhr.setRequestHeader('X-Target-Host', rAuth['X-Target-Host']); } catch (e) {}
+    try { xhr.setRequestHeader('X-Tizen-Time', rAuth['X-Tizen-Time']); } catch (e) {}
+    try { xhr.setRequestHeader('X-Tizen-Duid', rAuth['X-Tizen-Duid']); } catch (e) {}
+    try { xhr.setRequestHeader('X-Tizen-Sig', rAuth['X-Tizen-Sig']); } catch (e) {}
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          var grant = JSON.parse(xhr.responseText);
+          var s = grant && (grant.session || grant);
+          if (s && s.userId && s.userToken) {
+            session.sn = String(s.sn || '').toLowerCase();
+            session.snToken = String(s.snToken || '');
+            session.userId = String(s.userId);
+            session.userToken = String(s.userToken);
+            session.viaServer = true;
+            session.ready = true;
+            saveSession();
+            return callback(null, session);
+          }
+        } catch (e) {}
+      }
+      callback(new Error('Fallback session unavailable'));
+    };
+    xhr.onerror = xhr.ontimeout = function () {
+      callback(new Error('Fallback session request failed'));
+    };
+    xhr.send();
+  }
+
   /**
-   * The TV starts its own session with the portal, as it always did. Only when that fails does it ask the catalog
-   * server (xuper-catalog-session.js) for one, so the app does not depend on that server while the portal accepts it.
+   * The TV starts its own session with the portal, as it always did. Only when that fails does it ask our
+   * protected relay /session/fallback (and finally xuper-catalog-session.js) for one.
    */
   function ensureSession(callback) {
     callback = callback || function () {};
+    if (relayMode === 'off') {
+      return callback(new Error('Relay disabled (off)'));
+    }
     if (session.ready && session.userId && session.userToken) {
       return callback(null, session);
     }
     startSession(false, function (err, res) {
       if (!err) return callback(null, res);
-      var server = window.XuperCatalogSession;
-      if (!server || typeof server.acquire !== 'function') return callback(err);
-      console.warn('[MagisClient] own session failed, asking the catalog server: ' + (err.portalCode || err.message || err));
-      server.acquire(rejectedServerToken || undefined).then(function (grant) {
-        session.sn = String(grant.sn || '').toLowerCase();
-        session.userId = String(grant.userId || '');
-        session.userToken = String(grant.userToken || '');
-        session.viaServer = true;
-        session.ready = !!(session.sn && session.userId && session.userToken);
-        if (!session.ready) {
-          session.viaServer = false;
-          return callback(new Error('La sesión de catálogo no contiene los datos requeridos.'));
-        }
-        rejectedServerToken = '';
-        callback(null, session);
-      }, function () {
-        // The portal's own reason is the one worth showing
-        callback(err);
-      });
+      function fallbackServer() {
+        var server = window.XuperCatalogSession;
+        if (!server || typeof server.acquire !== 'function') return callback(err);
+        console.warn('[MagisClient] own session failed, asking the catalog server: ' + (err.portalCode || err.message || err));
+        server.acquire(rejectedServerToken || undefined).then(function (grant) {
+          session.sn = String(grant.sn || '').toLowerCase();
+          session.userId = String(grant.userId || '');
+          session.userToken = String(grant.userToken || '');
+          session.viaServer = true;
+          session.ready = !!(session.sn && session.userId && session.userToken);
+          if (!session.ready) {
+            session.viaServer = false;
+            return callback(new Error('La sesión de catálogo no contiene los datos requeridos.'));
+          }
+          rejectedServerToken = '';
+          callback(null, session);
+        }, function () {
+          // The portal's own reason is the one worth showing
+          callback(err);
+        });
+      }
+      if (err && err.portalCode) {
+        return acquireRelayFallbackSession(function (fbErr, fbSess) {
+          if (!fbErr && fbSess) return callback(null, fbSess);
+          fallbackServer();
+        });
+      }
+      fallbackServer();
     });
   }
 
@@ -811,17 +992,36 @@
       notifyWaiters(new Error('inicio de sesión: el portal no respondió'));
     }, SESSION_START_MAX_MS);
 
-    var fp = {};
-    for (var k in FINGERPRINT_FIXED) {
-      if (Object.prototype.hasOwnProperty.call(FINGERPRINT_FIXED, k)) fp[k] = FINGERPRINT_FIXED[k];
-    }
     var identity = deviceIdentity(freshIdentity);
-    fp.androidId = identity.androidId;
-    fp.cpuId = identity.cpuId;
-    fp.serialNumber = identity.serialNumber;
-    fp.etheMac = identity.etheMac;
-    fp.gatewayMac = identity.gatewayMac;
-    fp.wifiMac = identity.wifiMac;
+    var sh = identity.shortHash || 'a1b2c3d4';
+    var fp = {
+      androidId: identity.androidId,
+      wifiMac: identity.wifiMac,
+      etheMac: identity.etheMac,
+      serialNumber: identity.serialNumber,
+      diskInfo: '',
+      ramSize: '',
+      romSize: '',
+      gatewayMac: identity.gatewayMac,
+      cpuAbi: 'arm64-v8a',
+      display: 'RQ3A.211001.' + sh,
+      brand: 'Amlogic',
+      verId: 'RQ3A.211001.001',
+      cpuId: identity.cpuId,
+      hardware: 'amlogic',
+      manufacturer: 'Amlogic',
+      fingerprint: 'Amlogic/franklin/franklin:11/RQ3A.211001.001/' + sh + ':user/release-keys',
+      host: 'abuild-' + sh,
+      device: 'franklin',
+      board: 'franklin',
+      tags: 'release-keys',
+      userId: '',
+      userToken: '',
+      portalCode: '',
+      sn: '',
+      drmId: identity.drmId || '',
+      appLanguage: 'es'
+    };
 
     function notifyWaiters(err, res) {
       clearTimeout(watchdog);
@@ -838,7 +1038,7 @@
       if (err) return notifyWaiters(err);
       var snToken = trim(res && res.snToken);
       if (!snToken) return notifyWaiters(new Error('No snToken returned'));
-      var sn = (res && trim(res.sn)) || md5(snToken + SNTOKEN_SALT);
+      var sn = (String(res && res.isNew) === '1' && trim(res && res.sn)) ? trim(res.sn) : md5(snToken + SNTOKEN_SALT);
       session.snToken = snToken;
       session.sn = String(sn).toLowerCase();
 
@@ -848,11 +1048,14 @@
         authCode: '',
         preCode: '',
         macAddr: identity.etheMac,
-        reserve1: '',
-        openNum: 4,
+        reserve1: DEVICE_FIXED.reserve1 || '',
+        openNum: freshIdentity ? 1 : 0,
         channel: 'default',
         matadata: '',
-        signdata: ''
+        signdata: '',
+        portalCode: '',
+        drmId: identity.drmId || '',
+        appLanguage: 'es'
       };
 
       call('v8/active', activePayload, { baseFields: false, sessionStart: true }, function (aErr, aRes) {
@@ -1270,24 +1473,30 @@
 
     ensureSession(function (err) {
       if (err) return doneAll(err);
-      var payload = {
-        contentId: cid,
-        seriesContentId: trim(seriesContentId) || null,
-        startTime: 0,
-        type: '1',
-        columnId: -1,
-        authType: null,
-        episodeNumberList: epNum > 0 ? [epNum] : null,
-        portalCode: playProfile.portalCode,
-        appId: playProfile.appId,
-        apkVersion: playProfile.apkVersion,
-        sysVersion: playProfile.sysVersion,
-        loginType: playProfile.loginType,
-        model: playProfile.model,
-        hardwareInfo: playProfile.hardwareInfo
-      };
-      call('v10/startPlayVOD', payload, { profile: playProfile }, function (pErr, pRes) {
-        if (pErr) return doneAll(pErr);
+      var isSeriesPlay = !!(trim(seriesContentId) || epNum > 0 || opts.isSeries);
+
+      function makeMasnewPayload(asSeries) {
+        if (asSeries) {
+          return {
+            authType: '1',
+            columnId: 76178,
+            contentId: cid,
+            episodeNumberList: [epNum > 0 ? epNum : 1],
+            seriesContentId: trim(seriesContentId) || cid,
+            startTime: 0,
+            type: '0'
+          };
+        }
+        return {
+          contentId: cid,
+          language: 'en',
+          macAddr: '02:00:00:00:00:00',
+          sortType: '0',
+          type: '1'
+        };
+      }
+
+      function processPlayResponse(pRes) {
         if (!pRes) return doneAll(new Error('No video response returned'));
         // The Android client accepts up to three nested portal data envelopes.
         for (var depth = 0; depth < 3; depth++) {
@@ -1306,7 +1515,45 @@
         var data = { play: pRes, episode: ep, tracks: tracks, diag: diag };
         playCache[key] = { at: Date.now(), data: data };
         doneAll(null, data);
-      });
+      }
+
+      function attemptMasnew(asSeries, retried) {
+        var masnewProfile = resolveProfile('masnew');
+        call('v10/startPlayVOD', makeMasnewPayload(asSeries), { profile: masnewProfile }, function (pErr, pRes) {
+          if (pErr && !retried && String(pErr.portalCode) === '1') {
+            return attemptMasnew(!asSeries, true);
+          }
+          if (pErr) return doneAll(pErr);
+          processPlayResponse(pRes);
+        });
+      }
+
+      if (playProfile.name !== 'masnew') {
+        var mobilePayload = {
+          contentId: cid,
+          seriesContentId: trim(seriesContentId) || null,
+          startTime: 0,
+          type: '1',
+          columnId: -1,
+          authType: null,
+          episodeNumberList: epNum > 0 ? [epNum] : null,
+          portalCode: playProfile.portalCode,
+          appId: playProfile.appId,
+          apkVersion: playProfile.apkVersion,
+          sysVersion: playProfile.sysVersion,
+          loginType: playProfile.loginType,
+          model: playProfile.model,
+          hardwareInfo: playProfile.hardwareInfo
+        };
+        call('v10/startPlayVOD', mobilePayload, { profile: playProfile }, function (mErr, mRes) {
+          if (!mErr && mRes) {
+            return processPlayResponse(mRes);
+          }
+          attemptMasnew(isSeriesPlay, false);
+        });
+      } else {
+        attemptMasnew(isSeriesPlay, false);
+      }
     });
   }
 
@@ -1401,7 +1648,7 @@
             'Content-License': license,
             'User-Agent': UA_CDN,
             'App': APP_ID,
-            'App-Version': APK_VERSION
+            'App-Version': APK_VER_HEADER
           };
         }
 
@@ -1604,51 +1851,7 @@
   ];
 
   function getLiveCategories(callback) {
-    if (liveCategoriesCache && liveCategoriesCache.length) {
-      return callback(null, liveCategoriesCache);
-    }
-    try {
-      var rawCats = window.localStorage && localStorage.getItem('xuper_magis_cats_v1');
-      if (rawCats) {
-        var parsedCats = JSON.parse(rawCats);
-        if (parsedCats && parsedCats.cats && parsedCats.cats.length && (Date.now() - (parsedCats.at || 0) < LIVE_CATS_TTL)) {
-          liveCategoriesCache = parsedCats.cats;
-          return callback(null, liveCategoriesCache);
-        }
-      }
-    } catch (e) {}
-    ensureSession(function (err) {
-      if (err) return callback(null, FALLBACK_39_CATEGORIES);
-      call('getNextColumns', {
-        columnCode: 'masnew_live',
-        pageNum: 1,
-        pageSize: 50,
-        version: ''
-      }, function (cErr, cRes) {
-        if (cErr) return callback(null, FALLBACK_39_CATEGORIES);
-        var recList = cRes && cRes.recommendList || [];
-        var cats = [];
-        for (var i = 0; i < recList.length; i++) {
-          var col = recList[i];
-          if (col && col.columnId) {
-            cats.push({
-              id: col.columnId,
-              name: text(col.name || col.title || col.alias || ('Categoría ' + (i + 1))),
-              code: col.code || ''
-            });
-          }
-        }
-        if (cats.length) {
-          liveCategoriesCache = cats;
-          try {
-            if (window.localStorage) {
-              localStorage.setItem('xuper_magis_cats_v1', JSON.stringify({ at: Date.now(), cats: cats }));
-            }
-          } catch (e) {}
-        }
-        callback(null, cats.length ? cats : FALLBACK_39_CATEGORIES);
-      });
-    });
+    callback(null, FALLBACK_39_CATEGORIES);
   }
 
   function getLiveChannels(columnId, pageNum, pageSize, callback) {
@@ -2152,10 +2355,10 @@
           language: 'en',
           macAddr: sessionMac()
         }, function (dErr, dRes) {
-          if (dErr && dErr.portalCode === 'portal100006' && reqType !== '1') {
+          if (dErr && (dErr.portalCode === 'portal100006' || dErr.portalCode === 'portal100008') && reqType !== '1') {
             return requestItem('1', onDone);
           }
-          if (dErr && dErr.portalCode === 'portal100006' && reqType === '1' && initialType === '1') {
+          if (dErr && (dErr.portalCode === 'portal100006' || dErr.portalCode === 'portal100008') && reqType === '1' && initialType === '1') {
             return requestItem('0', onDone);
           }
           onDone(dErr, dRes);
@@ -2164,7 +2367,7 @@
 
       requestItem(initialType, function (dErr, dRes) {
         if (dErr) {
-          if (dErr.portalCode === 'portal100006' && local) {
+          if (local) {
             return callback(null, { item: local, episodes: [], seasons: [] });
           }
           return callback(dErr);
@@ -2258,6 +2461,59 @@
   }
 
   var treeCache = {};
+  var HOME_SS_PREFIX = 'xuper_home_ss_v1_';
+  function saveHomeSessionCache(cacheKey, items) {
+    var now = Date.now();
+    treeCache[cacheKey] = { at: now, items: items };
+    if (typeof sessionStorage !== 'undefined') {
+      try {
+        sessionStorage.setItem(HOME_SS_PREFIX + cacheKey, JSON.stringify({ at: now, items: items }));
+      } catch (e) {}
+    }
+  }
+  function readHomeSessionCache(cacheKey) {
+    if (typeof sessionStorage === 'undefined') return null;
+    try {
+      var raw = sessionStorage.getItem(HOME_SS_PREFIX + cacheKey);
+      if (!raw) return null;
+      var saved = JSON.parse(raw);
+      if (saved && saved.items && saved.items.length && (Date.now() - (saved.at || 0) < TREE_TTL)) {
+        return saved;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  var portalJsLoading = false;
+  var portalJsWaiters = [];
+  function ensurePortalJs(cb) {
+    if (window.XUPERTV_PORTAL || typeof document === 'undefined' || !document.head) {
+      return cb();
+    }
+    portalJsWaiters.push(cb);
+    if (portalJsLoading) return;
+    portalJsLoading = true;
+    var finished = false;
+    var timer = null;
+    var finish = function () {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      portalJsLoading = false;
+      var list = portalJsWaiters.slice(0);
+      portalJsWaiters = [];
+      for (var i = 0; i < list.length; i++) {
+        try { list[i](); } catch (e) {}
+      }
+    };
+    var script = document.createElement('script');
+    script.src = 'data/portal.js';
+    timer = setTimeout(finish, 8000);
+    script.onload = finish;
+    script.onerror = finish;
+    document.head.appendChild(script);
+  }
+
   // opts.low: background refresh, waits behind every other request
   function home(root, pageNum, callback, opts) {
     if (typeof pageNum === 'function') {
@@ -2266,23 +2522,67 @@
       pageNum = 1;
     }
     opts = opts || {};
+    if (root === 'free') {
+      return callback(null, { root: root, pageNum: pageNum, items: [], cached: true });
+    }
     root = ROOT_CODES[root] ? root : 'movies';
     pageNum = Math.max(1, parseInt(pageNum, 10) || 1);
     var cacheKey = root + ':' + pageNum;
     if (treeCache[cacheKey] && Date.now() - treeCache[cacheKey].at < TREE_TTL) {
       return callback(null, { root: root, pageNum: pageNum, items: treeCache[cacheKey].items, cached: true });
     }
+    var ssHit = readHomeSessionCache(cacheKey);
+    if (ssHit) {
+      treeCache[cacheKey] = { at: ssHit.at, items: ssHit.items };
+      for (var ssi = 0; ssi < ssHit.items.length; ssi++) remember(ssHit.items[ssi]);
+      return callback(null, { root: root, pageNum: pageNum, items: ssHit.items, cached: true });
+    }
+
+    function serveFallback(errReason) {
+      ensurePortalJs(function () {
+        var cat = ROOT_CATEGORY[root] || '';
+        var pool = (window.XUPERTV_PORTAL && window.XUPERTV_PORTAL.items) || (window.XUPERTV_CATALOG && window.XUPERTV_CATALOG.items) || [];
+        var staticItems = [];
+        for (var si = 0; si < pool.length; si++) {
+          var item = pool[si];
+          if (!item) continue;
+          var itemCat = item.category || '';
+          if (
+            !cat ||
+            cat === 'explorar' ||
+            itemCat.indexOf(cat) !== -1 ||
+            (cat === 'pelicula' && (item.type === 'movie' || item.kind === 'película')) ||
+            (cat === 'serie' && (item.type === 'series' || item.kind === 'serie'))
+          ) {
+            remember(item);
+            staticItems.push(item);
+          }
+        }
+        if (staticItems.length > 0) {
+          return callback(null, { root: root, pageNum: pageNum, items: staticItems, cached: false, fromStatic: true });
+        }
+        return callback(errReason);
+      });
+    }
+
+    if (relayMode === 'off' || relayMode === 'play-only') {
+      return serveFallback(new Error('Relay mode: ' + relayMode));
+    }
 
     ensureSession(function (err) {
-      if (err) return callback(err);
-      call('getNextColumns', {
-        columnCode: ROOT_CODES[root],
+      if (err) return serveFallback(err);
+      if (relayMode === 'off' || relayMode === 'play-only') {
+        return serveFallback(new Error('Relay mode: ' + relayMode));
+      }
+      call('v3/getColumnContents', {
+        columnId: ROOT_IDS[root] || ROOT_IDS.movies,
+        isAv1: '0',
+        specialFlag: '0',
         pageNum: pageNum,
-        pageSize: 60,
-        version: ''
+        pageSize: 20
       }, { low: !!opts.low }, function (cErr, cRes) {
-        if (cErr) return callback(cErr);
-        var recList = cRes && cRes.recommendList || [];
+        if (cErr) return serveFallback(cErr);
+
         var cat = ROOT_CATEGORY[root] || '';
         function rowTitles(assets, rowName) {
           var out = [];
@@ -2290,53 +2590,88 @@
             var it = itemFromAsset(assets[j], cat, null);
             if (it) {
               it.row = rowName;
-              if (root === 'free' && /free\.kids/i.test(it.row) && it.category.indexOf('infantil') === -1) {
-                it.category += ',infantil';
-              }
               out.push(it);
             }
           }
           return out;
         }
-        var rows = [];
-        for (var i = 0; i < recList.length; i++) {
-          var col = recList[i];
-          var name = text(col && col.name);
-          var row = { col: col, name: name, titles: rowTitles(col && col.assetList || [], name), tiles: [] };
-          // Aggregation row (e.g. Kids: Minions, Toy Story…): tiles that open a column of the root
-          var agg = col && col.aggregationList || [];
-          for (var g = 0; g < agg.length; g++) {
-            var tile = collectionFromColumn(agg[g], cat);
-            if (tile) row.tiles.push(tile);
+
+        var recList = cRes && cRes.recommendList || [];
+        if (recList.length > 0) {
+          var rows = [];
+          for (var i = 0; i < recList.length; i++) {
+            var col = recList[i];
+            var name = text(col && col.name);
+            var row = { col: col, name: name, titles: rowTitles(col && col.assetList || [], name), tiles: [] };
+            var agg = col && col.aggregationList || [];
+            for (var g = 0; g < agg.length; g++) {
+              var tile = collectionFromColumn(agg[g], cat);
+              if (tile) row.tiles.push(tile);
+            }
+            rows.push(row);
           }
-          rows.push(row);
+
+          function doneRec() {
+            var items = [];
+            for (var r = 0; r < rows.length; r++) items = items.concat(rows[r].titles, rows[r].tiles);
+            saveHomeSessionCache(cacheKey, items);
+            callback(null, { root: root, pageNum: pageNum, items: items, cached: false });
+          }
+
+          var pending = 0;
+          for (var k = 0; k < rows.length; k++) {
+            (function (row) {
+              var want = rankedSize(row.name);
+              var id = parseInt(row.col && (row.col.columnId || row.col.id), 10);
+              if (!want || !id || row.titles.length >= want) return;
+              pending++;
+              call('v3/getShelveData', { columnId: id, columnType: '2', pageNum: 1, pageSize: Math.max(20, want), numDisplay: null, encryptVersion: 0 }, { low: !!opts.low }, function (sErr, sRes) {
+                var full = sErr ? [] : rowTitles(sRes && sRes.assetList || [], row.name);
+                if (full.length > row.titles.length) row.titles = full.slice(0, want);
+                if (--pending === 0) doneRec();
+              });
+            })(rows[k]);
+          }
+          if (pending === 0) doneRec();
+          return;
         }
 
-        function done() {
-          var items = [];
-          for (var r = 0; r < rows.length; r++) items = items.concat(rows[r].titles, rows[r].tiles);
-          treeCache[cacheKey] = { at: Date.now(), items: items };
-          callback(null, { root: root, pageNum: pageNum, items: items, cached: false });
+        var childCols = cRes && cRes.childColumnList || [];
+        var shelves = childCols.slice(0, 5);
+        if (!shelves.length) {
+          return serveFallback(new Error('No shelves returned for ' + root));
         }
 
-        // The home sends at most 10 titles per row, also for its ranked rows ("Películas TOP15 clasificadas"):
-        // those get their whole list from the row's column (the column id must be a number, or the portal
-        // answers "request parameters error"). If that fails, the row keeps the 10 it has.
-        var pending = 0;
-        for (var k = 0; k < rows.length; k++) {
-          (function (row) {
-            var want = rankedSize(row.name);
-            var id = parseInt(row.col && (row.col.columnId || row.col.id), 10);
-            if (!want || !id || row.titles.length >= want) return;
-            pending++;
-            call('v3/getShelveData', { columnId: id, columnType: '2', pageNum: 1, pageSize: Math.max(20, want), numDisplay: null, encryptVersion: 0 }, { low: !!opts.low }, function (sErr, sRes) {
-              var full = sErr ? [] : rowTitles(sRes && sRes.assetList || [], row.name);
-              if (full.length > row.titles.length) row.titles = full.slice(0, want);
-              if (--pending === 0) done();
+        var shelfBuckets = new Array(shelves.length);
+        var shelfPending = shelves.length;
+        for (var sIdx = 0; sIdx < shelves.length; sIdx++) {
+          (function (idx, sCol) {
+            var sName = text(sCol && (sCol.name || sCol.alias));
+            call('v3/getShelveData', {
+              columnId: sCol.id,
+              columnType: '2',
+              pageNum: 1,
+              pageSize: 14,
+              encryptVersion: 0
+            }, { low: !!opts.low }, function (sErr, sRes) {
+              shelfBuckets[idx] = sErr ? [] : rowTitles(sRes && sRes.assetList || [], sName);
+              if (--shelfPending === 0) {
+                var items = [];
+                for (var b = 0; b < shelfBuckets.length; b++) {
+                  if (shelfBuckets[b] && shelfBuckets[b].length) {
+                    items = items.concat(shelfBuckets[b]);
+                  }
+                }
+                if (items.length > 0) {
+                  saveHomeSessionCache(cacheKey, items);
+                  callback(null, { root: root, pageNum: pageNum, items: items, cached: false });
+                } else {
+                  serveFallback(new Error('Empty shelves for ' + root));
+                }
+              }
             });
-          })(rows[k]);
+          })(sIdx, shelves[sIdx]);
         }
-        if (pending === 0) done();
       });
     });
   }
@@ -2641,13 +2976,7 @@
   }
 
   function getHome(callback) {
-    ensureSession(function (err) {
-      if (err) return callback(err);
-      call('getHome', { homePageCode: 'home' }, function (pErr, pRes) {
-        if (pErr) return callback(pErr);
-        callback(null, pRes);
-      });
-    });
+    callback(null, { shelveList: [] });
   }
 
   function getShelveData(shelveId, pageNum, pageSize, callback) {
@@ -2897,6 +3226,11 @@
     getProfileConfig: function (name) { return CLIENT_PROFILES[name || activeProfileName]; },
     // Nothing running or waiting: background work (title details for a focused card) starts only then
     isIdle: function () { return !session.busy && !queue.length && !lowQueue.length; },
+    getRelayMode: function () { return relayMode; },
+    setRelayMode: function (m) {
+      relayMode = (m === 'off' || m === 'play-only' || m === 'full') ? m : 'full';
+      return relayMode;
+    },
     call: call
   };
 

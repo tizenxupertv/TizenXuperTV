@@ -4,19 +4,26 @@ import path from 'path';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
+import zlib from 'zlib';
 import { URL } from 'url';
 import { tvCompatPlugin } from './vite-tv-compat';
 
-let cachedEpicToken = '';
+let cachedEpicToken = '01b53ec6.gente.1794262791.5db6ac9d1f51d4d84252ca9939f9e0beaa86a0e399ca3f1dabba6b2c2672ea4c';
 function getEpicToken(): Promise<string> {
   if (cachedEpicToken) return Promise.resolve(cachedEpicToken);
   return new Promise((resolve) => {
     const req = https.request({
-      hostname: 'playlatam.site',
+      hostname: 'epictvparaiphone.top',
       port: 443,
       path: '/iphone/pulsera',
       method: 'POST',
-      headers: { 'Accept': 'application/json' },
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+        'Referer': 'https://epictvparaiphone.top/iphone/',
+        'Origin': 'https://epictvparaiphone.top',
+        'X-Pulsera': '1'
+      },
       timeout: 5000
     }, (res) => {
       const cookies = res.headers['set-cookie'] || [];
@@ -28,9 +35,9 @@ function getEpicToken(): Promise<string> {
           return resolve(cachedEpicToken);
         }
       }
-      resolve('');
+      resolve('01b53ec6.gente.1794262791.5db6ac9d1f51d4d84252ca9939f9e0beaa86a0e399ca3f1dabba6b2c2672ea4c');
     });
-    req.on('error', () => resolve(''));
+    req.on('error', () => resolve('01b53ec6.gente.1794262791.5db6ac9d1f51d4d84252ca9939f9e0beaa86a0e399ca3f1dabba6b2c2672ea4c'));
     req.end();
   });
 }
@@ -52,8 +59,9 @@ function streamProxyPlugin() {
       return res.end(JSON.stringify({ ok: true, numero: token.split('.')[0], token }));
     }
     const headers: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
-      'Referer': 'https://playlatam.site/',
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+      'Referer': 'https://epictvparaiphone.top/iphone/',
+      'Origin': 'https://epictvparaiphone.top',
       'Accept': 'application/json, text/plain, */*'
     };
     if (token) {
@@ -61,7 +69,7 @@ function streamProxyPlugin() {
       headers['Cookie'] = `__Host-pulsera=${token}`;
     }
     const upstreamReq = https.request({
-      hostname: 'playlatam.site',
+      hostname: 'epictvparaiphone.top',
       port: 443,
       path: targetPath,
       method: req.method || 'GET',
@@ -118,7 +126,7 @@ function streamProxyPlugin() {
       if (auth || license) {
         headers['User-Agent'] = 'Ranger/4.9.4-17294ac0';
         headers['App'] = 'com.android.msandroid';
-        headers['App-Version'] = '49902';
+        headers['App-Version'] = '49920';
         headers['X-Buffer'] = '0';
         if (auth) headers['Content-Auth'] = auth;
         if (license) headers['Content-License'] = license;
@@ -138,6 +146,10 @@ function streamProxyPlugin() {
         } else if (targetUrl.includes('wedd48c') || targetUrl.includes('daddylive') || targetUrl.includes('premium')) {
           headers['Referer'] = 'https://daddylive.sx/';
           headers['Origin'] = 'https://daddylive.sx';
+        } else if (targetUrl.includes('teveo.cu')) {
+          headers['Referer'] = 'https://teveo.cu/';
+          headers['Origin'] = 'https://teveo.cu';
+          headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
         }
       }
       if (req.headers.range) headers['Range'] = req.headers.range;
@@ -168,7 +180,16 @@ function streamProxyPlugin() {
             const chunks: Buffer[] = [];
             targetRes.on('data', (c) => chunks.push(c));
             targetRes.on('end', () => {
-              const text = Buffer.concat(chunks).toString('utf8');
+              let rawBuf = Buffer.concat(chunks);
+              const contentEncoding = String(targetRes.headers['content-encoding'] || '').toLowerCase();
+              if (contentEncoding.includes('gzip') || (rawBuf.length >= 2 && rawBuf[0] === 0x1f && rawBuf[1] === 0x8b)) {
+                try {
+                  rawBuf = zlib.gunzipSync(rawBuf);
+                } catch {
+                  // Keep raw buffer if decompression fails
+                }
+              }
+              const text = rawBuf.toString('utf8');
               const lines = text.split('\n');
               const rewritten = lines.map((line) => {
                 const trimmed = line.trim();
@@ -191,6 +212,7 @@ function streamProxyPlugin() {
           } else {
             res.statusCode = status;
             if (contentType) res.setHeader('Content-Type', contentType);
+            if (targetRes.headers['content-encoding']) res.setHeader('Content-Encoding', targetRes.headers['content-encoding']);
             if (targetRes.headers['content-length']) res.setHeader('Content-Length', targetRes.headers['content-length']);
             if (targetRes.headers['content-range']) res.setHeader('Content-Range', targetRes.headers['content-range']);
             if (targetRes.headers['accept-ranges']) res.setHeader('Accept-Ranges', targetRes.headers['accept-ranges']);
@@ -264,17 +286,9 @@ export default defineConfig({
         rewrite: (p: string) => p.replace(/^\/epic-api/, '')
       },
       '/api/portalCore': {
-        // Browser development needs one CORS-safe upstream. Keep it aligned with the
-        // primary authorized transport used by the working backup.
-        target: 'https://osuhk.m3x8o50te.com',
+        target: 'https://tizenxuper-relay.tizenxupertv.workers.dev',
         changeOrigin: true,
-        secure: false,
-        headers: {
-          'User-Agent': 'okhttp/3.12.12',
-          'apk': 'com.android.msandroid',
-          'apkVer': '43404',
-          'spkgVer': '2025-08-07 05:40:11_36_16_'
-        }
+        secure: true
       }
     }
   },
@@ -283,20 +297,14 @@ export default defineConfig({
     host: true,
     proxy: {
       '/epic-api': {
-        target: 'https://playlatam.site',
+        target: 'https://epictvparaiphone.top',
         changeOrigin: true,
         rewrite: (p: string) => p.replace(/^\/epic-api/, '')
       },
       '/api/portalCore': {
-        target: 'https://osuhk.m3x8o50te.com',
+        target: 'https://tizenxuper-relay.tizenxupertv.workers.dev',
         changeOrigin: true,
-        secure: false,
-        headers: {
-          'User-Agent': 'okhttp/3.12.12',
-          'apk': 'com.android.msandroid',
-          'apkVer': '43404',
-          'spkgVer': '2025-08-07 05:40:11_36_16_'
-        }
+        secure: true
       }
     }
   },

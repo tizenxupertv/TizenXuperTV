@@ -806,11 +806,14 @@ export const App: React.FC = () => {
     }
   });
 
+  const [favTick, setFavTick] = useState<number>(0);
+  useEffect(() => favoritesService.subscribe(() => setFavTick(t => t + 1)), []);
+
   // Check if current hero item is favorite
   const isHeroFav = useMemo(() => {
     const item = currentHeroItems[activeHeroIndex];
     return item ? favoritesService.isFavorite(item.id) : false;
-  }, [currentHeroItems, activeHeroIndex]);
+  }, [currentHeroItems, activeHeroIndex, favTick]);
 
   // Network connectivity status (Phase 3 resilience)
   const [networkToast, setNetworkToast] = useState<{ visible: boolean; online: boolean; message: string } | null>(null);
@@ -850,15 +853,14 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  const [favTick, setFavTick] = useState<number>(0);
-  useEffect(() => favoritesService.subscribe(() => setFavTick(t => t + 1)), []);
-  void favTick;
 
   return (
     <div className="app-root theme-apple-dark">
-      {catalog.catalogError && selectedTab !== 'tv' && !isSportsTab(selectedTab) && (
+      {((catalog.catalogError && selectedTab !== 'tv' && !isSportsTab(selectedTab)) ||
+        (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('test') === 'catalog-error')) && (
         <div role="alert" className="network-status-toast is-offline">
-          No se pudo cargar el catálogo. Reintentando automáticamente…
+          <span className="network-status-dot" />
+          <span>No se pudo cargar el catálogo. Reintentando automáticamente…</span>
         </div>
       )}
       {/* Network Connectivity Toast (Tizen Resilience) */}

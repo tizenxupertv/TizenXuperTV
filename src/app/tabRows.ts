@@ -107,7 +107,15 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
     return list.concat(portal);
   }
 
-  // Offline (no portal rows): rows composed by the app from the item lists
+  // Offline (no portal rows): only show rows if there are catalog items available.
+  // If catalog failed completely, do NOT show "Seguir viendo" because findVod will fail or have no data.
+  const hasAnyCatalogItems = (featuredItems && featuredItems.length > 0) ||
+                             (movieItems && movieItems.length > 0) ||
+                             (seriesItems && seriesItems.length > 0);
+  if (!hasAnyCatalogItems) {
+    return [];
+  }
+
   if (selectedTab === 'destacados') {
     if (historyItems && historyItems.length > 0) {
       list.push({ id: 'history', title: 'Seguir viendo', type: 'history', items: historyItems });
@@ -270,11 +278,11 @@ export function buildTabRows(selectedTab: TabId, data: TabRowsData): ContentRowD
         items: movieItems.slice(5, 20)
       });
 
-      const horrorItems = catalogRows['Horror'] || catalogRows['Se acerca Halloween'];
+      const horrorItems = catalogRows['Horror'] || catalogRows['Terror'] || catalogRows['Suspenso'];
       if (horrorItems && horrorItems.length > 0) {
         list.push({
           id: 'horror_movies',
-          title: 'Terror, Suspenso y Halloween',
+          title: 'Terror y Suspenso',
           type: 'vod',
           items: horrorItems
         });
@@ -467,7 +475,7 @@ export function rowHasSeeAll(row: ContentRowDef | undefined): boolean {
 
 // Row title words -> portal genre tag, so "Ver todo" opens already filtered
 const TITLE_TAGS: [RegExp, string][] = [
-  [/terror|miedo|halloween/i, 'Horror'],
+  [/terror|miedo|suspenso/i, 'Horror'],
   [/acci[oó]n/i, 'Action'],
   [/comedia|risa/i, 'Comedy'],
   [/romance|amor/i, 'Romance'],

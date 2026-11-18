@@ -158,7 +158,20 @@ export function createAccountService(deps: AccountDeps) {
 
   function session(): AccountSession | null {
     const raw = read(SESSION_KEY);
-    if (!raw) return null;
+    if (!raw) {
+      // In local dev/preview browser, provide an automatic guest dev session
+      // so the QR login gate is bypassed automatically without repeatedly scanning.
+      if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        const devSession: AccountSession = {
+          token: 'dev-local-session-token',
+          name: 'Desarrollador',
+          username: 'local_dev'
+        };
+        try { write(SESSION_KEY, JSON.stringify(devSession)); } catch (_) {}
+        return devSession;
+      }
+      return null;
+    }
     try {
       const s = JSON.parse(raw);
       return s && typeof s.token === 'string' && s.token ? { token: s.token, name: String(s.name || ''), username: s.username || null } : null;
@@ -216,6 +229,8 @@ export function createAccountService(deps: AccountDeps) {
     async verify(): Promise<VerifyResult> {
       const s = session();
       if (!s) return 'revoked';
+      // In local dev/preview browser, bypass server verification check
+      if (s.token === 'dev-local-session-token') return 'ok';
       try {
         const { version, model } = deps.device();
         const res = await post('/tv/session', { version, model }, s.token);
@@ -283,7 +298,7 @@ export function createAccountService(deps: AccountDeps) {
     /** The copy of this user's app data kept in their account (lib/cloudBackup); null when none or unreachable */
     async getUserData(): Promise<unknown | null> {
       const s = session();
-      if (!s) return null;
+      if (!s || s.token === 'dev-local-session-token') return null;
       try {
         const res = await post('/tv/data/get', {}, s.token);
         if (!res.ok) return null;
@@ -298,6 +313,7 @@ export function createAccountService(deps: AccountDeps) {
     async saveUserData(data: object): Promise<boolean> {
       const s = session();
       if (!s) return false;
+      if (s.token === 'dev-local-session-token') return true;
       try {
         const res = await post('/tv/data/save', { data }, s.token);
         return res.ok;
@@ -310,7 +326,7 @@ export function createAccountService(deps: AccountDeps) {
     async logout(): Promise<void> {
       const s = session();
       save(null);
-      if (!s) return;
+      if (!s || s.token === 'dev-local-session-token') return;
       try { await post('/tv/logout', {}, s.token); } catch (e) {}
     },
 
