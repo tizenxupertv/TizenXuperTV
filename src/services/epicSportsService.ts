@@ -64,7 +64,7 @@ export const EXTRA_CHANNELS: LiveChannel[] = [
   { id: 'extra-espnu', code: 'extra-espnu', name: 'ESPN U HD', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'http://85.237.89.160:9590/usa-s/ESPN-U-HD/index.m3u8', logo: 'http://schedulesdirect-api20141201-logos.s3.dualstack.us-east-1.amazonaws.com/stationLogos/s45654_dark_360w_270h.png' },
 ];
 
-const DEFAULT_TOKEN = '01b53ec6.gente.1794262791.5db6ac9d1f51d4d84252ca9939f9e0beaa86a0e399ca3f1dabba6b2c2672ea4c';
+const DEFAULT_TOKEN = '9d7f743c.gente.1794262627.6c0ed20caa00f079c6628210b1cc8de81e503acf58ab77bc8bcfb536836b75f3';
 
 class EpicSportsService {
   private inMemoryToken: string = DEFAULT_TOKEN;

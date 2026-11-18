@@ -8,7 +8,7 @@ import zlib from 'zlib';
 import { URL } from 'url';
 import { tvCompatPlugin } from './vite-tv-compat';
 
-let cachedEpicToken = '01b53ec6.gente.1794262791.5db6ac9d1f51d4d84252ca9939f9e0beaa86a0e399ca3f1dabba6b2c2672ea4c';
+let cachedEpicToken = '9d7f743c.gente.1794262627.6c0ed20caa00f079c6628210b1cc8de81e503acf58ab77bc8bcfb536836b75f3';
 function getEpicToken(): Promise<string> {
   if (cachedEpicToken) return Promise.resolve(cachedEpicToken);
   return new Promise((resolve) => {
