@@ -1534,7 +1534,10 @@
 
         self._safeStopAndClose();
 
-        var isSecureRequired = String(url).indexOf(':443') !== -1 || (typeof headers !== 'undefined' && headers && (headers['Referer'] || headers['referer'] || headers['Origin']));
+        var meta = window.__xuperCurrentStreamMeta || {};
+        var h = meta.headers;
+        // Direct channels (lib/directLink) keep their own https: many of those servers have no plain http
+        var isSecureRequired = String(url).indexOf(':443') !== -1 || !!meta.direct || (h && (h['Referer'] || h['referer'] || h['Origin'] || h['X-Pulsera'] || h['Cookie']));
         var cleanUrl = isSecureRequired ? String(url) : String(url).replace(/^https:\/\//i, 'http://');
         self._lastPreviewUrl = cleanUrl;
         webapis.avplay.open(cleanUrl);
@@ -1542,7 +1545,6 @@
         // Never stretch the preview: a channel that is not 16:9 gets bars instead
         webapis.avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX');
 
-        var meta = window.__xuperCurrentStreamMeta || {};
         self._applyHeaders(meta.headers);
 
         try {

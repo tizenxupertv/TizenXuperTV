@@ -64,7 +64,7 @@ function streamProxyPlugin() {
       'Accept': 'application/json, text/plain, */*'
     };
     if (token) {
-      headers['X-Pulsera'] = '1';
+      headers['X-Pulsera'] = token;
       headers['Cookie'] = `__Host-pulsera=${token}`;
     }
     const upstreamReq = https.request({

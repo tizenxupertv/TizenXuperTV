@@ -7,7 +7,10 @@ import { createSequenceFixer } from '../lib/mediaSequence';
 import { shouldMoveLiveToAvPlay, videoCodecRejected } from '../lib/liveVideoFallback';
 import { unwrapPngTs } from '../lib/pngWrappedTs';
 import { isStaleLinkStatus } from '../lib/liveLink';
+import { directHlsPlayer, directStreamMeta } from '../lib/directLink';
 import { epicSportsService } from './epicSportsService';
+
+const CLOUD_STREAM_PROXY = 'https://tizenxuper-bot.tizenxupertv.workers.dev/stream-proxy';
 
 declare global {
   interface Window {
@@ -578,10 +581,19 @@ class PlayerService {
       if (channel.url.includes('epictvparaiphone.top') || channel.url.includes('playlatam.site')) {
         epicSportsService.getPulseraToken().then(token => {
           if (this.activeChannelCode !== code) return;
+          const headers: Record<string, string> = {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+            'Referer': 'https://epictvparaiphone.top/iphone/',
+            'Cookie': `__Host-pulsera=${token}`,
+            'X-Pulsera': token
+          };
           window.__xuperCurrentStreamMeta = {
             url: channel.url,
-            headers: { 'X-Pulsera': token }
+            headers
           };
+
+          // Epic Sports channels MUST use HLS.js because video chunks are .image (PNG-wrapped TS)
+          // that require unwrapPngTs in JavaScript. AVPlay hardware decoder cannot unwrap them.
           this.streamHls(channel.url!, videoEl, window.__xuperCurrentStreamMeta, code);
         }).catch(() => {
           if (this.activeChannelCode !== code) return;
@@ -590,16 +602,16 @@ class PlayerService {
         return;
       }
 
+      // A direct link has its own headers or none: never the last portal channel's (lib/directLink)
+      const directMeta = directStreamMeta(channel.url, channel.headers);
+      window.__xuperCurrentStreamMeta = directMeta;
+
       if (channel.url.includes('.m3u8')) {
-        const streamMeta = channel.headers ? { url: channel.url, headers: channel.headers } : undefined;
-        // On Tizen, HLS.js cannot inject CORS-unsafe headers (e.g. Referer).
-        // Route those streams through AVPlay which supports custom HTTP headers natively.
-        const isTizen = typeof (window as any).tizen !== 'undefined';
-        const needsNativePlayer = isTizen &&
-          channel.headers &&
-          (channel.headers['Referer'] || channel.headers['referer'] || channel.headers['User-Agent'] || channel.headers['user-agent']);
-        if (needsNativePlayer && window.XuperAVPlay) {
-          window.__xuperCurrentStreamMeta = streamMeta || null;
+        const streamMeta = directMeta;
+        const onTv = typeof (window as any).tizen !== 'undefined' && !!window.XuperAVPlay;
+        const isTeveo = channel.url.includes('teveo.cu');
+        // teveo.cu requires Referer which AVPlay cannot send: route to HLS.js with proxy
+        if (!isTeveo && directHlsPlayer(channel.headers, onTv) === 'avplay') {
           if (fullscreen && window.XuperAVPlay.playStream) {
             this.playLiveStream(channel.url, channel.headers || null, videoEl);
           } else if (window.XuperAVPlay.playPreview) {
@@ -611,11 +623,10 @@ class PlayerService {
           return;
         }
         this.streamHls(channel.url, videoEl, streamMeta, code);
+        return;
       } else if (fullscreen && window.XuperAVPlay && window.XuperAVPlay.playStream) {
         this.playLiveStream(channel.url, channel.headers || null, videoEl);
       } else if (window.XuperAVPlay && window.XuperAVPlay.playPreview) {
-        // A direct link has no headers of its own: do not reuse the last portal channel's
-        window.__xuperCurrentStreamMeta = channel.headers ? { url: channel.url, headers: channel.headers } : null;
         this.playAvPreview(channel.url, videoEl);
       } else {
         videoEl.src = channel.url;
@@ -729,12 +740,22 @@ class PlayerService {
     );
 
     let effectiveUrl = url;
-    if (isBrowserEnv && url.startsWith('http') && !url.includes('/stream-proxy')) {
+    const isEpic = url.includes('epictvparaiphone.top') || url.includes('playlatam.site');
+    const isTeveo = url.includes('teveo.cu');
+    const hasSpecialHeaders = !!(streamMeta?.headers?.['Referer'] || streamMeta?.headers?.['referer'] || streamMeta?.headers?.['User-Agent'] || streamMeta?.headers?.['user-agent']);
+
+    if (url.startsWith('http') && !url.includes('/stream-proxy')) {
       const auth = streamMeta?.headers?.['Content-Auth'] || '';
       const license = streamMeta?.headers?.['Content-License'] || '';
       const pulsera = streamMeta?.headers?.['X-Pulsera'] || '';
       const ref = streamMeta?.headers?.['Referer'] || streamMeta?.headers?.['referer'] || '';
-      effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}&pulsera=${encodeURIComponent(pulsera)}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}`;
+      const ua = streamMeta?.headers?.['User-Agent'] || streamMeta?.headers?.['user-agent'] || '';
+
+      if (isBrowserEnv) {
+        effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}&pulsera=${encodeURIComponent(pulsera)}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}`;
+      } else if (isEpic || isTeveo || hasSpecialHeaders) {
+        effectiveUrl = `${CLOUD_STREAM_PROXY}?url=${encodeURIComponent(url)}${pulsera ? `&pulsera=${encodeURIComponent(pulsera)}` : ''}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}`;
+      }
     }
 
     if (window.__xuperCreateHls || (window.Hls && window.Hls.isSupported())) {
