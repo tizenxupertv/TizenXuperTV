@@ -6,10 +6,8 @@ CERT_DIR="$HOME/Library/Application Support/Apps2Samsung/Certificate/Jelly2Sams 
 WORK_DIR="/tmp/xuper_sign_work"
 TMP_WGT="/tmp/TizenXuperTV_unsigned.wgt"
 SRC_DIR="$DIR/dist"
-if [ ! -d "$SRC_DIR" ] || [ ! -f "$SRC_DIR/index.html" ]; then
-  echo "==> Building React app..."
-  npm run build
-fi
+echo "==> Building React app..."
+npm --prefix "$DIR" run build
 echo "==> Packaging React build from: $SRC_DIR"
 
 # Read version from config.xml if available
