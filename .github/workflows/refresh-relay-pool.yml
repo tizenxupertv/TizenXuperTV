@@ -1,8 +1,6 @@
 name: Refresh Relay Session Pool
 
 on:
-  schedule:
-    - cron: '30 */4 * * *'
   workflow_dispatch:
 
 jobs:
