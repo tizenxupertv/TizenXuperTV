@@ -10005,3 +10005,30 @@ html.legacy-video .maintenance-card { box-shadow: none; }
 .live-epic-group-hdr:first-child {
   margin-top: 0;
 }
+
+/* ============================================================================
+ * Tizen 3.0 / 4.0 (html.tv-legacy) — Lightweight GPU/RAM mode
+ * Disables expensive blur, backdrop-filter, shadows, and continuous animations
+ * so navigation stays snappy on older 1 GB RAM TVs without affecting Tizen 5+.
+ * ============================================================================ */
+html.tv-legacy *,
+html.tv-legacy *::before,
+html.tv-legacy *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  text-shadow: none !important;
+}
+
+html.tv-legacy .poster-card,
+html.tv-legacy .live-channel-card,
+html.tv-legacy .spb-card,
+html.tv-legacy .spb-live-card,
+html.tv-legacy .modal-card,
+html.tv-legacy .vod-hero-btn {
+  box-shadow: none !important;
+  transition: none !important;
+}
+
+html.tv-legacy .skeleton-shimmer {
+  animation: none !important;
+}

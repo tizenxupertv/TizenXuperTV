@@ -250,7 +250,11 @@ function streamProxyPlugin() {
     'fuxok.nguvmqhpk.com',
     'ftmrmy.jdfey0cd.com',
     'mptec.dhkrxuzcy.com',
-    'eajmnp.hcgv1dt8.com'
+    'eajmnp.hcgv1dt8.com',
+    'hinumz.a878kkoyc.com',
+    'krdwvd.swcaw7qx.com',
+    'osuhk.m3x8o50te.com',
+    'oogoy.f30c96w8.com'
   ]);
 
   const direct43404Handler = (req: any, res: any) => {
@@ -363,7 +367,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     // Tizen 4.0 (2018 TVs) ships Chromium 56: lower JS syntax so older models parse the bundle
-    target: 'chrome56',
+    target: 'es2015',
     cssTarget: 'chrome56',
     // Keep a real stylesheet (iife output would otherwise inject CSS from JS)
     cssCodeSplit: false,

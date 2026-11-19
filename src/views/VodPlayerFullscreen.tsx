@@ -298,7 +298,12 @@ export const VodPlayerFullscreen: React.FC<VodPlayerFullscreenProps> = ({
     }).catch(() => {});
   }, [item]);
 
-  const epIndex = episode ? effectiveEpisodes.findIndex(ep => String(ep.id) === String(episode.id)) : -1;
+  const epIndex = episode
+    ? effectiveEpisodes.findIndex(ep =>
+        String(ep.id) === String(episode.id) &&
+        (episode.number === undefined || ep.number === undefined || Number(ep.number) === Number(episode.number))
+      )
+    : -1;
   const currentEpIndex = epIndex >= 0 ? epIndex : 0;
 
   const [episodeSubFocus, setEpisodeSubFocus] = useState<'tiles' | 'seasons'>('tiles');

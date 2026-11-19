@@ -1040,7 +1040,7 @@ export const App: React.FC = () => {
       {/* Fullscreen Cinema Player (VOD & Trailers) */}
       {activeVodPlayer && (
         <VodPlayerFullscreen
-          key={`${activeVodPlayer.item.id}-${activeVodPlayer.episode?.id || ''}-${activeVodPlayer.isTrailer ? 't' : ''}`}
+          key={`${activeVodPlayer.item.id}-${activeVodPlayer.episode?.id || ''}-${activeVodPlayer.episode?.number ?? ''}-${activeVodPlayer.isTrailer ? 't' : ''}`}
           item={activeVodPlayer.item}
           episode={activeVodPlayer.episode}
           isTrailer={activeVodPlayer.isTrailer}

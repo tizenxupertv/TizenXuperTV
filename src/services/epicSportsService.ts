@@ -9,9 +9,25 @@ const isBrowser = typeof window !== 'undefined' && (
   window.location.hostname === '127.0.0.1' ||
   (typeof (window as any).tizen === 'undefined' && typeof (window as any).webOS === 'undefined')
 );
+const APARATO_STORAGE_KEY = 'xuper_epic_aparato_id';
+function getOrCreateAparatoId(): string {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem(APARATO_STORAGE_KEY);
+      if (saved && /^[0-9a-f]{8}$/i.test(saved)) return saved.toLowerCase();
+    }
+  } catch (_) {}
+  let hex = '';
+  for (let i = 0; i < 8; i++) hex += Math.floor(Math.random() * 16).toString(16);
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(APARATO_STORAGE_KEY, hex);
+  } catch (_) {}
+  return hex || 'a1b2c3d4';
+}
+
 export const EPIC_API_BASE = isBrowser ? '/epic-api' : 'https://epictvparaiphone.top';
 export const EPIC_LLAVE = '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq';
-export const EPIC_APARATO = 'a1b2c3d4';
+export const EPIC_APARATO = getOrCreateAparatoId();
 export const EPIC_AUTH_HEADERS: Record<string, string> = {
   'X-Llave': EPIC_LLAVE,
   'X-Aparato': EPIC_APARATO,
