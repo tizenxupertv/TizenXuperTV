@@ -56,17 +56,17 @@
       name: 'masnew',
       portalCode: 'masnew',
       appId: 'com.android.msandroid',
-      apkVersion: '49902',
-      sysVersion: '2024-09-10 06:25:30_33_13_',
+      apkVersion: '49920',
+      sysVersion: '2026-10-21 15:40:39_28_9_4.4.146',
       transportAppId: 'com.android.msandroid',
-      apkVerHeader: '43404',
+      apkVerHeader: '49920',
       loginType: '2',
-      hardwareInfo: 'ranchu',
-      model: 'sdk_gphone64_arm64',
-      product: 'sdk_gphone64_arm64',
+      hardwareInfo: 'amlogic',
+      model: 'S905X3',
+      product: 'franklin',
       cpu: 'arm64-v8a',
-      sdkVer: 33,
-      reserve1: '583442714b345572434a4d5769637461545a735936413d3d',
+      sdkVer: 28,
+      reserve1: '4b4d354a69546a7636736d2f73776a2b705834316d3874536576774470327448',
       liveCodeList: ['masnew_live'],
       fingerprint: {
         board: 'goldfish_arm64',
@@ -1200,15 +1200,21 @@
         callDirect43404(endpoint, payload, opts, function (dErr, dRes) {
           release();
           if (!dErr) return callback(null, dRes);
-          // A portal business code (e.g. portal100006 "wrong type", not a transport/session failure) means direct 43404
-          // answered normally — return it directly so callers like detail() can retry with type='1' without poisoning session.forceRelay
-          if (dErr.portalCode && !isSessionError(dErr)) {
+          // A portal business code (e.g. portal100006 "wrong type", not a transport/session/version failure) means direct 43404
+          // answered normally — return it directly so callers like detail() can retry with type='1' without poisoning session.forceRelay.
+          // Exception: portal200001 ("version discontinued" on endpoints like v3/searchByName) should try relay for this call only.
+          if (dErr.portalCode && !isSessionError(dErr) && dErr.portalCode !== 'portal200001') {
             return callback(dErr);
           }
           if (relayMode !== 'off' && relayCooldownUntil <= Date.now() && dErr.httpStatus !== 0) {
             console.warn('[MagisClient] direct 43404 failed for ' + endpoint + ', falling back to relay');
-            session.forceRelay = true;
+            if (dErr.portalCode !== 'portal200001') session.forceRelay = true;
             if (!session.userId || !session.userToken) {
+              if (directSession.ready && directSession.userId && directSession.userToken) {
+                session.userId = directSession.userId;
+                session.userToken = directSession.userToken;
+                return callViaRelay();
+              }
               return ensureSession(function (sErr) {
                 if (sErr) return callback(dErr);
                 callViaRelay();
