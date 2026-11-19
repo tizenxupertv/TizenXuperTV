@@ -367,7 +367,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     // Tizen 4.0 (2018 TVs) ships Chromium 56: lower JS syntax so older models parse the bundle
-    target: 'chrome56',
+    target: 'es2015',
     cssTarget: 'chrome56',
     // Keep a real stylesheet (iife output would otherwise inject CSS from JS)
     cssCodeSplit: false,
