@@ -7,8 +7,8 @@
   "scripts": {
     "start": "electron .",
     "build:web": "npm --prefix .. run build",
-    "dist:mac": "npm run build:web && electron-builder --mac",
-    "dist:win": "npm run build:web && electron-builder --win"
+    "dist:mac": "npm run build:web && electron-builder --mac -c.directories.output=../build/desktop/macos",
+    "dist:win": "npm run build:web && electron-builder --win --x64 -c.directories.output=../build/desktop/windows"
   },
   "devDependencies": {
     "electron": "^33.2.0",
