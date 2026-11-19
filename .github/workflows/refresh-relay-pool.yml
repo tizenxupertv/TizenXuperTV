@@ -1,0 +1,28 @@
+name: Refresh Relay Session Pool
+
+on:
+  schedule:
+    - cron: '30 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh-pool:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Mint 120 fresh sessions
+        run: node tools/refresh-relay-pool.mjs --count 120 --out tools/relay-worker/src/sessionPool.js
+
+      - name: Deploy tizenxuper-relay to Cloudflare
+        working-directory: tools/relay-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 0bc7ecd836f7da439e1e953e00df9da3
+        run: npx --yes wrangler deploy

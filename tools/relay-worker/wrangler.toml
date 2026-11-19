@@ -1,0 +1,8 @@
+name = "tizenxuper-relay"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+account_id = "0bc7ecd836f7da439e1e953e00df9da3"
+workers_dev = true
+
+[vars]
+RELAY_MODE = "full"
