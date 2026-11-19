@@ -10,7 +10,7 @@ import { isStaleLinkStatus } from '../lib/liveLink';
 import { directHlsPlayer, directStreamMeta } from '../lib/directLink';
 import { EPIC_AUTH_HEADERS } from './epicSportsService';
 
-const CLOUD_STREAM_PROXY = 'https://tizenxuper-bot.tizenxupertv.workers.dev/stream-proxy';
+const CLOUD_STREAM_PROXY = 'https://tizenxuper-tv.pages.dev/stream-proxy';
 
 declare global {
   interface Window {
@@ -741,7 +741,7 @@ class PlayerService {
 
       if (isBrowserEnv) {
         effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}&pulsera=${encodeURIComponent(pulsera)}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}`;
-      } else if (isTeveo || hasReferer) {
+      } else if (isEpic || isTeveo || hasReferer) {
         effectiveUrl = `${CLOUD_STREAM_PROXY}?url=${encodeURIComponent(url)}${pulsera ? `&pulsera=${encodeURIComponent(pulsera)}` : ''}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}`;
       }
     }
