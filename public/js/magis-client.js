@@ -34,7 +34,12 @@
   var DIRECT_HOSTS = [
     'fuxok.nguvmqhpk.com',
     'ftmrmy.jdfey0cd.com',
-    'mptec.dhkrxuzcy.com'
+    'mptec.dhkrxuzcy.com',
+    'eajmnp.hcgv1dt8.com',
+    'hinumz.a878kkoyc.com',
+    'krdwvd.swcaw7qx.com',
+    'osuhk.m3x8o50te.com',
+    'oogoy.f30c96w8.com'
   ];
   var DIRECT_APK_VERSION = '49902';
   var DIRECT_APK_VER_HEADER = '43404';
