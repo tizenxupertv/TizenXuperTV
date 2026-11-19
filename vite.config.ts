@@ -59,15 +59,12 @@ function streamProxyPlugin() {
       return res.end(JSON.stringify({ ok: true, numero: token.split('.')[0], token }));
     }
     const headers: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
-      'Referer': 'https://epictvparaiphone.top/iphone/',
-      'Origin': 'https://epictvparaiphone.top',
+      'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)',
+      'X-Llave': '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq',
+      'X-Aparato': 'a1b2c3d4',
+      'X-Pulsera': '1',
       'Accept': 'application/json, text/plain, */*'
     };
-    if (token) {
-      headers['X-Pulsera'] = token;
-      headers['Cookie'] = `__Host-pulsera=${token}`;
-    }
     const upstreamReq = https.request({
       hostname: 'epictvparaiphone.top',
       port: 443,
@@ -78,7 +75,8 @@ function streamProxyPlugin() {
     }, (upstreamRes) => {
       res.statusCode = upstreamRes.statusCode || 200;
       for (const [k, v] of Object.entries(upstreamRes.headers)) {
-        if (k.toLowerCase() !== 'content-security-policy') {
+        const lower = k.toLowerCase();
+        if (lower !== 'content-security-policy' && lower !== 'www-authenticate') {
           if (v) res.setHeader(k, v);
         }
       }
@@ -134,6 +132,7 @@ function streamProxyPlugin() {
         headers['User-Agent'] = 'Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)';
         headers['X-Llave'] = '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq';
         headers['X-Aparato'] = 'a1b2c3d4';
+        headers['X-Pulsera'] = '1';
       } else {
         headers['User-Agent'] = ua || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
         if (referer) {
@@ -247,15 +246,67 @@ function streamProxyPlugin() {
     }
   };
 
+  const DIRECT_43404_HOSTS = new Set([
+    'fuxok.nguvmqhpk.com',
+    'ftmrmy.jdfey0cd.com',
+    'mptec.dhkrxuzcy.com',
+    'eajmnp.hcgv1dt8.com'
+  ]);
+
+  const direct43404Handler = (req: any, res: any) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    if (req.method === 'OPTIONS') {
+      res.statusCode = 204;
+      return res.end();
+    }
+    const cleanUrl = String(req.url || '').replace(/^\/+/, '');
+    const slashIdx = cleanUrl.indexOf('/');
+    const targetHost = slashIdx > 0 ? cleanUrl.slice(0, slashIdx) : '';
+    const portalPath = slashIdx > 0 ? cleanUrl.slice(slashIdx + 1) : '';
+    if (!DIRECT_43404_HOSTS.has(targetHost) || !portalPath) {
+      res.statusCode = 400;
+      return res.end('Invalid direct-43404 target');
+    }
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json;charset=utf-8',
+      'apk': String(req.headers['apk'] || 'com.android.msandroid'),
+      'apkVer': String(req.headers['apkver'] || '43404'),
+      'spkgVer': String(req.headers['spkgver'] || '2024-09-10 06:25:30_33_13_'),
+      'User-Agent': 'okhttp/3.12.12'
+    };
+    const upstreamReq = https.request({
+      hostname: targetHost,
+      port: 443,
+      path: '/api/portalCore/' + portalPath,
+      method: 'POST',
+      headers,
+      timeout: 15000
+    }, (upstreamRes) => {
+      res.statusCode = upstreamRes.statusCode || 200;
+      res.setHeader('Content-Type', String(upstreamRes.headers['content-type'] || 'application/json'));
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      upstreamRes.pipe(res);
+    });
+    upstreamReq.on('error', (err) => {
+      res.statusCode = 502;
+      res.end(err.message);
+    });
+    req.pipe(upstreamReq);
+  };
+
   return {
     name: 'magis-stream-proxy',
     configureServer(server: any) {
       server.middlewares.use('/epic-api', epicApiHandler);
       server.middlewares.use('/stream-proxy', handler);
+      server.middlewares.use('/direct-43404', direct43404Handler);
     },
     configurePreviewServer(server: any) {
       server.middlewares.use('/epic-api', epicApiHandler);
       server.middlewares.use('/stream-proxy', handler);
+      server.middlewares.use('/direct-43404', direct43404Handler);
     }
   };
 }

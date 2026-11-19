@@ -82,7 +82,7 @@ const KOFI_URL = 'https://ko-fi.com/tizenxupertv';
 /** Telegram places, as QR codes: the TV cannot open links. Channel and group are invitations with approval */
 const TELEGRAM_LINKS = [
   { name: 'Soporte', desc: 'Ayuda y reportes', url: 'https://t.me/TizenXuperSupportBot?start=soporte' },
-  { name: 'Canal', desc: 'Novedades y versiones', url: 'https://t.me/+u72Cmxw-HDY0NGMx' },
+  { name: 'Canal', desc: 'Novedades y versiones', url: 'https://t.me/+gpV_JDXgliFlNDZh' },
   { name: 'Comunidad', desc: 'Habla con otros usuarios', url: 'https://t.me/+jbQgGArewEozMzZh' },
   { name: 'Beta Testers', desc: 'Pruebas por modelo de TV', url: 'https://t.me/+CTPQE5XuzFA3MDkx' }
 ];

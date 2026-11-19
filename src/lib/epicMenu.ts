@@ -3,7 +3,7 @@
  * "Fútbol+" category. Pure: no requests here (services/epicAgendaService.ts does them).
  * No relative imports except types, so tests can load this file in Node.
  */
-import type { SportsEvent, SportsStream } from '../types/sports.ts';
+import type { LiveMatchScore, SportsEvent, SportsStream } from '../types/sports.ts';
 
 /** tokenApi of an option whose address EPIC+ works out (`/resolve`) when the viewer picks it */
 export const EPIC_RESOLVE = 'epic-resolve';
@@ -30,7 +30,7 @@ export function deviceTimeZone(intl: any = typeof Intl !== 'undefined' ? Intl : 
 /** The agenda request: full agenda, every option a current client can open, the TV's day and language */
 export function epicMenuPath(timeZone: string): string {
   const tz = timeZone || FALLBACK_ZONE;
-  return `/menu?all=1&recetas=aparte&agenda=propia&v=9999&tz=${encodeURIComponent(tz)}&idioma=es`;
+  return `/menu?all=1&recetas=aparte&agenda=propia&v=800&tz=${encodeURIComponent(tz)}&idioma=es`;
 }
 const MATCH_MS = 150 * 60 * 1000;
 const MAX_OPTIONS = 12;
@@ -141,6 +141,35 @@ export function epicOptions(e: any): SportsStream[] {
   });
 }
 
+/** Parse EPIC+ score/clock fields (`reloj`, `marcador`, `minute`, `estado_api`) into LiveMatchScore */
+export function epicScore(e: any, status: SportsEvent['status']): LiveMatchScore | undefined {
+  if (!e || status === 'scheduled') return undefined;
+  const reloj = e.reloj && typeof e.reloj === 'object' ? e.reloj : null;
+  const raw = String((reloj && reloj.marcador) || e.marcador || '').trim();
+  const m = /^(\d+)\s*-\s*(\d+)$/.exec(raw);
+  if (!m) return undefined;
+  const minRaw = reloj && typeof reloj.minuto === 'number' && reloj.minuto > 0
+    ? reloj.minuto
+    : typeof e.minute === 'number' && e.minute > 0
+      ? e.minute
+      : 0;
+  const apiState = String(e.estado_api || '').toUpperCase();
+  let periodDetail = '';
+  if (status === 'live') {
+    if (apiState === 'HT') periodDetail = 'MT';
+    else if (minRaw > 0) periodDetail = `${minRaw}'`;
+  } else if (status === 'finished') {
+    periodDetail = apiState === 'PEN' ? 'PEN' : 'Final';
+  }
+  return {
+    homeScore: m[1],
+    awayScore: m[2],
+    state: status,
+    periodDetail,
+    sport: 'soccer'
+  };
+}
+
 /** The agenda as the app's events (hidden ones left out) */
 export function parseEpicMenu(menu: any, now = Date.now()): SportsEvent[] {
   const list: any[] = (menu && Array.isArray(menu.events)) ? menu.events : [];
@@ -153,6 +182,7 @@ export function parseEpicMenu(menu: any, now = Date.now()): SportsEvent[] {
     const options = epicOptions(e);
     const live = e.status === 'live';
     const status: SportsEvent['status'] = live ? 'live' : e.ended || now > start + MATCH_MS ? 'finished' : 'scheduled';
+    const score = epicScore(e, status);
     events.push({
       id: `epic-${e.id}`,
       sport: 'football_plus',
@@ -169,7 +199,8 @@ export function parseEpicMenu(menu: any, now = Date.now()): SportsEvent[] {
       status,
       linksPath: EPIC_LINKS_PREFIX + String(e.id),
       linkNames: options.map(o => o.name),
-      priority: typeof e.orden === 'number' ? e.orden : undefined
+      priority: typeof e.orden === 'number' ? e.orden : undefined,
+      ...(score ? { score } : {})
     });
   }
   return events.sort((a, b) => a.startMillis - b.startMillis);

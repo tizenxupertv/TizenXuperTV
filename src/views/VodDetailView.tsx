@@ -181,7 +181,10 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     }).catch(err => {
       if (!isMounted || currentToken !== viewTokenRef.current) return;
       console.warn('[VodDetailView] Detail load failed:', err);
-      setLoadError(friendlyPortalError(err, 'No se pudieron cargar los episodios.'));
+      const fallbackErrMsg = (item.isSeries || item.kind === 'serie')
+        ? 'No se pudieron cargar los episodios.'
+        : 'No se pudo cargar la información de la película.';
+      setLoadError(friendlyPortalError(err, fallbackErrMsg));
       setDetailData({
         item,
         episodes: [],
@@ -393,10 +396,16 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
 
   const resume = getResumeTarget(item, episodes, historyEntry, currentSeasonNumber, currentSeasonId);
   void historyTick;
+  const isKnownMovie =
+    ((currentItem.kind === 'película' || currentItem.kind === 'pelicula') && seasons.length <= 1 && episodes.length <= 1) ||
+    (!isLoading && !seasonLoading && !loadError && seasons.length <= 1 && episodes.length === 0);
   const isSeries = Boolean(
-    currentItem.isSeries ||
-    currentItem.kind === 'serie' ||
-    (currentItem.kind !== 'película' && currentItem.kind !== 'pelicula' && (seasons.length > 0 || episodes.length > 1))
+    !isKnownMovie && (
+      currentItem.isSeries ||
+      currentItem.kind === 'serie' ||
+      seasons.length > 0 ||
+      episodes.length > 1
+    )
   );
 
   // What the title offers (audio languages, qualities, subtitles): the settings list shows only that. The portal answer is

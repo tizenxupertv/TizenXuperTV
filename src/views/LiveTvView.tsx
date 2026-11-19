@@ -489,6 +489,13 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         container.scrollTop = container.scrollHeight;
         return;
       }
+      if (container.querySelector('.live-epic-group-hdr')) {
+        const focusedEl = container.querySelector('.live-channel-card.is-focused') as HTMLElement | undefined;
+        if (focusedEl) {
+          scrollRowIntoView(container, focusedEl, 24);
+          return;
+        }
+      }
       fastScrollList(container, focus.channelIndex, CHANNEL_PITCH, 16);
     }
   }, [isFullscreen, isFocusActive, focus.area, focus.channelIndex, channels.length]);
@@ -653,7 +660,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
             tune(replacement);
           }
         }
-      }, { progressive: false });
+      }, { progressive: false, forceRelay: true });
     };
     window.addEventListener('xuper-channel-code-expired', handleExpired);
     return () => window.removeEventListener('xuper-channel-code-expired', handleExpired);
@@ -785,6 +792,7 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
     if (activeCategory.id === 'espn' || activeCategory.isEspn) {
       const isEspnChannel = (name: string) => /\bespn\b/i.test(name) || /^espn/i.test(name.trim());
       const sortEspn = (a: LiveChannel, b: LiveChannel) => {
+        const isDirect = (c: LiveChannel) => /^\d+\s*·/.test(c.name);
         const getPriority = (name: string) => {
           const n = name.toLowerCase();
           const m = n.match(/^(\d+)/);
@@ -796,9 +804,14 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
           if (n.includes('espn 6')) return 6;
           if (n.includes('espn 7')) return 7;
           if (n.includes('premium')) return 8;
+          if (n.includes('espn extra')) return 9;
+          if (n.includes('espn u')) return 10;
           if (n.includes('espn')) return 1;
           return 20;
         };
+        const dA = isDirect(a) ? 0 : 1;
+        const dB = isDirect(b) ? 0 : 1;
+        if (dA !== dB) return dA - dB;
         const pA = getPriority(a.name);
         const pB = getPriority(b.name);
         if (pA !== pB) return pA - pB;
@@ -1197,6 +1210,29 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
                     ? channelsError
                     : 'No hay canales disponibles en esta categoría.\nSi no carga ningún canal, fija la IP y el DNS en manual (1.1.1.1 o 8.8.8.8) en Configuración › General › Red › Estado de la red › Configuración de IP.'}
             </div>
+          ) : activeCategory.isEpicSports ? (
+            <>
+              {channels.map((ch, idx) => {
+                const group = ch.categoryName || 'Latinoamérica';
+                const prevGroup = idx > 0 ? (channels[idx - 1].categoryName || 'Latinoamérica') : '';
+                return (
+                  <React.Fragment key={ch.id || idx}>
+                    {group !== prevGroup && (
+                      <div className="live-epic-group-hdr">{group}</div>
+                    )}
+                    <ChannelRow
+                      ch={ch}
+                      idx={idx}
+                      focused={isFocusActive && focus.area === 'channels' && focus.channelIndex === idx}
+                      tuned={isSameChannel(tunedChannel, ch)}
+                      fav={!!favMap[channelKey(ch)]}
+                      onTune={tune}
+                      onFullscreen={onEnterFullscreen}
+                    />
+                  </React.Fragment>
+                );
+              })}
+            </>
           ) : (
             <>
               {rowsSpacer(chFrom, CHANNEL_PITCH)}

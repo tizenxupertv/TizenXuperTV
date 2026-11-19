@@ -8,6 +8,9 @@ import { fetchWithTimeout } from '../lib/fetchTimeout.ts';
 const DEFAULT_BASE_URL = 'https://hello-how.pages.dev/';
 const CACHE_TTL_MS = 120_000; // 2 minutes
 const STREAMS_CACHE_TTL_MS = 300_000; // 5 minutes
+const DEAD_STREAM_TTL_MS = 15 * 60_000; // 15 minutes
+const HEALTH_PROBE_TIMEOUT_MS = 2_500; // 2.5 seconds
+const MAX_PROBED_STREAMS = 6;
 
 /**
  * Signals the app plays: any stream resolved to an active HTTP/HTTPS playback URL.
@@ -62,8 +65,75 @@ export class SportsService {
   private lastFetchTime: number = 0;
   private fetchPromise: Promise<SportsEvent[]> | null = null;
   private streamsCache: Map<string, { streams: SportsStream[]; time: number }> = new Map();
+  /** Stream URLs that failed playback or returned 4xx/5xx during this session */
+  private deadStreamUrls = new Map<string, number>();
   /** Other sources whose signals are worked out when picked (the EPIC+ tab), by their tokenApi */
   private resolvers = new Map<string, (stream: SportsStream) => Promise<SportsStream>>();
+
+  public markStreamDead(url?: string): void {
+    if (!url || !/^https?:\/\//.test(url)) return;
+    this.deadStreamUrls.set(url, Date.now());
+  }
+
+  public isStreamDead(url?: string): boolean {
+    if (!url) return false;
+    const ts = this.deadStreamUrls.get(url);
+    if (!ts) return false;
+    if (Date.now() - ts > DEAD_STREAM_TTL_MS) {
+      this.deadStreamUrls.delete(url);
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Fast parallel health check on direct .m3u8/.mpd streams:
+   * - 200 OK: boosted to the top
+   * - 403/404/410/5xx: marked dead and dropped (if live alternatives exist)
+   * - Timeout: demoted
+   * - CORS / network opaque: kept neutral so AVPlay/proxy can still try it
+   */
+  private async healthCheckDirectStreams(streams: SportsStream[]): Promise<SportsStream[]> {
+    if (streams.length <= 1) return streams;
+    const ranks = new Map<SportsStream, number>();
+    const probes: Array<Promise<void>> = [];
+    let probed = 0;
+
+    for (const s of streams) {
+      if (this.isStreamDead(s.url)) {
+        ranks.set(s, -200);
+        continue;
+      }
+      const isDirect = !s.tokenApi && !!s.url && /^https?:\/\//.test(s.url) &&
+        (!s.headers || Object.keys(s.headers).length === 0);
+      if (isDirect && probed < MAX_PROBED_STREAMS) {
+        probed++;
+        probes.push((async () => {
+          try {
+            const res = await fetchWithTimeout(s.url, { method: 'GET' }, HEALTH_PROBE_TIMEOUT_MS);
+            if (res.ok) {
+              ranks.set(s, 50);
+            } else if (res.status >= 400) {
+              this.markStreamDead(s.url);
+              ranks.set(s, -200);
+            }
+          } catch (err: any) {
+            if (err && err.name === 'AbortError') {
+              ranks.set(s, -50);
+            }
+          }
+        })());
+      }
+    }
+
+    if (probes.length > 0) {
+      await Promise.allSettled(probes);
+    }
+
+    const alive = streams.filter(s => (ranks.get(s) ?? 0) > -200);
+    const list = alive.length > 0 ? alive : streams;
+    return list.slice().sort((a, b) => (ranks.get(b) ?? 0) - (ranks.get(a) ?? 0));
+  }
 
   public registerResolver(tokenApi: string, resolve: (stream: SportsStream) => Promise<SportsStream>): void {
     this.resolvers.set(tokenApi, resolve);
@@ -280,7 +350,7 @@ export class SportsService {
     const now = Date.now();
     const cached = this.streamsCache.get(linksPath);
     if (!forceRefresh && cached && now - cached.time < STREAMS_CACHE_TTL_MS) {
-      return cached.streams;
+      return cached.streams.slice().sort((a, b) => (this.isStreamDead(a.url) ? 1 : 0) - (this.isStreamDead(b.url) ? 1 : 0));
     }
 
     const fullUrl = linksPath.startsWith('http://') || linksPath.startsWith('https://')
@@ -298,7 +368,8 @@ export class SportsService {
     // The list as the service gives it. A signal whose address has to be worked out (a signed link, a page to read)
     // is resolved when the viewer picks it (resolveStream): doing all of them here made every match wait for
     // requests to signals nobody opened, and a signed link could be minutes old by the time it was played
-    const streams = this.parseStreams(decrypted);
+    const parsed = this.parseStreams(decrypted);
+    const streams = await this.healthCheckDirectStreams(parsed);
 
     this.streamsCache.set(linksPath, { streams, time: now });
     return streams;

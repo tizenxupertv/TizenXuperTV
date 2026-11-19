@@ -1431,6 +1431,8 @@ html, body {
 }
 
 .live-channel-vlist {
+  /* The rows' offsetParent: allows scrollRowIntoView to scroll by each row's real place */
+  position: relative;
   flex: 1;
   overflow-y: auto;
   scrollbar-width: none;
@@ -1609,9 +1611,9 @@ html, body {
   height: 42px;
   border-radius: 8px;
   object-fit: contain;
-  background: #000000;
-  padding: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
   flex-shrink: 0;
 }
 
@@ -9987,4 +9989,19 @@ html.legacy-video .maintenance-card { box-shadow: none; }
 
 .ms-row::-webkit-scrollbar {
   display: none;
+}
+
+.live-epic-group-hdr {
+  padding: 12px 14px 6px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 6px;
+}
+
+.live-epic-group-hdr:first-child {
+  margin-top: 0;
 }

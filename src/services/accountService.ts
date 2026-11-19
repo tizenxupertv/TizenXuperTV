@@ -125,7 +125,13 @@ export function createAccountService(deps: AccountDeps) {
     return id;
   }
 
+  let botCooldownUntil = 0;
+
   async function post(path: string, body: unknown, token?: string): Promise<Response> {
+    const isBackgroundCall = path === '/tv/maintenance/status' || path === '/tv/session' || path === '/tv/data/save';
+    if (!deps && isBackgroundCall && botCooldownUntil > Date.now()) {
+      throw new Error('bot_cooldown');
+    }
     let lastError: Error | null = null;
     for (let i = 0; i < endpoints.length; i++) {
       const endpoint = endpoints[i];
@@ -145,6 +151,7 @@ export function createAccountService(deps: AccountDeps) {
           console.warn(`[account] ${endpoint}${path} returned ${res.status}, trying fallback...`);
           continue;
         }
+        botCooldownUntil = 0;
         return res;
       } catch (err: any) {
         lastError = err instanceof Error ? err : new Error(String(err));
@@ -152,6 +159,9 @@ export function createAccountService(deps: AccountDeps) {
       } finally {
         clearTimeout(timer);
       }
+    }
+    if (!deps && isBackgroundCall) {
+      botCooldownUntil = Date.now() + 120000;
     }
     throw lastError || new Error('network_error');
   }

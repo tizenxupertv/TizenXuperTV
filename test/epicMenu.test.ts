@@ -70,7 +70,7 @@ test('epicOptionLabel: order number, the channel when it is one, HD kept, source
 test('epicMenuPath asks the agenda in the TV zone, Bogotá when the TV does not say', () => {
   assert.match(epicMenuPath('America/Mexico_City'), /tz=America%2FMexico_City&/);
   assert.match(epicMenuPath(''), /tz=America%2FBogota&/);
-  assert.match(epicMenuPath('Europe/Madrid'), /^\/menu\?all=1&recetas=aparte&agenda=propia&v=9999&/);
+  assert.match(epicMenuPath('Europe/Madrid'), /^\/menu\?all=1&recetas=aparte&agenda=propia&v=800&/);
   assert.equal(deviceTimeZone({ DateTimeFormat: () => ({ resolvedOptions: () => ({ timeZone: 'America/Lima' }) }) }), 'America/Lima');
   assert.equal(deviceTimeZone({ DateTimeFormat: () => ({ resolvedOptions: () => ({}) }) }), '');
   assert.equal(deviceTimeZone(null), '');

@@ -8,9 +8,9 @@ import { directManifestBlocked, shouldMoveLiveToAvPlay, videoCodecRejected } fro
 import { unwrapPngTs } from '../lib/pngWrappedTs';
 import { isStaleLinkStatus } from '../lib/liveLink';
 import { directHlsPlayer, directStreamMeta } from '../lib/directLink';
-import { epicSportsService } from './epicSportsService';
+import { EPIC_AUTH_HEADERS } from './epicSportsService';
 
-const CLOUD_STREAM_PROXY = 'https://tizenxuper-bot.tizenxupertv.workers.dev/stream-proxy';
+const CLOUD_STREAM_PROXY = 'https://tizenxuper-tv.pages.dev/stream-proxy';
 
 declare global {
   interface Window {
@@ -476,9 +476,6 @@ class PlayerService {
             document.head.appendChild(link);
           }
         }
-        if (channel.url.includes('epictvparaiphone.top') || channel.url.includes('playlatam.site')) {
-          epicSportsService.getPulseraToken().catch(() => {});
-        }
       } else if (window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
         // Portal stream: pre-resolve so it gets stored in liveResolveCache[code]
         window.MagisClient.resolveLive(code, (err: any, meta: any) => {
@@ -579,26 +576,14 @@ class PlayerService {
     // If channel has direct stream URL (M3U / IPTV / Epic Sports)
     if (channel.url && channel.url.startsWith('http')) {
       if (channel.url.includes('epictvparaiphone.top') || channel.url.includes('playlatam.site')) {
-        epicSportsService.getPulseraToken().then(token => {
-          if (this.activeChannelCode !== code) return;
-          const headers: Record<string, string> = {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
-            'Referer': 'https://epictvparaiphone.top/iphone/',
-            'Cookie': `__Host-pulsera=${token}`,
-            'X-Pulsera': token
-          };
-          window.__xuperCurrentStreamMeta = {
-            url: channel.url,
-            headers
-          };
+        window.__xuperCurrentStreamMeta = {
+          url: channel.url,
+          headers: { ...EPIC_AUTH_HEADERS }
+        };
 
-          // Epic Sports channels MUST use HLS.js because video chunks are .image (PNG-wrapped TS)
-          // that require unwrapPngTs in JavaScript. AVPlay hardware decoder cannot unwrap them.
-          this.streamHls(channel.url!, videoEl, window.__xuperCurrentStreamMeta, code);
-        }).catch(() => {
-          if (this.activeChannelCode !== code) return;
-          this.streamHls(channel.url!, videoEl, undefined, code);
-        });
+        // Epic Sports channels MUST use HLS.js because video chunks are .image (PNG-wrapped TS)
+        // that require unwrapPngTs in JavaScript. AVPlay hardware decoder cannot unwrap them.
+        this.streamHls(channel.url!, videoEl, window.__xuperCurrentStreamMeta, code);
         return;
       }
 
@@ -757,7 +742,7 @@ class PlayerService {
       if (isBrowserEnv) {
         effectiveUrl = `/stream-proxy?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(auth)}&license=${encodeURIComponent(license)}&pulsera=${encodeURIComponent(pulsera)}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}`;
       } else if (isEpic || isTeveo || hasReferer) {
-        effectiveUrl = `${CLOUD_STREAM_PROXY}?url=${encodeURIComponent(url)}${pulsera ? `&pulsera=${encodeURIComponent(pulsera)}` : ''}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}`;
+        effectiveUrl = `${CLOUD_STREAM_PROXY}?cv=2&url=${encodeURIComponent(url)}${pulsera ? `&pulsera=${encodeURIComponent(pulsera)}` : ''}${ref ? `&referer=${encodeURIComponent(ref)}` : ''}${ua ? `&ua=${encodeURIComponent(ua)}` : ''}`;
       }
     }
 
@@ -777,7 +762,16 @@ class PlayerService {
               nudgeMaxRetry: 5,
               liveSyncDurationCount: 3,
               pLoader,
-              fLoader
+              fLoader,
+              xhrSetup: (!isBrowserEnv && isEpic)
+                ? (xhr: XMLHttpRequest, reqUrl: string) => {
+                    if (reqUrl.includes('epictvparaiphone.top') || reqUrl.includes('playlatam.site')) {
+                      for (const [hk, hv] of Object.entries(EPIC_AUTH_HEADERS)) {
+                        try { xhr.setRequestHeader(hk, hv); } catch (_) {}
+                      }
+                    }
+                  }
+                : undefined
             });
         window.__xuperPreviewHls = hls;
 

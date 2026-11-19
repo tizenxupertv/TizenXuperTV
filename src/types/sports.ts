@@ -35,6 +35,8 @@ export interface SportsEvent {
   linksPath: string;
   linkNames: string[];
   priority?: number;
+  /** Built-in score from the agenda source (e.g. EPIC+ / 365scores), used when ESPN has no match */
+  score?: LiveMatchScore;
 }
 
 export interface LiveMatchScore {

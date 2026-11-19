@@ -1,11 +1,12 @@
 import type { SportsEvent, SportsStream } from '../types/sports.ts';
 import { fetchWithTimeout } from '../lib/fetchTimeout';
 import { EPIC_LINKS_PREFIX, EPIC_RESOLVE, deviceTimeZone, epicMenuPath, epicOptions, epicResolved, parseEpicMenu } from '../lib/epicMenu';
-import { EPIC_API_BASE, epicSportsService } from './epicSportsService';
+import { EPIC_API_BASE, EPIC_AUTH_HEADERS } from './epicSportsService';
 import { sportsService } from './sportsService.ts';
 
 /** Asked once per start: the TV's zone (each country gets its own day), Bogotá when the TV does not say */
 const MENU_URL = `${EPIC_API_BASE}${epicMenuPath(deviceTimeZone())}`;
+const STATIC_AGENDA_FALLBACK_URL = 'https://tizenxuper-tv.pages.dev/data/epic-agenda.json';
 const CACHE_TTL_MS = 120_000;
 /** /resolve can take seconds while EPIC+ reads the source page (their PWA waits up to 15 s) */
 const RESOLVE_TIMEOUT_MS = 15_000;
@@ -38,10 +39,16 @@ class EpicAgendaService {
     if (this.pending) return this.pending;
     this.pending = (async () => {
       try {
-        const token = await epicSportsService.getPulseraToken();
-        const res = await fetchWithTimeout(MENU_URL, { headers: { 'X-Pulsera': token, Accept: 'application/json' }, cache: 'no-store' });
-        if (!res.ok) throw new Error(`EPIC+ agenda HTTP ${res.status}`);
-        const menu = await res.json();
+        let menu: any = null;
+        try {
+          const res = await fetchWithTimeout(MENU_URL, { headers: { ...EPIC_AUTH_HEADERS, Accept: 'application/json' }, cache: 'no-store' });
+          if (!res.ok) throw new Error(`EPIC+ agenda HTTP ${res.status}`);
+          menu = await res.json();
+        } catch (liveErr) {
+          const snapRes = await fetchWithTimeout(STATIC_AGENDA_FALLBACK_URL, { cache: 'no-cache' }, 5000);
+          if (!snapRes.ok) throw liveErr;
+          menu = await snapRes.json();
+        }
         this.raw.clear();
         for (const e of (menu && menu.events) || []) if (e && e.id != null) this.raw.set(String(e.id), e);
         this.events = parseEpicMenu(menu);
@@ -74,9 +81,8 @@ class EpicAgendaService {
   }
 
   private async ask(option: SportsStream): Promise<SportsStream> {
-    const token = await epicSportsService.getPulseraToken();
     const url = `${EPIC_API_BASE}/resolve?url=${encodeURIComponent(option.url)}&navegador=1`;
-    const res = await fetchWithTimeout(url, { headers: { 'X-Pulsera': token, Accept: 'application/json' }, cache: 'no-store' }, RESOLVE_TIMEOUT_MS);
+    const res = await fetchWithTimeout(url, { headers: { ...EPIC_AUTH_HEADERS, Accept: 'application/json' }, cache: 'no-store' }, RESOLVE_TIMEOUT_MS);
     if (!res.ok) throw new Error(`EPIC+ resolve HTTP ${res.status}`);
     const resolved = epicResolved(option, await res.json());
     if (!resolved) throw new Error('EPIC+ resolve gave no address');

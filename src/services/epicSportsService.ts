@@ -10,8 +10,16 @@ const isBrowser = typeof window !== 'undefined' && (
   (typeof (window as any).tizen === 'undefined' && typeof (window as any).webOS === 'undefined')
 );
 export const EPIC_API_BASE = isBrowser ? '/epic-api' : 'https://epictvparaiphone.top';
+export const EPIC_LLAVE = '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq';
+export const EPIC_APARATO = 'a1b2c3d4';
+export const EPIC_AUTH_HEADERS: Record<string, string> = {
+  'X-Llave': EPIC_LLAVE,
+  'X-Aparato': EPIC_APARATO,
+  'X-Pulsera': '1'
+};
 const PULSERA_URL = `${EPIC_API_BASE}/iphone/pulsera`;
-const CANALES_URL = `${EPIC_API_BASE}/iphone/canales`;
+const CANALES_URL = `${EPIC_API_BASE}/canales`;
+const STATIC_EPIC_SNAPSHOT_URL = 'https://tizenxuper-tv.pages.dev/data/epic-channels.json';
 const LOGO_BASE = 'https://epictvparaiphone.top';
 
 const STORAGE_KEY = 'xuper_epic_pulsera_v2';
@@ -60,8 +68,8 @@ export const STATIC_EPIC_CHANNELS: LiveChannel[] = [
  * One line per channel, between the brackets. `id` and `code` are the same text, unique, and start with "extra-".
  */
 export const EXTRA_CHANNELS: LiveChannel[] = [
-  // { id: 'extra-nombre', code: 'extra-nombre', name: 'Nombre del canal', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'http://servidor/ruta/index.m3u8', logo: 'https://servidor/logo.png' },
-  { id: 'extra-espnu', code: 'extra-espnu', name: 'ESPN U HD', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'http://85.237.89.160:9590/usa-s/ESPN-U-HD/index.m3u8', logo: 'http://schedulesdirect-api20141201-logos.s3.dualstack.us-east-1.amazonaws.com/stationLogos/s45654_dark_360w_270h.png' },
+  // { id: 'extra-nombre', code: 'extra-nombre', name: 'Nombre del canal', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'http://servidor/ruta/index.m3u8', logo: 'https://servidor/logo.png' },
+  { id: 'extra-espnu', code: 'extra-espnu', name: 'ESPN U HD', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'http://85.237.89.160:9590/usa-s/ESPN-U-HD/index.m3u8', logo: 'http://schedulesdirect-api20141201-logos.s3.dualstack.us-east-1.amazonaws.com/stationLogos/s45654_dark_360w_270h.png' },
 ];
 
 const DEFAULT_TOKEN = '9d7f743c.gente.1794262627.6c0ed20caa00f079c6628210b1cc8de81e503acf58ab77bc8bcfb536836b75f3';
@@ -158,11 +166,38 @@ class EpicSportsService {
       return this.cachedChannels;
     }
 
+    // 1. Try auto-updated static snapshot on Cloudflare Pages first (instant CDN, zero load on Epic+)
     try {
-      const token = await this.getPulseraToken();
+      const snapRes = await fetchWithTimeout(STATIC_EPIC_SNAPSHOT_URL, { cache: 'no-cache' }, 5000);
+      if (snapRes.ok) {
+        const snap = await snapRes.json();
+        if (snap && Array.isArray(snap.channels) && snap.channels.length > 0) {
+          const regionOrder = (r: string) => (r === 'Latinoamérica' ? '0' : r === 'Colombia' ? '1' : '2' + r.toLowerCase());
+          const latamOrder = (n: string) => {
+            const l = n.toLowerCase();
+            return l.startsWith('espn') ? '0' + l : l.startsWith('dsports') ? '1' + l : '2' + l;
+          };
+          const withExtras = placeExtraChannels(snap.channels as LiveChannel[], EXTRA_CHANNELS);
+          withExtras.sort((a, b) => {
+            const rA = a.categoryName || 'Latinoamérica';
+            const rB = b.categoryName || 'Latinoamérica';
+            const ra = regionOrder(rA);
+            const rb = regionOrder(rB);
+            if (ra !== rb) return ra.localeCompare(rb, 'es');
+            if (rA === 'Latinoamérica') return latamOrder(a.name).localeCompare(latamOrder(b.name), 'es');
+            return a.name.localeCompare(b.name, 'es');
+          });
+          this.cachedChannels = withExtras;
+          this.channelsCacheTime = now;
+          return this.cachedChannels;
+        }
+      }
+    } catch (_) {}
+
+    try {
       const res = await fetchWithTimeout(CANALES_URL, {
         headers: {
-          'X-Pulsera': token,
+          ...EPIC_AUTH_HEADERS,
           'Accept': 'application/json'
         }
       });
@@ -170,37 +205,121 @@ class EpicSportsService {
         throw new Error('HTTP ' + res.status);
       }
       const json = await res.json();
-      const rawList = json && Array.isArray(json.canales) ? json.canales : [];
+      const rawList = Array.isArray(json)
+        ? json
+        : (json && Array.isArray(json.canales) ? json.canales : []);
 
       if (rawList.length > 0) {
-        const mapped: LiveChannel[] = rawList.map((c: any) => {
-          const rawId = String(c.id || '').replace(/^pere-/, '');
-          const logoUrl = c.logo && c.logo.startsWith('http') ? c.logo : `${LOGO_BASE}${c.logo || ''}`;
+        const staticLogoById = new Map<string, string>();
+        for (const sc of STATIC_EPIC_CHANNELS) {
+          if (sc.logo) staticLogoById.set(String(sc.id), sc.logo);
+        }
+        // Fallback logos for Perelman IDs whose slug differs from STATIC_EPIC_CHANNELS
+        const extraLogos: Record<string, string> = {
+          'epic-dsportsperu': `${LOGO_BASE}/logos/canales/dsports_color.png?v=18`,
+          'epic-dsportsplus': `${LOGO_BASE}/logos/canales/dsports_plus_color.png?v=18`,
+          'epic-winsports': `${LOGO_BASE}/logos/canales/win_sports_color.png?v=18`,
+          'epic-teleamazonas': `${LOGO_BASE}/logos/canales/teleamazonas_color.png?v=18`,
+          'epic-antena3': `${LOGO_BASE}/logos/canales/antena_3_color.png?v=18`,
+          'epic-cuatro': `${LOGO_BASE}/logos/canales/cuatro_color.png?v=18`,
+          'epic-americatv': `${LOGO_BASE}/logos/canales/america_tv_color.png?v=18`,
+          'epic-lasexta': `${LOGO_BASE}/logos/canales/lasexta_color.png?v=18`,
+          'epic-telecinco': `${LOGO_BASE}/logos/canales/telecinco_color.png?v=18`
+        };
+        for (const [k, v] of Object.entries(extraLogos)) {
+          if (!staticLogoById.has(k)) staticLogoById.set(k, v);
+        }
 
-          // Use the URL from the API directly (may be playlatam.site or epictvparaiphone.top)
-          // and ensure it ends in .m3u8
+        const normalizeEpicRegion = (c: any): string => {
+          const folder = String(c.folder || '').trim();
+          if (!folder || folder.includes(',') || folder.toLowerCase() === 'otros') {
+            return 'Latinoamérica';
+          }
+          return folder;
+        };
+
+        // Match Epic+ PWA Canales tab: only stable Perelman channels, grouped by region
+        // (Latinoamérica first, then Colombia, then remaining countries alphabetically)
+        const playable = rawList.filter((c: any) => c && c.fuente === 'perelman' && typeof c.url === 'string');
+
+        const regionOrder = (r: string) => {
+          if (r === 'Latinoamérica') return '0';
+          if (r === 'Colombia') return '1';
+          return '2' + r.toLowerCase();
+        };
+        const latamChannelOrder = (name: string): string => {
+          const low = name.toLowerCase();
+          if (low.startsWith('espn')) return '0' + low;
+          if (low.startsWith('dsports')) return '1' + low;
+          return '2' + low;
+        };
+        playable.sort((a: any, b: any) => {
+          const rA = normalizeEpicRegion(a);
+          const rB = normalizeEpicRegion(b);
+          const ra = regionOrder(rA);
+          const rb = regionOrder(rB);
+          if (ra !== rb) return ra.localeCompare(rb, 'es');
+          const na = String(a.name || a.nombre || '');
+          const nb = String(b.name || b.nombre || '');
+          if (rA === 'Latinoamérica') return latamChannelOrder(na).localeCompare(latamChannelOrder(nb), 'es');
+          return na.localeCompare(nb, 'es');
+        });
+
+        const seen = new Set<string>();
+        const mapped: LiveChannel[] = [];
+        for (const c of playable) {
+          const rawId = String(c.id || '').replace(/^pere-/, '');
+          const id = `epic-${rawId}`;
+          if (!rawId || seen.has(id)) continue;
+          seen.add(id);
+
           let streamUrl: string;
           if (c.url && c.url.startsWith('http')) {
-            streamUrl = c.url.endsWith('.m3u8') ? c.url : `${c.url}.m3u8`;
+            streamUrl = !c.url.endsWith('.m3u8') ? `${c.url}.m3u8` : c.url;
           } else {
             const rawPath = c.url ? c.url.substring(c.url.lastIndexOf('/') + 1) : rawId;
             streamUrl = `https://epictvparaiphone.top/perelman/${rawPath}.m3u8`;
           }
 
-          return {
-            id: `epic-${rawId}`,
-            code: `epic-${rawId}`,
-            name: c.nombre || rawId,
-            categoryName: 'Beta · Deportes Latam',
+          const logoUrl = c.logo
+            ? (c.logo.startsWith('http') ? c.logo : `${LOGO_BASE}${c.logo}`)
+            : (staticLogoById.get(id) || '');
+
+          const rawName = String(c.name || c.nombre || rawId).replace(/\s*·\s*[^·]+$/, '').trim();
+          const nameOverrides: Record<string, string> = {
+            'epic-espn': 'ESPN',
+            'epic-dsportsperu': 'DSports',
+            'epic-dsports2': 'DSports 2',
+            'epic-dsportsplus': 'DSports+'
+          };
+          const displayName = nameOverrides[id] || rawName;
+
+          mapped.push({
+            id,
+            code: id,
+            name: displayName,
+            categoryName: normalizeEpicRegion(c),
             time: 'EN VIVO',
             url: streamUrl,
             logo: logoUrl
-          };
-        });
+          });
+        }
 
-        this.cachedChannels = placeExtraChannels(mapped, EXTRA_CHANNELS);
-        this.channelsCacheTime = now;
-        return this.cachedChannels;
+        if (mapped.length > 0) {
+          const withExtras = placeExtraChannels(mapped, EXTRA_CHANNELS);
+          withExtras.sort((a, b) => {
+            const rA = a.categoryName || 'Latinoamérica';
+            const rB = b.categoryName || 'Latinoamérica';
+            const ra = regionOrder(rA);
+            const rb = regionOrder(rB);
+            if (ra !== rb) return ra.localeCompare(rb, 'es');
+            if (rA === 'Latinoamérica') return latamChannelOrder(a.name).localeCompare(latamChannelOrder(b.name), 'es');
+            return a.name.localeCompare(b.name, 'es');
+          });
+          this.cachedChannels = withExtras;
+          this.channelsCacheTime = now;
+          return this.cachedChannels;
+        }
       }
     } catch (err) {
       console.warn('[EpicSportsService] Falling back to static channels list:', err);

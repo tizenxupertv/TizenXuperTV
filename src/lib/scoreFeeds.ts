@@ -34,6 +34,7 @@ interface EventLike {
 
 const BY_SPORT: Record<string, ScoreFeed[]> = {
   football: ['soccer'],
+  football_plus: ['soccer'],
   basketball: ['nba'],
   american_football: ['nfl', 'cfb', 'cfl'],
   baseball: ['mlb']
