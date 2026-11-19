@@ -1,14 +1,14 @@
 {
   "name": "tizenxuper-desktop",
-  "version": "1.19.11",
-  "description": "TizenXuper TV Desktop (Windows & macOS)",
+  "version": "1.19.12",
+  "description": "MacXuper TV / WinXuper TV Desktop",
   "main": "main.cjs",
   "private": true,
   "scripts": {
     "start": "electron .",
     "build:web": "npm --prefix .. run build",
-    "dist:mac": "npm run build:web && electron-builder --mac -c.directories.output=../build/desktop/macos",
-    "dist:win": "npm run build:web && electron-builder --win --x64 -c.directories.output=../build/desktop/windows"
+    "dist:mac": "npm run build:web && electron-builder --mac -c.productName=\"MacXuper TV\" -c.appId=com.tizenxupertv.mac -c.directories.output=../build/desktop/macos",
+    "dist:win": "npm run build:web && electron-builder --win --x64 -c.productName=\"WinXuper TV\" -c.appId=com.tizenxupertv.win -c.directories.output=../build/desktop/windows"
   },
   "devDependencies": {
     "electron": "^33.2.0",
@@ -18,6 +18,7 @@
     "appId": "com.tizenxupertv.desktop",
     "productName": "TizenXuper TV",
     "directories": {
+      "buildResources": "build",
       "output": "../build/desktop"
     },
     "files": [

@@ -17,12 +17,18 @@ async function createWindow() {
   const started = await startLocalServer(distDir);
   localServer = started.server;
 
+  const isMac = process.platform === 'darwin';
+  const appName = isMac ? 'MacXuper TV' : 'WinXuper TV';
+  const desktopTag = isMac ? 'mac' : 'win';
+  const iconPath = path.join(__dirname, 'build', 'icon.png');
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 720,
     minWidth: 960,
     minHeight: 540,
-    title: 'TizenXuper TV',
+    title: appName,
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     backgroundColor: '#0a0a0f',
     autoHideMenuBar: true,
     webPreferences: {
@@ -31,7 +37,7 @@ async function createWindow() {
     }
   });
 
-  mainWindow.loadURL(`http://127.0.0.1:${started.port}/`);
+  mainWindow.loadURL(`http://127.0.0.1:${started.port}/?desktop=${desktopTag}`);
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
