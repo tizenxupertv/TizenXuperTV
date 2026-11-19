@@ -51,17 +51,17 @@
       name: 'masnew',
       portalCode: 'masnew',
       appId: 'com.android.msandroid',
-      apkVersion: '49920',
-      sysVersion: '2026-10-21 15:40:39_28_9_4.4.146',
+      apkVersion: '49902',
+      sysVersion: '2024-09-10 06:25:30_33_13_',
       transportAppId: 'com.android.msandroid',
-      apkVerHeader: '49920',
+      apkVerHeader: '43404',
       loginType: '2',
-      hardwareInfo: 'amlogic',
-      model: 'S905X3',
-      product: 'franklin',
+      hardwareInfo: 'ranchu',
+      model: 'sdk_gphone64_arm64',
+      product: 'sdk_gphone64_arm64',
       cpu: 'arm64-v8a',
-      sdkVer: 28,
-      reserve1: '4b4d354a69546a7636736d2f73776a2b705834316d3874536576774470327448',
+      sdkVer: 33,
+      reserve1: '583442714b345572434a4d5769637461545a735936413d3d',
       liveCodeList: ['masnew_live'],
       fingerprint: {
         board: 'goldfish_arm64',
@@ -1195,6 +1195,11 @@
         callDirect43404(endpoint, payload, opts, function (dErr, dRes) {
           release();
           if (!dErr) return callback(null, dRes);
+          // A portal business code (e.g. portal100006 "wrong type", not a transport/session failure) means direct 43404
+          // answered normally — return it directly so callers like detail() can retry with type='1' without poisoning session.forceRelay
+          if (dErr.portalCode && !isSessionError(dErr)) {
+            return callback(dErr);
+          }
           if (relayMode !== 'off' && relayCooldownUntil <= Date.now() && dErr.httpStatus !== 0) {
             console.warn('[MagisClient] direct 43404 failed for ' + endpoint + ', falling back to relay');
             session.forceRelay = true;
@@ -1318,9 +1323,6 @@
           session.ready = true;
           return callback(null, ds);
         }
-        if (dErr.httpStatus === 0 && !dErr.portalCode) {
-          return callback(dErr);
-        }
         console.warn('[MagisClient] direct 43404 session failed, falling back to relay');
         session.forceRelay = true;
         session.directOnly = false;
@@ -1401,18 +1403,22 @@
       session.snToken = snToken;
       session.sn = String(sn).toLowerCase();
 
+      var snMd5 = String(md5(snToken + SNTOKEN_SALT)).toLowerCase();
       var activePayload = {
+        sn: snMd5,
         snToken: snToken,
+        loginType: '2',
         authVersion: '',
         authCode: '',
         preCode: '',
         macAddr: identity.etheMac,
-        reserve1: DEVICE_FIXED.reserve1 || '',
+        wlanMac: identity.wifiMac,
+        reserve1: DEVICE_FIXED.reserve1 || DIRECT_RESERVE1,
         openNum: freshIdentity ? 1 : 0,
         channel: 'default',
         matadata: '',
         signdata: '',
-        portalCode: '',
+        portalCode: 'masnew',
         drmId: identity.drmId || '',
         appLanguage: 'es'
       };

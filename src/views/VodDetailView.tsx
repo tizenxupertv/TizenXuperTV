@@ -396,7 +396,9 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
 
   const resume = getResumeTarget(item, episodes, historyEntry, currentSeasonNumber, currentSeasonId);
   void historyTick;
-  const isKnownMovie = (currentItem.kind === 'película' || currentItem.kind === 'pelicula') && seasons.length === 0 && episodes.length <= 1;
+  const isKnownMovie =
+    ((currentItem.kind === 'película' || currentItem.kind === 'pelicula') && seasons.length <= 1 && episodes.length <= 1) ||
+    (!isLoading && !seasonLoading && !loadError && seasons.length <= 1 && episodes.length === 0);
   const isSeries = Boolean(
     !isKnownMovie && (
       currentItem.isSeries ||
