@@ -14,7 +14,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = path.resolve(__dirname, '..');
+const ROOT_DIR = fs.existsSync(path.join(__dirname, 'public')) ? __dirname : path.resolve(__dirname, '..');
 const OUT_ARG_IDX = process.argv.indexOf('--out');
 const OUT_DIR = OUT_ARG_IDX !== -1 && process.argv[OUT_ARG_IDX + 1]
   ? path.resolve(process.cwd(), process.argv[OUT_ARG_IDX + 1])

@@ -11,7 +11,7 @@ const CLK_TCK = 100;
 
 const JOBS = [
   { id: 'refresh', name: 'Renovar pool de sesiones', minute: 0, hourStep: 6, every: 'Cada 6 h', script: 'refresh-and-deploy.sh', log: 'relay-refresh.log' },
-  { id: 'catalog', name: 'Actualizar catálogo', minute: 5, hourStep: 1, every: 'Cada hora', script: 'update-catalog.sh', log: 'catalog.log' },
+  { id: 'catalog', name: 'Actualizar catálogo', minute: 30, hourStep: 1, every: 'Cada hora (:30)', script: 'update-catalog.sh', log: 'catalog.log' },
 ];
 
 const SERVICES = [
