@@ -22,8 +22,13 @@ add_cron() {
 
 add_cron "0 */6 * * * /bin/bash $SCRIPT_DIR/refresh-and-deploy.sh >> $SCRIPT_DIR/relay-refresh.log 2>&1"
 
-# 2. Actualizar catálogo cada hora
-add_cron "5 * * * * /bin/bash $SCRIPT_DIR/update-catalog.sh >> $SCRIPT_DIR/catalog.log 2>&1"
+# 2. Actualizar catálogo cada hora, en el minuto 30 (la renovación de las :00 tarda ~15 min en la B+)
+CATALOG_CRON="30 * * * * /bin/bash $SCRIPT_DIR/update-catalog.sh >> $SCRIPT_DIR/catalog.log 2>&1"
+if crontab -l 2>/dev/null | grep -F "$SCRIPT_DIR/update-catalog.sh" | grep -qvxF "$CATALOG_CRON"; then
+  crontab -l | grep -vF "$SCRIPT_DIR/update-catalog.sh" | crontab -
+  echo "   Quitado el horario anterior del catálogo"
+fi
+add_cron "$CATALOG_CRON"
 
 # 3. Arrancar dashboard y servicios al encender la Pi (cron no tiene ~/.local/bin en PATH)
 NODE_BIN="$(command -v node || echo "$HOME/.local/bin/node")"

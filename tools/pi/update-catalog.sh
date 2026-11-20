@@ -6,8 +6,8 @@
 # Genera portal-catalog.json y live-channels.json desde la Pi
 # (IP residencial, no bloqueada) y hace push a la rama catalog-data.
 #
-# Cron recomendado: cada hora (en vez de cada 4h como GitHub Actions)
-# 0 * * * * /bin/bash ~/tizenxuper/update-catalog.sh >> ~/tizenxuper/catalog.log 2>&1
+# Cron (minuto 30, cuando la renovación del pool de las :00 ya terminó; la salida va al log desde el cron):
+# 30 * * * * /bin/bash ~/tizenxuper/update-catalog.sh >> ~/tizenxuper/catalog.log 2>&1
 # =============================================================================
 set -eo pipefail
 
@@ -16,29 +16,41 @@ export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/.env.pi"
-LOG_FILE="$SCRIPT_DIR/catalog.log"
 OUT_DIR="/tmp/tizenxuper-catalog"
+now() { date -u +%FT%TZ; }
+
+# One run at a time: overlapping runs on the single-core B+ make the portal time out
+exec 9>/tmp/tizenxuper-catalog.lock
+if ! flock -n 9; then
+  echo "[$(now)] Omitido: ya hay una actualización del catálogo en curso"
+  exit 0
+fi
+if pgrep -f "refresh-and-deploy.sh|mint-worker.mjs" > /dev/null; then
+  echo "[$(now)] Omitido: la renovación del pool está en curso"
+  exit 0
+fi
 
 # Cargar secrets
 source "$ENV_FILE"
 
 if [ -z "$GITHUB_TOKEN_TIZENXUPERTV" ]; then
-  echo "[$(date -u +%FT%TZ)] ERROR: GITHUB_TOKEN_TIZENXUPERTV no encontrado en $ENV_FILE" | tee -a "$LOG_FILE"
+  echo "[$(now)] ERROR: GITHUB_TOKEN_TIZENXUPERTV no encontrado en $ENV_FILE"
   exit 1
 fi
 
-echo "[$(date -u +%FT%TZ)] Generando catálogo estático..." | tee -a "$LOG_FILE"
+echo "[$(now)] Generando catálogo estático..."
 
 # Generar JSONs
+rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
-node "$SCRIPT_DIR/generate-static-catalog.mjs" --out "$OUT_DIR" 2>&1 | tee -a "$LOG_FILE"
+node "$SCRIPT_DIR/generate-static-catalog.mjs" --out "$OUT_DIR" 2>&1
 
 # Push a catalog-data en GitHub
-echo "[$(date -u +%FT%TZ)] Push a catalog-data..." | tee -a "$LOG_FILE"
+echo "[$(now)] Push a catalog-data..."
 rm -rf /tmp/pub-repo
-git clone --depth 1 \
+git clone -q --depth 1 --branch catalog-data \
   "https://x-access-token:${GITHUB_TOKEN_TIZENXUPERTV}@github.com/tizenxupertv/TizenXuperTV.git" \
-  /tmp/pub-repo 2>&1 | tee -a "$LOG_FILE"
+  /tmp/pub-repo 2>&1
 cd /tmp/pub-repo
 git config user.name "TizenXuper Pi"
 git config user.email "pi@tizenxupertv.local"
@@ -49,8 +61,8 @@ cp "$OUT_DIR/portal-catalog.json" .
 git add live-channels.json portal-catalog.json
 if ! git diff --cached --quiet; then
   git commit -m "chore(data): auto-update catalog from Pi ($(date -u +'%Y-%m-%d %H:%M UTC'))"
-  git push origin catalog-data --force
-  echo "[$(date -u +%FT%TZ)] DONE — catálogo actualizado" | tee -a "$LOG_FILE"
+  git push -q origin catalog-data --force 2>&1
+  echo "[$(now)] DONE — catálogo actualizado"
 else
-  echo "[$(date -u +%FT%TZ)] Sin cambios en el catálogo" | tee -a "$LOG_FILE"
+  echo "[$(now)] Sin cambios en el catálogo"
 fi
