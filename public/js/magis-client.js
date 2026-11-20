@@ -1210,7 +1210,11 @@
             console.warn('[MagisClient] direct 43404 failed for ' + endpoint + ', falling back to relay');
             if (dErr.portalCode !== 'portal200001') session.forceRelay = true;
             if (!session.userId || !session.userToken) {
-              if (directSession.ready && directSession.userId && directSession.userToken) {
+              // Direct 43404 just told us this very session is invalid (aaa100027/aaa100028) — reusing its
+              // userId/userToken for the relay call would hand the portal the same rejected identity and get
+              // rejected again on every single call. Only reuse it when direct failed for another reason
+              // (network flake, portal200001) and the portal never said this session was bad.
+              if (!isSessionError(dErr) && directSession.ready && directSession.userId && directSession.userToken) {
                 session.userId = directSession.userId;
                 session.userToken = directSession.userToken;
                 return callViaRelay();
