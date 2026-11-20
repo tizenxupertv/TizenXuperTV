@@ -17,11 +17,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn } from 'node:child_process';
 
-const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REFRESH_LOG = path.join(__dirname, 'relay-refresh.log');
 const ENV_FILE  = path.join(__dirname, '.env.pi');
 const LOG_FILE  = path.join(__dirname, 'tg-listener.log');
 const ADMIN_ID  = '68683111';
@@ -63,17 +62,37 @@ async function getUpdates(token, offset) {
 
 // ── Command handlers ─────────────────────────────────────────────────────────
 async function handleRefresh(token, chatId) {
-  await tgSend(token, chatId, '⏳ Iniciando renovación del pool de sesiones...');
+  await tgSend(token, chatId, '⏳ Iniciando renovación del pool de sesiones (unos 15 min en la Pi)...');
   log('CMD /refresh — ejecutando refresh-and-deploy.sh');
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   try {
     const script = path.join(__dirname, 'refresh-and-deploy.sh');
-    const { stdout, stderr } = await execFileAsync('bash', [script], { timeout: 300_000 });
-    const out = (stdout + stderr).slice(-800); // últimas 800 chars para no exceder límite de TG
-    log('CMD /refresh — completado');
-    await tgSend(token, chatId, `✅ <b>Pool renovado</b>\n\n<code>${out}</code>`);
+    let out = '';
+    const fd = fs.openSync(REFRESH_LOG, 'a');
+    fs.writeSync(fd, `\n[${new Date().toISOString()}] ▶ Ejecutado desde Telegram (/refresh)\n`);
+    const code = await new Promise((resolve, reject) => {
+      const child = spawn('bash', [script], { cwd: __dirname });
+      const onData = (b) => {
+        fs.writeSync(fd, b);
+        out = (out + b.toString()).slice(-2000);
+      };
+      child.stdout.on('data', onData);
+      child.stderr.on('data', onData);
+      child.on('error', reject);
+      child.on('close', resolve);
+    }).finally(() => fs.closeSync(fd));
+    const tail = out.slice(-800); // últimas 800 chars para no exceder límite de TG
+    log(`CMD /refresh — terminó con código ${code}`);
+    if (code !== 0) {
+      await tgSend(token, chatId, `❌ <b>La renovación falló</b> (código ${code})\n\n<code>${esc(tail)}</code>`);
+    } else if (/Omitido/.test(out)) {
+      await tgSend(token, chatId, 'ℹ️ Ya había una renovación en curso; no se lanzó otra.');
+    } else {
+      await tgSend(token, chatId, `✅ <b>Pool renovado</b>\n\n<code>${esc(tail)}</code>`);
+    }
   } catch (e) {
     log(`CMD /refresh — ERROR: ${e.message}`);
-    await tgSend(token, chatId, `❌ Error en /refresh:\n<code>${e.message.slice(0, 500)}</code>`);
+    await tgSend(token, chatId, `❌ Error en /refresh:\n<code>${esc(e.message.slice(0, 500))}</code>`);
   }
 }
 
@@ -122,7 +141,8 @@ async function main() {
         const chatId = msg.chat.id;
         log(`CMD recibido: ${cmd} de ${fromId}`);
 
-        if (cmd === '/refresh') await handleRefresh(token, chatId);
+        // Not awaited: a refresh takes ~15 min and /status or /ping must keep answering meanwhile
+        if (cmd === '/refresh') handleRefresh(token, chatId);
         else if (cmd === '/status') await handleStatus(token, chatId);
         else if (cmd === '/ping') await handlePing(token, chatId);
       }

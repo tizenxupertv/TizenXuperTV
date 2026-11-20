@@ -87,8 +87,12 @@ async function main() {
   const seen = new Set();
   const startTime = Date.now();
 
+  // Give up instead of looping forever when the portal stops handing out sessions
+  const deadline = startTime + Number(process.env.MINT_MAX_MINUTES || 40) * 60000;
+  const minSessions = Math.min(target, Number(process.env.MINT_MIN_SESSIONS || 50));
+
   async function worker() {
-    while (pool.length < target) {
+    while (pool.length < target && Date.now() < deadline) {
       const s = await mintOne(22000);
       if (s && !seen.has(s.userId)) {
         seen.add(s.userId);
@@ -102,9 +106,20 @@ async function main() {
   const workers = Array.from({ length: concurrency }, () => worker());
   await Promise.all(workers);
 
+  if (pool.length < minSessions) {
+    console.error('[mint-worker] ERROR: only ' + pool.length + '/' + target + ' sessions (minimum ' + minSessions + '); keeping the current pool');
+    process.exit(1);
+  }
+  if (pool.length < target) {
+    console.log('[mint-worker] Time limit reached with ' + pool.length + '/' + target + ' sessions; writing them');
+  }
+
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, 'export const SESSION_POOL = ' + JSON.stringify(pool, null, 2) + ';\n');
   console.log('[mint-worker] Successfully wrote ' + pool.length + ' sessions to ' + outPath);
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error('[mint-worker] Fatal:', err);
+  process.exit(1);
+});
