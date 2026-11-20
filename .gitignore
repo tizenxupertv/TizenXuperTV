@@ -32,3 +32,4 @@ tools/epic-preview
 .gemini
 
 desktop/node_modules/
+tools/pi/.env.pi
