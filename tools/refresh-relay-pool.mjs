@@ -82,7 +82,7 @@ function mintOne() {
       }
       finish(null);
     });
-    setTimeout(() => finish(null), 7000);
+    setTimeout(() => finish(null), 25000);
   });
 }
 
