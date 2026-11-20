@@ -3,6 +3,7 @@ import { SeriesCollector, isAdultItem, belongsToSection, parseSeason } from '../
 import { formatDuration } from '../lib/vodResume.ts';
 import { collectPosterAlternates } from '../lib/searchArtwork.ts';
 import { getCachedTitleMeta, setCachedTitleMeta } from '../lib/titleMetaCache.ts';
+import { debugLogEnabled, groupBySource, logCall, sourceNames, type SourcePart } from '../lib/callLog.ts';
 import { historyService } from './historyService.ts';
 import { catalogProvider } from './catalogProvider.ts';
 
@@ -171,8 +172,8 @@ function waitForCatalogRequest<T>(request: Promise<T>, fallback: T): Promise<T> 
   });
 }
 
-function homeRoot(root: string, low: boolean): Promise<any[]> {
-  return catalogProvider.home(root, 1, { low }).then(res => res.items || []);
+function homeRoot(root: string, low: boolean): Promise<{ items: any[]; via: string }> {
+  return catalogProvider.home(root, 1, { low }).then(res => ({ items: res.items || [], via: res.via || '' }));
 }
 
 function fetchCompositeHome(): Promise<any[]> {
@@ -193,15 +194,28 @@ function fetchCompositeHome(): Promise<any[]> {
 function fetchLiveCatalog(): Promise<any[]> {
   if (liveInFlight) return liveInFlight;
   const t0 = Date.now();
+  const parts: SourcePart[] = [];
   const roots = waitForCatalogRequest<(any[] | null)[]>(Promise.all([
-    ...LIVE_ROOTS.map(root => homeRoot(root, false).catch(() => null)),
+    ...LIVE_ROOTS.map(root => homeRoot(root, false).then(
+      res => {
+        // 'free' answers an empty list without asking anyone: nothing to report
+        if (res.via || res.items.length) parts.push({ name: root, count: res.items.length, via: res.via });
+        return res.items;
+      },
+      () => {
+        parts.push({ name: root, count: null, via: '' });
+        return null;
+      }
+    )),
     fetchCompositeHome()
   ]), []);
   liveInFlight = roots.then(lists => {
     const items = ([] as any[]).concat(...lists.map(l => l || []));
-    const failed = lists.filter(l => l === null).length;
-    console.log(`[catalog] live catalog: ${items.length} items in ${Date.now() - t0} ms${failed ? `, ${failed} roots failed` : ''}`);
-    if (items.length < 100) throw new Error(`live catalog too small (${items.length})`);
+    // One line for every section, grouped by where each came from (memoria, caché de sesión, json, relay, respaldo)
+    const tooSmall = items.length < 100 ? new Error(`catálogo demasiado pequeño (${items.length})`) : null;
+    logCall('Home', 'sections', parts.length ? sourceNames(parts) : 'sin respuesta a tiempo', tooSmall, Date.now() - t0,
+      `${items.length} títulos`, groupBySource(parts));
+    if (tooSmall) throw tooSmall;
     return items;
   });
   liveInFlight.then(() => { liveInFlight = null; }, () => { liveInFlight = null; });
@@ -220,17 +234,23 @@ const TAB_RECOMMEND_MAP: { tab: string; root: string }[] = [
 async function fetchTabRecommends(): Promise<Record<string, VodItem[]>> {
   if (!catalogProvider.recommends) return {};
   const result: Record<string, VodItem[]> = {};
+  const parts: SourcePart[] = [];
+  const t0 = Date.now();
   await Promise.all(
     TAB_RECOMMEND_MAP.map(({ tab, root }) =>
       catalogProvider.recommends!(root)
-        .then(rawList => {
-          if (Array.isArray(rawList) && rawList.length > 0) {
+        .then(({ items: rawList, via }) => {
+          parts.push({ name: root, count: via === 'error' ? null : rawList.length, via });
+          if (rawList.length > 0) {
             result[tab] = rawList.map((raw, idx) => normalizeItem(raw, idx));
           }
         })
-        .catch(() => {})
+        .catch(() => { parts.push({ name: root, count: null, via: '' }); })
     )
   );
+  // One line for the hero of every tab, grouped by source
+  logCall('Home', 'hero', sourceNames(parts), null, Date.now() - t0, `${Object.keys(result).length}/${TAB_RECOMMEND_MAP.length} pestañas`,
+    debugLogEnabled() ? { ...groupBySource(parts), títulos: result } : groupBySource(parts));
   return result;
 }
 
@@ -260,13 +280,43 @@ class CatalogService {
     portalRows: Record<string, PortalRow[]>;
     heroByTab: Record<string, VodItem[]>;
   }> {
-    if (this.cache) return this.cache;
+    if (this.cache) {
+      logCall('Home', 'fetchCatalog', 'memoria', null, 0);
+      return this.cache;
+    }
+    // Home and search can ask at the same time: both wait for the one load (it used to run twice)
+    if (!this.loading) {
+      this.loading = this.loadCatalog();
+      this.loading.then(() => { this.loading = null; }, () => { this.loading = null; });
+    }
+    return this.loading;
+  }
 
-    const [items, heroByTab] = await Promise.all([
-      fetchLiveCatalog(),
-      waitForCatalogRequest(fetchTabRecommends(), {})
-    ]);
-    return this.categorize(items.map((item, index) => normalizeItem(item, index)), heroByTab);
+  private loading: Promise<NonNullable<CatalogService['cache']>> | null = null;
+
+  private async loadCatalog(): Promise<NonNullable<CatalogService['cache']>> {
+    const t0 = Date.now();
+    try {
+      const [items, heroByTab] = await Promise.all([
+        fetchLiveCatalog(),
+        waitForCatalogRequest(fetchTabRecommends(), {})
+      ]);
+      const catalog = this.categorize(items.map((item, index) => normalizeItem(item, index)), heroByTab);
+      const sections = {
+        destacados: catalog.featured.length,
+        películas: catalog.movies.length,
+        series: catalog.series.length,
+        kids: catalog.kids.length,
+        anime: catalog.anime.length,
+        filas: Object.keys(catalog.portalRows).reduce((n, root) => n + catalog.portalRows[root].length, 0)
+      };
+      logCall('Home', 'fetchCatalog', 'red', null, Date.now() - t0, `${items.length} títulos`,
+        debugLogEnabled() ? { ...sections, catálogo: catalog } : sections);
+      return catalog;
+    } catch (err) {
+      logCall('Home', 'fetchCatalog', 'red', err, Date.now() - t0);
+      throw err;
+    }
   }
 
   private categorize(rawItems: VodItem[], heroByTab: Record<string, VodItem[]> = {}) {
@@ -350,6 +400,7 @@ class CatalogService {
 
     // 1. If MagisClient is available on TV (with 1200ms timeout protection)
     if (window.MagisClient && typeof window.MagisClient.detail === 'function') {
+      const tDetail = Date.now();
       try {
         const timeoutPromise = new Promise<any>((_, reject) =>
           setTimeout(() => reject(new Error('Detail request timeout')), 15000)
@@ -368,6 +419,10 @@ class CatalogService {
 
         const res = await Promise.race([fetchPromise, timeoutPromise]);
 
+        if (!res || !res.item) {
+          // The page then shows the title as the catalog had it, with no episodes or seasons
+          logCall('Detail', `detail/${item.id}`, 'portal', new Error('respuesta sin ficha'), Date.now() - tDetail);
+        }
         if (res && res.item) {
           const detailItem = normalizeItem(res.item, 0);
           if (!detailItem.backdrop && item.backdrop) detailItem.backdrop = item.backdrop;
@@ -497,6 +552,17 @@ class CatalogService {
             backdrop: detailItem.backdrop
           });
 
+          const summary = {
+            título: detailItem.title,
+            tipo: detailItem.isSeries || episodes.length ? 'serie' : 'película',
+            capítulos: episodes.length,
+            temporadas: cleanedSeasons.map(s => s.name),
+            calidades: mergedQualities,
+            subtítulos: hasCC,
+            tráiler: Boolean(detailItem.trailerUrl)
+          };
+          logCall('Detail', `detail/${item.id}`, 'portal', null, Date.now() - tDetail, `${summary.tipo}, ${episodes.length} capítulos`,
+            debugLogEnabled() ? { ...summary, ficha: detailItem, episodios: episodes } : summary);
           return {
             item: detailItem,
             episodes,
@@ -505,7 +571,7 @@ class CatalogService {
         }
       } catch (e) {
         // With a portal session, a failure is reported to the UI (retry) instead of showing demo data
-        console.warn('[CatalogService] MagisClient.detail failed:', e);
+        logCall('Detail', `detail/${item.id}`, 'portal', e, Date.now() - tDetail, 'la ficha muestra Reintentar');
         throw e;
       }
     }
@@ -662,8 +728,13 @@ export function getPersons(contentId: string): Promise<PersonResult> {
     if (!client || typeof client.getPerson !== 'function') {
       return resolve({ directors: [], actors: [] });
     }
+    const t0 = Date.now();
     client.getPerson(contentId, (err: any, data: any) => {
-      if (err || !data) return resolve({ directors: [], actors: [] });
+      if (err || !data) {
+        // The page just hides the cast
+        logCall('Detail', `persons/${contentId}`, 'portal', err || new Error('sin datos'), Date.now() - t0, 'sin reparto');
+        return resolve({ directors: [], actors: [] });
+      }
       const dirList = (data.directorList || data.directors || []).map((d: any) => ({
         puId: String(d.puId || ''),
         name: String(d.name || ''),
@@ -684,6 +755,8 @@ export function getPersons(contentId: string): Promise<PersonResult> {
         introduction: a.introduction || undefined,
         personType: 0
       }));
+      logCall('Detail', `persons/${contentId}`, 'portal', null, Date.now() - t0, `${dirList.length} directores, ${actList.length} actores`,
+        { directores: dirList.map((d: PersonDetail) => d.name), actores: actList.map((a: PersonDetail) => a.name) });
       resolve({ directors: dirList, actors: actList });
     });
   });

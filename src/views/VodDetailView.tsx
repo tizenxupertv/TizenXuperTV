@@ -15,6 +15,7 @@ import { PREF_LANG_CODES, languageName, sameLanguage, formatQualityTag, firstQua
 import { setCachedTitleMeta, useTitleMeta } from '../lib/titleMetaCache';
 import { getResumeTarget, getEpisodeStatus, EpisodeStatus, formatDuration } from '../lib/vodResume';
 import { useViewProfiler } from '../lib/perfMonitor';
+import { logCall } from '../lib/callLog';
 
 import {
   type SettingsCol,
@@ -425,7 +426,12 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
     // The CDN token too, so Play finds everything ready
     if (typeof client.warmSlb === 'function') client.warmSlb();
     let cancelled = false;
+    const tMedia = Date.now();
     client.mediaOptions(playableId, playableSeries, (err: any, m: TitleMedia) => {
+      // Logged even when the page moved on: the request was made all the same
+      logCall('Detail', `mediaOptions/${playableId}`, 'portal', err || (m ? null : new Error('sin datos')), Date.now() - tMedia,
+        m ? `${(m.audios || []).length} audios, ${(m.qualities || []).length} calidades, ${(m.subtitles || []).length} subtítulos` : 'se muestran todas las opciones',
+        m ? { audio: m.audios, calidad: m.qualities, subtítulos: m.subtitles } : undefined);
       if (cancelled) return;
       setMediaLoading(false);
       if (!err && m) {

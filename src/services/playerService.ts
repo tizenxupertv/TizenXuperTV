@@ -188,6 +188,8 @@ class PlayerService {
   private activeChannelCode: string = '';
   private currentVideoEl: HTMLVideoElement | null = null;
   private resolveTimer: any = null;
+  /** Bumped by stop(): a channel or prewarm resolve started before it stops asking the portal */
+  private liveGen = 0;
   private isFullscreen: boolean = false;
   private lastChannel: LiveChannel | null = null;
   private status: LiveStatus = { code: '', state: 'idle' };
@@ -416,6 +418,7 @@ class PlayerService {
   }
 
   public stop() {
+    this.liveGen++;
     if (this.resolveTimer) {
       clearTimeout(this.resolveTimer);
       this.resolveTimer = null;
@@ -477,7 +480,8 @@ class PlayerService {
           }
         }
       } else if (window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
-        // Portal stream: pre-resolve so it gets stored in liveResolveCache[code]
+        // Portal stream: pre-resolve so it gets stored in liveResolveCache[code]; dropped when live TV stops
+        const gen = this.liveGen;
         window.MagisClient.resolveLive(code, (err: any, meta: any) => {
           if (!err && meta && meta.url) {
             const m = meta.url.match(/^(https?:\/\/[^/]+)/i);
@@ -488,7 +492,7 @@ class PlayerService {
               document.head.appendChild(link);
             }
           }
-        });
+        }, { isCancelled: () => gen !== this.liveGen });
       }
     } catch (_) {}
   }
@@ -622,7 +626,10 @@ class PlayerService {
 
     // Portal channel -> resolve with MagisClient
     if (window.MagisClient && typeof window.MagisClient.resolveLive === 'function') {
+      // Stops asking the portal as soon as the viewer leaves this channel or live TV (stop)
+      const isCancelled = () => this.activeChannelCode !== code;
       window.MagisClient.resolveLive(code, (err: any, streamMeta: any) => {
+        if (err && err.cancelled) return;
         if (err || !streamMeta || !streamMeta.url) {
           console.error('[PlayerService] Failed to resolve channel:', err);
           this.lastHlsError = `portal ${(err && (err.portalCode || err.message)) || 'sin enlace'}`.slice(0, 80);
@@ -631,7 +638,8 @@ class PlayerService {
               window.dispatchEvent(new CustomEvent('xuper-channel-code-expired', { detail: { channelCode: code, channelName: channel.name } }));
             } catch (e) {}
           }
-          if (!(err && /aaa10002/i.test(err.portalCode || err.message || ''))) {
+          // Sessions paused after the portal refused them (magis-client): retrying now only repeats the refusal
+          if (!(err && /aaa10002/i.test(err.portalCode || err.message || '')) || err.sessionBlocked) {
             // The portal refuses this channel for the viewer's region or provider: say so, not "no signal"
             this.failChannel(code, 'resolve', isRegionBlocked(err) ? 'region' : undefined);
             return;
@@ -644,6 +652,11 @@ class PlayerService {
             setTimeout(() => {
               if (this.activeChannelCode === code) {
                 window.MagisClient?.resolveLive(code, (rErr: any, rMeta: any) => {
+                  if (rErr && !rErr.cancelled) {
+                    this.lastHlsError = `portal ${rErr.portalCode || rErr.message || 'sin enlace'}`.slice(0, 80);
+                    this.failChannel(code, 'resolve');
+                    return;
+                  }
                   if (!rErr && rMeta && rMeta.url && this.activeChannelCode === code) {
                     window.__xuperCurrentStreamMeta = rMeta;
                     if (rMeta.url.includes('.m3u8')) {
@@ -656,7 +669,7 @@ class PlayerService {
                       this.streamHls(rMeta.url, videoEl, rMeta, code);
                     }
                   }
-                });
+                }, { isCancelled });
               }
             }, 600);
           }
@@ -680,7 +693,7 @@ class PlayerService {
         } else {
           this.streamHls(streamMeta.url, videoEl, streamMeta, code);
         }
-      });
+      }, { isCancelled });
     }
   }
 
@@ -860,7 +873,7 @@ class PlayerService {
                 // No new token: handle the original error as usual (backups, retries, the error on screen)
                 onHlsError(event, data);
               }
-            }, { fresh: true });
+            }, { fresh: true, isCancelled: () => this.activeChannelCode !== code });
             return;
           }
           // What the server sent instead of a playlist (an ISP block page, a portal error): links removed

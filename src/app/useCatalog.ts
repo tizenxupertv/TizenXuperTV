@@ -60,6 +60,7 @@ export function useCatalog(onLoaded?: (catalog: Catalog) => void) {
       }).catch(() => {
         if (cancelled) return;
         attempt += 1;
+        console.warn(`[Home:useCatalog] intento ${attempt} falló; reintento en ${Math.round(catalogRetryDelayMs(attempt) / 1000)} s${attempt >= 2 ? ', aviso de error visible' : ''}`);
         // Don't panic the user on transient initial network hiccups:
         // Keep showing the loading state and only surface the error toast after sustained failure.
         if (attempt >= 2) {
