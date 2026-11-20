@@ -1117,13 +1117,14 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   const focusedChannel = channels[focus.channelIndex] || tunedChannel || channels[0] || null;
 
   // Zero-Latency Zapping: Pre-warm network connection and stream URL on cursor dwell (~350ms)
+  // Only prewarm when the user is actively viewing the TV tab
   useEffect(() => {
-    if (!focusedChannel || isSameChannel(focusedChannel, tunedChannel)) return;
+    if (!isActiveTab || !focusedChannel || isSameChannel(focusedChannel, tunedChannel)) return;
     const timer = setTimeout(() => {
       playerService.prewarm(focusedChannel);
     }, 350);
     return () => clearTimeout(timer);
-  }, [focusedChannel, tunedChannel]);
+  }, [isActiveTab, focusedChannel, tunedChannel]);
 
   // The info panel always describes the channel that is playing in the preview
   const displayChannel = tunedChannel || focusedChannel;

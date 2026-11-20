@@ -32,7 +32,13 @@ export function formatHhMm(d: Date): string {
   return `${h}:${m}`;
 }
 
+// Flag to disable live Magis EPG network queries (avoids 100% portal200001 failure loops and relay traffic)
+const EPG_DISABLED = true;
+
 export async function fetchChannelEpg(channel: LiveChannel): Promise<{ now: string; next?: string; time?: string; desc?: string } | null> {
+  if (EPG_DISABLED) {
+    return null;
+  }
   const code = String(channel.code || channel.id || '');
   if (!code || code.startsWith('extra-') || code.startsWith('wiwy-') || code.startsWith('epic-')) {
     return null; // Special feeds don't have Magis portal EPG

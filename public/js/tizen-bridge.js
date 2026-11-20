@@ -785,11 +785,7 @@
     _pendingSeekCallbacks: null,
 
     init: function () {
-      if (!isTizen || !window.webapis || !webapis.avplay) {
-        console.log('[XuperAVPlay] AVPlay not available in this environment');
-        return;
-      }
-      console.log('[XuperAVPlay] AVPlay is available and ready');
+      this._hasAvPlay = !!(isTizen && window.webapis && webapis.avplay);
     },
 
     getScaleInfo: function () {
@@ -1948,5 +1944,5 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onDomReady);
   else onDomReady();
 
-  console.log('[XuperBridge] Tizen bridge ready. Platform:', window.XuperPlatform.name);
+  console.log('[XuperBridge:init] Ready (platform=' + window.XuperPlatform.name + ', avplay=' + !!(window.XuperAVPlay && window.XuperAVPlay._hasAvPlay) + ')');
 })(window);
