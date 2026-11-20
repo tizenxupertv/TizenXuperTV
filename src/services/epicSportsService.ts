@@ -47,33 +47,34 @@ interface PulseraCache {
 }
 
 export const STATIC_EPIC_CHANNELS: LiveChannel[] = [
-  { id: 'epic-espn', code: 'epic-espn', name: 'ESPN', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_color.png?v=18' },
-  { id: 'epic-espn2', code: 'epic-espn2', name: 'ESPN 2', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn2.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_2_color.png?v=18' },
-  { id: 'epic-espn3', code: 'epic-espn3', name: 'ESPN 3', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn3.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_3_color.png?v=18' },
-  { id: 'epic-espn4', code: 'epic-espn4', name: 'ESPN 4', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn4.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_4_color.png?v=18' },
-  { id: 'epic-espn5', code: 'epic-espn5', name: 'ESPN 5', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn5.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_5_color.png?v=18' },
-  { id: 'epic-espn6', code: 'epic-espn6', name: 'ESPN 6', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn6.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_6_color.png?v=18' },
-  { id: 'epic-espn7', code: 'epic-espn7', name: 'ESPN 7', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn7.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_7_color.png?v=18' },
-  { id: 'epic-dsports', code: 'epic-dsports', name: 'DSports', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/dsportsperu.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/dsports_color.png?v=18' },
-  { id: 'epic-dsports2', code: 'epic-dsports2', name: 'DSports 2', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/dsports2.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/dsports_2_color.png?v=18' },
-  { id: 'epic-winsportsplus', code: 'epic-winsportsplus', name: 'Win Sports+', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/winsportsplus.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/win_sports_plus_color.png?v=18' },
-  { id: 'epic-l1max', code: 'epic-l1max', name: 'L1MAX', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/l1max.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/L1_max_color.png?v=18' },
-  { id: 'epic-l1', code: 'epic-l1', name: 'L1', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/l1.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/l1_color.png?v=18' },
-  { id: 'epic-zappingsports', code: 'epic-zappingsports', name: 'Zapping Sports', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/zappingsports.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/zapping_sports_color.png?v=18' },
-  { id: 'epic-zappingsportsplus', code: 'epic-zappingsportsplus', name: 'Zapping Sports+', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/zappingsportsplus.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/zapping_sports_plus_color.png?v=18' },
-  { id: 'epic-dtvcplus', code: 'epic-dtvcplus', name: 'Deportes TVC', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/dtvcplus.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/deportes_tvc_color.png?v=18' },
-  { id: 'epic-bicolorpremium', code: 'epic-bicolorpremium', name: 'Bicolor+ Premium', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/bicolorpremium.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/Bicolor_plus_premium_color.png?v=18' },
-  { id: 'epic-bicolorpremium2', code: 'epic-bicolorpremium2', name: 'Bicolor+ Premium 2', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/bicolorpremium2.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/Bicolor_plus_premium_2_color.png?v=18' },
-  { id: 'epic-bicolorplus', code: 'epic-bicolorplus', name: 'Bicolor+', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/bicolorplus.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/Bicolor_plus_color.png?v=18' },
-  { id: 'epic-entelgol', code: 'epic-entelgol', name: 'Entel Gol', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/entelgol.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/entel_gol_color.png?v=18' },
-  { id: 'epic-entelgolplus', code: 'epic-entelgolplus', name: 'Entel Gol Plus', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/entelgolplus.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/entel_gol_plus_color_liviano.png?v=18' },
-  { id: 'epic-futbolcanal', code: 'epic-futbolcanal', name: 'Fútbol Canal', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/futbolcanal.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/futbol_canal_color.png?v=18' },
-  { id: 'epic-unitel', code: 'epic-unitel', name: 'Unitel La Paz', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/unitel.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/unitel_color.png?v=18' },
-  { id: 'epic-unitelscz', code: 'epic-unitelscz', name: 'Unitel Santa Cruz', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/unitelscz.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/unitel_color.png?v=18' },
-  { id: 'epic-reduno', code: 'epic-reduno', name: 'Red Uno', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/reduno.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/red_uno_color_liviano.png?v=18' },
-  { id: 'epic-bolivision', code: 'epic-bolivision', name: 'Bolivisión', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/bolivision.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/bolivision_color.png?v=18' },
-  { id: 'epic-atb', code: 'epic-atb', name: 'ATB', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/atb.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/atb_color.png?v=18' },
-  { id: 'epic-boliviatv', code: 'epic-boliviatv', name: 'Bolivia TV', categoryName: 'Beta · Deportes Latam', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/boliviatv.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/bolivia_tv_color.png?v=18' }
+  { id: 'epic-winsports', code: 'epic-winsports', name: 'Win Sports', categoryName: 'Colombia', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/winsports.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/win_sports_color.png?v=18' },
+  { id: 'epic-winsportsplus', code: 'epic-winsportsplus', name: 'Win Sports+', categoryName: 'Colombia', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/winsportsplus.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/win_sports_plus_color.png?v=18' },
+  { id: 'epic-espn', code: 'epic-espn', name: 'ESPN', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_color.png?v=18' },
+  { id: 'epic-espn2', code: 'epic-espn2', name: 'ESPN 2', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn2.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_2_color.png?v=18' },
+  { id: 'epic-espn3', code: 'epic-espn3', name: 'ESPN 3', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn3.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_3_color.png?v=18' },
+  { id: 'epic-espn4', code: 'epic-espn4', name: 'ESPN 4', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn4.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_4_color.png?v=18' },
+  { id: 'epic-espn5', code: 'epic-espn5', name: 'ESPN 5', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn5.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_5_color.png?v=18' },
+  { id: 'epic-espn6', code: 'epic-espn6', name: 'ESPN 6', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn6.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_6_color.png?v=18' },
+  { id: 'epic-espn7', code: 'epic-espn7', name: 'ESPN 7', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/espn7.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/ESPN_7_color.png?v=18' },
+  { id: 'epic-dsports', code: 'epic-dsports', name: 'DSports', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/dsportsperu.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/dsports_color.png?v=18' },
+  { id: 'epic-dsports2', code: 'epic-dsports2', name: 'DSports 2', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/dsports2.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/dsports_2_color.png?v=18' },
+  { id: 'epic-l1max', code: 'epic-l1max', name: 'L1MAX', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/l1max.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/L1_max_color.png?v=18' },
+  { id: 'epic-l1', code: 'epic-l1', name: 'L1', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/l1.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/l1_color.png?v=18' },
+  { id: 'epic-zappingsports', code: 'epic-zappingsports', name: 'Zapping Sports', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/zappingsports.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/zapping_sports_color.png?v=18' },
+  { id: 'epic-zappingsportsplus', code: 'epic-zappingsportsplus', name: 'Zapping Sports+', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/zappingsportsplus.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/zapping_sports_plus_color.png?v=18' },
+  { id: 'epic-dtvcplus', code: 'epic-dtvcplus', name: 'Deportes TVC', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/dtvcplus.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/deportes_tvc_color.png?v=18' },
+  { id: 'epic-bicolorpremium', code: 'epic-bicolorpremium', name: 'Bicolor+ Premium', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/bicolorpremium.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/Bicolor_plus_premium_color.png?v=18' },
+  { id: 'epic-bicolorpremium2', code: 'epic-bicolorpremium2', name: 'Bicolor+ Premium 2', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/bicolorpremium2.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/Bicolor_plus_premium_2_color.png?v=18' },
+  { id: 'epic-bicolorplus', code: 'epic-bicolorplus', name: 'Bicolor+', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/bicolorplus.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/Bicolor_plus_color.png?v=18' },
+  { id: 'epic-entelgol', code: 'epic-entelgol', name: 'Entel Gol', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/entelgol.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/entel_gol_color.png?v=18' },
+  { id: 'epic-entelgolplus', code: 'epic-entelgolplus', name: 'Entel Gol Plus', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/entelgolplus.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/entel_gol_plus_color_liviano.png?v=18' },
+  { id: 'epic-futbolcanal', code: 'epic-futbolcanal', name: 'Fútbol Canal', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/futbolcanal.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/futbol_canal_color.png?v=18' },
+  { id: 'epic-unitel', code: 'epic-unitel', name: 'Unitel La Paz', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/unitel.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/unitel_color.png?v=18' },
+  { id: 'epic-unitelscz', code: 'epic-unitelscz', name: 'Unitel Santa Cruz', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/unitelscz.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/unitel_color.png?v=18' },
+  { id: 'epic-reduno', code: 'epic-reduno', name: 'Red Uno', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/reduno.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/red_uno_color_liviano.png?v=18' },
+  { id: 'epic-bolivision', code: 'epic-bolivision', name: 'Bolivisión', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/bolivision.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/bolivision_color.png?v=18' },
+  { id: 'epic-atb', code: 'epic-atb', name: 'ATB', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/atb.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/atb_color.png?v=18' },
+  { id: 'epic-boliviatv', code: 'epic-boliviatv', name: 'Bolivia TV', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://epictvparaiphone.top/perelman/boliviatv.m3u8', logo: 'https://epictvparaiphone.top/logos/canales/bolivia_tv_color.png?v=18' }
 ];
 
 /**
@@ -85,6 +86,10 @@ export const STATIC_EPIC_CHANNELS: LiveChannel[] = [
  */
 export const EXTRA_CHANNELS: LiveChannel[] = [
   // { id: 'extra-nombre', code: 'extra-nombre', name: 'Nombre del canal', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'http://servidor/ruta/index.m3u8', logo: 'https://servidor/logo.png' },
+  { id: 'extra-espn-ocho', code: 'extra-espn-ocho', name: 'ESPN The Ocho', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'https://d3b6q2ou5kp8ke.cloudfront.net/ESPNTheOcho.m3u8', logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png' },
+  { id: 'extra-espn-mx', code: 'extra-espn-mx', name: 'ESPN México', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'http://168.228.44.241:9997/play/a06p/index.m3u8', logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png' },
+  { id: 'extra-espn-usa', code: 'extra-espn-usa', name: 'ESPN USA HD', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'http://85.237.89.160:9590/usa-s/ESPN-HD/index.m3u8', logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png' },
+  { id: 'extra-espn2-usa', code: 'extra-espn2-usa', name: 'ESPN 2 USA HD', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'http://85.237.89.160:9590/usa-s/ESPN-2-HD/index.m3u8', logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-2-us.png' },
   { id: 'extra-espnu', code: 'extra-espnu', name: 'ESPN U HD', categoryName: 'Latinoamérica', time: 'EN VIVO', url: 'http://85.237.89.160:9590/usa-s/ESPN-U-HD/index.m3u8', logo: 'http://schedulesdirect-api20141201-logos.s3.dualstack.us-east-1.amazonaws.com/stationLogos/s45654_dark_360w_270h.png' },
 ];
 
@@ -188,7 +193,7 @@ class EpicSportsService {
       if (snapRes.ok) {
         const snap = await snapRes.json();
         if (snap && Array.isArray(snap.channels) && snap.channels.length > 0) {
-          const regionOrder = (r: string) => (r === 'Latinoamérica' ? '0' : r === 'Colombia' ? '1' : '2' + r.toLowerCase());
+          const regionOrder = (r: string) => (r === 'Colombia' ? '0' : r === 'Latinoamérica' ? '1' : '2' + r.toLowerCase());
           const latamOrder = (n: string) => {
             const l = n.toLowerCase();
             return l.startsWith('espn') ? '0' + l : l.startsWith('dsports') ? '1' + l : '2' + l;
@@ -259,8 +264,8 @@ class EpicSportsService {
         const playable = rawList.filter((c: any) => c && c.fuente === 'perelman' && typeof c.url === 'string');
 
         const regionOrder = (r: string) => {
-          if (r === 'Latinoamérica') return '0';
-          if (r === 'Colombia') return '1';
+          if (r === 'Colombia') return '0';
+          if (r === 'Latinoamérica') return '1';
           return '2' + r.toLowerCase();
         };
         const latamChannelOrder = (name: string): string => {

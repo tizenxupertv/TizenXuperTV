@@ -145,6 +145,38 @@ export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
     url: 'https://d3b6q2ou5kp8ke.cloudfront.net/ESPNTheOcho.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
     time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-mx',
+    code: 'wiwy-espn-mx',
+    name: '10 · ESPN México',
+    url: 'http://168.228.44.241:9997/play/a06p/index.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-usa',
+    code: 'wiwy-espn-usa',
+    name: '11 · ESPN USA HD',
+    url: 'http://85.237.89.160:9590/usa-s/ESPN-HD/index.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-2-usa',
+    code: 'wiwy-espn-2-usa',
+    name: '12 · ESPN 2 USA HD',
+    url: 'http://85.237.89.160:9590/usa-s/ESPN-2-HD/index.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-2-us.png',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'extra-espnu',
+    code: 'extra-espnu',
+    name: '13 · ESPN U HD',
+    url: 'http://85.237.89.160:9590/usa-s/ESPN-U-HD/index.m3u8',
+    logo: 'http://schedulesdirect-api20141201-logos.s3.dualstack.us-east-1.amazonaws.com/stationLogos/s45654_dark_360w_270h.png',
+    time: 'EN VIVO'
   }
 ];
 

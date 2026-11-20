@@ -5,12 +5,13 @@ export interface BrandLogoProps {
   className?: string;
 }
 
-export function getBrandPrefix(): 'MAC' | 'WIN' | 'TIZEN' {
+export function getBrandPrefix(): 'MAC' | 'WIN' | 'ANDRO' | 'TIZEN' {
   try {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search).get('desktop');
       if (p === 'mac') return 'MAC';
       if (p === 'win') return 'WIN';
+      if (p === 'andro') return 'ANDRO';
     }
   } catch {}
   return 'TIZEN';
