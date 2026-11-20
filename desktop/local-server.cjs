@@ -10,7 +10,10 @@ const DIRECT_43404_HOSTS = new Set([
   'hinumz.a878kkoyc.com',
   'krdwvd.swcaw7qx.com',
   'osuhk.m3x8o50te.com',
-  'oogoy.f30c96w8.com'
+  'oogoy.f30c96w8.com',
+  'neqpsx.6dqtl974.com',
+  'lvmcmb.6dqtl974.com',
+  'dqbvvb.wg5h6vjz.com'
 ]);
 
 const MIME = {
@@ -49,14 +52,23 @@ async function handleDirect43404(req, res, subPath) {
   }
   const body = await readBody(req);
   try {
+    const upHeaders = {
+      'Content-Type': 'application/json;charset=utf-8',
+      'User-Agent': 'okhttp/3.12.13'
+    };
+    if (req.headers['x-magis-cookie']) {
+      upHeaders['Cookie'] = String(req.headers['x-magis-cookie']);
+    } else {
+      upHeaders['apk'] = String(req.headers['apk'] || 'com.android.msandroid');
+      upHeaders['apkVer'] = String(req.headers['apkver'] || '49920');
+      upHeaders['spkgVer'] = String(req.headers['spkgver'] || '2022-06-22 10:06:33_33_13_5.15.137-00001-gfdae1bb0ce90');
+      if (req.headers['x-request-trace']) upHeaders['X-Request-Trace'] = String(req.headers['x-request-trace']);
+      if (req.headers['x-client-meta']) upHeaders['X-Client-Meta'] = String(req.headers['x-client-meta']);
+    }
+
     const up = await fetch(`https://${host}/api/portalCore/${apiPath}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json;charset=utf-8',
-        'apk': String(req.headers['apk'] || 'com.android.msandroid'),
-        'apkVer': String(req.headers['apkver'] || '43404'),
-        'spkgVer': String(req.headers['spkgver'] || '2024-09-10 06:25:30_33_13_')
-      },
+      headers: upHeaders,
       body
     });
     const text = await up.text();

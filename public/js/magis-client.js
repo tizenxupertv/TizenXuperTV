@@ -32,21 +32,39 @@
   var relayMode = 'full';
   var relayCooldownUntil = 0;
   var DIRECT_HOSTS = [
+    'neqpsx.6dqtl974.com',
+    'lvmcmb.6dqtl974.com',
+    'dqbvvb.wg5h6vjz.com',
+    'eajmnp.hcgv1dt8.com',
     'fuxok.nguvmqhpk.com',
     'ftmrmy.jdfey0cd.com',
     'mptec.dhkrxuzcy.com',
-    'eajmnp.hcgv1dt8.com',
     'hinumz.a878kkoyc.com',
     'krdwvd.swcaw7qx.com',
     'osuhk.m3x8o50te.com',
     'oogoy.f30c96w8.com'
   ];
-  var DIRECT_APK_VERSION = '49902';
-  var DIRECT_APK_VER_HEADER = '43404';
-  var DIRECT_SPKG_VER = '2024-09-10 06:25:30_33_13_';
+  var DIRECT_APK_VERSION = '49920';
+  var DIRECT_APK_VER_HEADER = '49920';
+  var DIRECT_SPKG_VER = '2022-06-22 10:06:33_33_13_5.15.137-00001-gfdae1bb0ce90';
+  var DIRECT_META_SALT = '213f24ac-14b7-4c03-a209-383ead1b014f';
   var DIRECT_RESERVE1 = '583442714b345572434a4d5769637461545a735936413d3d';
   var DIRECT_SESSION_KEY = 'xuper_magis_direct_v1';
 
+  function generateClientMeta() {
+    var trace = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0;
+      var v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+    var meta = '';
+    try {
+      if (typeof CryptoJS !== 'undefined' && CryptoJS.MD5) {
+        meta = CryptoJS.MD5(trace + DIRECT_META_SALT).toString().toLowerCase();
+      }
+    } catch (_) {}
+    return { trace: trace, meta: meta };
+  }
   /**
    * One console entry per request: `[MagisClient:<route>] <via> ✓|✗ <ms> ms · <info>`, the same format as
    * src/lib/callLog.ts. With the debug log on (localhost, or localStorage['xuper.debugLog'] = '1') the response
@@ -1025,9 +1043,9 @@
       logCall(directPath, 'direct', err, Date.now() - tCall, logInfo + (opts.low ? (logInfo ? ', ' : '') + 'fondo' : ''), res);
       finish(err, res);
     };
-    var bodyHex;
+    var bodyStr;
     try {
-      bodyHex = encryptBody(JSON.stringify(payload));
+      bodyStr = secWrap(JSON.stringify(payload), SEC.keyHex, SEC.alpha);
     } catch (e) {
       return done(new Error(directPath + ': error cifrando cuerpo directo: ' + e.message));
     }
@@ -1036,6 +1054,7 @@
     var finished = false;
     var tStart = Date.now();
     var lastStatus = 0;
+    var failedHosts = [];
 
     function tryHost() {
       if (finished) return;
@@ -1043,6 +1062,7 @@
         finished = true;
         var e = new Error(directPath + ': el portal no respondió');
         e.httpStatus = lastStatus;
+        e.failedHostCount = failedHosts.length;
         logInfo = idx + ' hosts probados' + (lastStatus ? ', último HTTP ' + lastStatus : '');
         return done(e);
       }
@@ -1076,23 +1096,53 @@
       xhr.onprogress = arm;
       xhr.onreadystatechange = function () { if (xhr.readyState >= 2) arm(); };
       try { xhr.setRequestHeader('Content-Type', 'application/json;charset=utf-8'); } catch (e) {}
-      try { xhr.setRequestHeader('apk', 'com.android.msandroid'); } catch (e) {}
-      try { xhr.setRequestHeader('apkVer', DIRECT_APK_VER_HEADER); } catch (e) {}
-      try { xhr.setRequestHeader('spkgVer', DIRECT_SPKG_VER); } catch (e) {}
+      try {
+        var metaPair = generateClientMeta();
+        var traceId = (metaPair && metaPair.trace) || '';
+        var clientMeta = (metaPair && metaPair.meta) || '';
+        var hdrLines = [
+          'apk: ' + APK_TRANSPORT_APP_ID,
+          'apkVer: ' + APK_VER_HEADER,
+          'spkgVer: ' + SPKG_VER,
+          'Content-type: application/json;charset=utf-8',
+          'Cache-Control: no-store',
+          'X-Request-Trace: ' + traceId,
+          'X-Client-Meta: ' + clientMeta
+        ];
+        var dVal = secWrap(hdrLines.join('\r\n') + '\r\n', SEC.keyHex, SEC.alpha);
+        var cookieStr = 'd=' + dVal + '; s=' + SEC.s + '; t=' + SEC.t;
+        if (isLocalDevHost) {
+          xhr.setRequestHeader('X-Magis-Cookie', cookieStr);
+        } else {
+          try { xhr.setRequestHeader('Cookie', cookieStr); } catch (_) {}
+        }
+      } catch (e) {}
 
       xhr.onload = function () {
         if (settled || finished) return;
         settled = true;
         disarm();
         lastStatus = xhr.status;
-        if (xhr.status < 200 || xhr.status >= 300) return tryHost();
+        if (xhr.status < 200 || xhr.status >= 300) {
+          failedHosts.push(host);
+          return tryHost();
+        }
+        var rawTxt = trim(xhr.responseText);
         var resp;
         try {
-          resp = JSON.parse(trim(xhr.responseText));
+          if (rawTxt && rawTxt.charAt(0) !== '{') {
+            rawTxt = secUnwrap(rawTxt, SEC.keyHex, SEC.alpha);
+          }
+          resp = JSON.parse(rawTxt);
         } catch (e) {
+          failedHosts.push(host);
           return tryHost();
         }
         var code = (resp.returnCode === undefined || resp.returnCode === null) ? '' : String(resp.returnCode);
+        if (code === 'portal200001') {
+          failedHosts.push(host);
+          return tryHost();
+        }
         if (code !== '' && code !== '0') {
           var pErr = new Error(directPath + ' -> ' + code + ' ' + text(resp.errorMessage));
           pErr.portalCode = code;
@@ -1121,7 +1171,7 @@
         disarm();
         tryHost();
       };
-      xhr.send(bodyHex);
+      xhr.send(bodyStr);
     }
 
     tryHost();
@@ -1160,7 +1210,7 @@
       deviceToken: '',
       drmId: identity.drmId || '',
       sdkVer: 33,
-      sn: identity.serialNumber || identity.androidId || '0000111122223333'
+      sn: ''
     };
 
     postDirectHttp('v3/snToken', snPayload, function (err, res) {
@@ -1169,24 +1219,24 @@
       if (!snToken) return finishDirect(new Error('Direct v3/snToken: missing snToken'));
       var snMd5 = String(md5(snToken + SNTOKEN_SALT)).toLowerCase();
       var activePayload = {
-        appId: 'com.android.msandroid',
-        apkVersion: DIRECT_APK_VERSION,
-        loginType: '2',
-        appLanguage: 'es',
-        hardwareInfo: 'ranchu',
-        model: 'sdk_gphone64_arm64',
-        product: 'sdk_gphone64_arm64',
-        cpu: 'arm64-v8a',
-        B29: '',
-        reserve1: DIRECT_RESERVE1,
-        deviceToken: '',
-        drmId: identity.drmId || '',
-        sdkVer: 33,
         sn: snMd5,
         snToken: snToken,
-        portalCode: 'masnew',
+        loginType: '2',
+        authVersion: '',
+        authCode: '',
+        preCode: '',
         macAddr: identity.etheMac,
-        wlanMac: identity.wifiMac
+        wlanMac: identity.wifiMac,
+        reserve1: DIRECT_RESERVE1,
+        openNum: 0,
+        channel: 'default',
+        matadata: '',
+        signdata: '',
+        portalCode: 'masnew',
+        drmId: identity.drmId || '',
+        appLanguage: 'es',
+        appId: 'com.android.msandroid',
+        apkVersion: DIRECT_APK_VERSION
       };
       postDirectHttp('v8/active', activePayload, function (aErr, aRes) {
         if (aErr) return finishDirect(aErr);
@@ -1202,7 +1252,7 @@
           portalCode: trim(aRes && aRes.portalCode) || 'masnew'
         };
         saveDirectSession();
-        console.log('[MagisClient] Direct 43404 session established');
+        console.log('[MagisClient:session] Direct session established');
         finishDirect(null, directSession);
       });
     });
@@ -1275,7 +1325,7 @@
         postHttp(endpoint, fullPayload, function (err, res) {
           releaseOnce();
           if (isRelayUnavailableError(err) && canUseDirect43404 && !opts.sessionStart) {
-            console.warn('[MagisClient] relay unavailable for ' + endpoint + ', falling back to direct 43404');
+            console.warn('[MagisClient:' + endpoint + '] relay unavailable, falling back to direct 43404');
             return callDirect43404(endpoint, payload, opts, callback);
           }
           // Not for the two requests that start the session: their retry would wait for the very session start that
@@ -1309,7 +1359,8 @@
             return callback(dErr);
           }
           if (relayMode !== 'off' && relayCooldownUntil <= Date.now() && dErr.httpStatus !== 0) {
-            console.warn('[MagisClient] direct 43404 failed for ' + endpoint + ', falling back to relay');
+            var hostSummary = dErr.failedHostCount ? ' (' + dErr.failedHostCount + ' hosts probados)' : '';
+            console.warn('[MagisClient:' + endpoint + '] direct 43404 failed' + hostSummary + ', falling back to relay');
             if (dErr.portalCode !== 'portal200001') session.forceRelay = true;
             if (!session.userId || !session.userToken) {
               // Direct 43404 just told us this very session is invalid (aaa100027/aaa100028) — reusing its
@@ -1988,7 +2039,7 @@
         var diag = summarizeStartPlayDiag(cid, seriesContentId, epNum, pRes, matchedEp, tracks);
         publishStartPlayDiag(diag);
         if (typeof console !== 'undefined' && console.info) {
-          console.info('[MagisClient] startPlayVOD variants', diag);
+          console.info('[MagisClient:v10/startPlayVOD] variants', diag);
         }
         if (!tracks.length) return doneAll(new Error('No video tracks returned'));
         var data = { play: pRes, episode: ep, tracks: tracks, diag: diag };
@@ -4006,5 +4057,5 @@
     call: call
   };
 
-  console.log('[MagisClient] Initialized successfully.');
+  console.log('[MagisClient:init] Ready.');
 })(window);
