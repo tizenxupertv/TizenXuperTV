@@ -102,10 +102,8 @@ function createDirectMagisClient() {
       delete h['X-Tizen-Duid'];
       delete h['X-Tizen-Sig'];
     } else if (u.includes('/session/fallback')) {
-      this.status = 404;
-      this.readyState = 4;
-      if (this.onload) this.onload();
-      return;
+      // Allow relay session acquisition (uses pooled session minted from home)
+      // Headers (X-Tizen-Sig, X-Tizen-Time, etc.) will pass cleanly to the Relay
     }
     fetch(u, { method: this._m, headers: h, body: body || undefined })
       .then(async (r) => {
