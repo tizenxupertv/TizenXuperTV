@@ -2,40 +2,46 @@
 # =============================================================================
 # TizenXuper — Renovación autónoma del pool de sesiones del Relay
 # Ejecutar en la Raspberry Pi como: bash refresh-and-deploy.sh
+# La salida va a stdout: el cron, el dashboard y el bot de Telegram la añaden a relay-refresh.log.
 # =============================================================================
-set -e
+set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/.env.pi"
-LOG_FILE="$SCRIPT_DIR/relay-refresh.log"
+POOL_FILE="$SCRIPT_DIR/relay-worker/src/sessionPool.js"
 SESSION_COUNT="${SESSION_COUNT:-120}"
+now() { date -u +%FT%TZ; }
 
 # Asegurar Node en PATH
 export PATH="$HOME/.local/bin:$PATH"
 
+# Una sola renovación a la vez (cron, dashboard y /refresh de Telegram)
+exec 9>/tmp/tizenxuper-refresh.lock
+if ! flock -n 9; then
+  echo "[$(now)] Omitido: ya hay una renovación del pool en curso"
+  exit 0
+fi
+
 # Cargar secrets
 if [ ! -f "$ENV_FILE" ]; then
-  echo "[$(date -u +%FT%TZ)] ERROR: Falta $ENV_FILE con CLOUDFLARE_API_TOKEN" | tee -a "$LOG_FILE"
+  echo "[$(now)] ERROR: Falta $ENV_FILE con CLOUDFLARE_API_TOKEN"
   exit 1
 fi
 # shellcheck source=/dev/null
 source "$ENV_FILE"
 
 if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-  echo "[$(date -u +%FT%TZ)] ERROR: CLOUDFLARE_API_TOKEN vacío en $ENV_FILE" | tee -a "$LOG_FILE"
+  echo "[$(now)] ERROR: CLOUDFLARE_API_TOKEN vacío en $ENV_FILE"
   exit 1
 fi
 
-echo "[$(date -u +%FT%TZ)] START — minando $SESSION_COUNT sesiones desde la Pi..." | tee -a "$LOG_FILE"
+echo "[$(now)] START — minando $SESSION_COUNT sesiones desde la Pi..."
 
-# 1. Minar sesiones usando el minero optimizado para ARMv6
-node "$SCRIPT_DIR/mint-worker.mjs" \
-  "$SESSION_COUNT" \
-  1 \
-  "$SCRIPT_DIR/relay-worker/src/sessionPool.js" 2>&1 | tee -a "$LOG_FILE"
+# 1. Minar sesiones (mint-worker sale con error y no toca el pool si no consigue suficientes)
+node "$SCRIPT_DIR/mint-worker.mjs" "$SESSION_COUNT" 1 "$POOL_FILE" 2>&1
 
-# 2. Desplegar el Worker en Cloudflare directamente vía API REST (ultrarrápido, 0 esbuild)
-echo "[$(date -u +%FT%TZ)] Desplegando Worker a Cloudflare..." | tee -a "$LOG_FILE"
-node "$SCRIPT_DIR/deploy-via-api.mjs" 2>&1 | tee -a "$LOG_FILE"
+# 2. Desplegar el Worker en Cloudflare directamente vía API REST
+echo "[$(now)] Desplegando Worker a Cloudflare..."
+node "$SCRIPT_DIR/deploy-via-api.mjs" 2>&1
 
-echo "[$(date -u +%FT%TZ)] DONE — Pool renovado y desplegado con éxito" | tee -a "$LOG_FILE"
+echo "[$(now)] DONE — Pool renovado y desplegado con éxito"

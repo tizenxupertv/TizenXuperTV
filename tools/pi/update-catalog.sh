@@ -25,10 +25,13 @@ if ! flock -n 9; then
   echo "[$(now)] Omitido: ya hay una actualización del catálogo en curso"
   exit 0
 fi
-if pgrep -f "refresh-and-deploy.sh|mint-worker.mjs" > /dev/null; then
+# refresh-and-deploy.sh holds this lock while it runs
+exec 8>/tmp/tizenxuper-refresh.lock
+if ! flock -n 8; then
   echo "[$(now)] Omitido: la renovación del pool está en curso"
   exit 0
 fi
+flock -u 8
 
 # Cargar secrets
 source "$ENV_FILE"
