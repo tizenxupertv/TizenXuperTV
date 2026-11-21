@@ -104,15 +104,24 @@ test('a session start that fails reports the error, and the next call starts ove
   advance(5000);
   assert.equal(first.length, 1, 'the caller gets an answer');
   assert.match(String(first[0] && first[0].message), /v3\/snToken: el portal no respondió/);
-  assert.equal(requests.length, 3, 'one try per host, and no second round for a network failure');
   assert.ok(requests.every(r => /\/api\/portalCore\/v3\/snToken$/.test(r.url)));
+  // Direct first, one try per portal host, then the relay: no second round for a network failure
+  const direct = requests.filter(r => !/workers\.dev/.test(r.url)).map(r => r.url);
+  const viaRelay = requests.filter(r => /workers\.dev/.test(r.url));
+  assert.ok(direct.length > 0, 'the direct hosts are tried first');
+  assert.equal(new Set(direct).size, direct.length, 'no direct host twice');
+  assert.equal(viaRelay.length, 3, 'one relay try per portal host');
+  const firstRound = requests.length;
 
   // The app asks again later (the Wi-Fi is back, or not): a new attempt starts and answers too
   const second: any[] = [];
   client.ensureSession((err: any) => second.push(err));
   advance(5000);
   assert.equal(second.length, 1, 'not left waiting for the first attempt');
-  assert.equal(requests.length, 6);
+  // After a failed direct start the session stays on the relay, so the new attempt does not wait on every host again
+  const secondRound = requests.slice(firstRound);
+  assert.equal(secondRound.length, 3, 'a new attempt, one relay try per portal host');
+  assert.ok(secondRound.every(r => /workers\.dev/.test(r.url)));
 });
 
 test('callers that arrive while the session is starting all get the same answer', () => {
@@ -152,18 +161,23 @@ test('a host that keeps sending is not cut at 8 s, only at 30 s', () => {
   assert.equal(requests.length, 2);
 });
 
-test('a request gives up after 64 s in all, even with hosts left', () => {
+test('a request gives up after 64 s in all, even with hosts left, and a session start after 180 s', () => {
   const { client, requests, advance } = loadPortalClient(() => {});
   const answers: any[] = [];
   client.ensureSession((err: any) => answers.push(err));
-  for (let second = 1; second <= 100 && !answers.length; second++) {
+  let elapsed = 0;
+  for (let second = 1; second <= 300 && !answers.length; second++) {
     advance(1000);
+    elapsed = second;
     // Every open host sends some bytes every 5 s, so each one lasts until its own 30 s limit
     if (second % 5 === 0) requests.filter(r => !r.aborted).forEach(r => r.progress());
   }
   assert.equal(answers.length, 1);
   assert.match(String(answers[0].message), /el portal no respondió/);
-  assert.equal(requests.length, 3, 'three hosts at 30 s each pass the 64 s: the other five are not tried');
+  const direct = requests.filter(r => !/workers\.dev/.test(r.url));
+  assert.equal(direct.length, 3, 'three direct hosts at 30 s each pass the 64 s: the others are not tried');
+  assert.equal(requests.length - direct.length, 3, 'the relay try gives up the same way');
+  assert.ok(elapsed <= 180, `the whole start gives up by 180 s (took ${elapsed} s)`);
 });
 
 test('collectTracks and getLastStartPlayDiag preserve all multi-codec variants and omit secrets', () => {

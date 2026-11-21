@@ -1055,14 +1055,18 @@
     var tStart = Date.now();
     var lastStatus = 0;
     var failedHosts = [];
+    var sawVersionGone = false;
 
     function tryHost() {
       if (finished) return;
       if (idx >= DIRECT_HOSTS.length || Date.now() - tStart >= REQUEST_MAX_MS) {
         finished = true;
-        var e = new Error(directPath + ': el portal no respondió');
+        var e = new Error(directPath + (sawVersionGone ? ' -> portal200001 versión no admitida en este endpoint' : ': el portal no respondió'));
         e.httpStatus = lastStatus;
         e.failedHostCount = failedHosts.length;
+        // Keep the code: without it the caller takes it for a network failure and sends the rest of the session
+        // through the relay, when only this endpoint refuses our version
+        if (sawVersionGone) e.portalCode = 'portal200001';
         logInfo = idx + ' hosts probados' + (lastStatus ? ', último HTTP ' + lastStatus : '');
         return done(e);
       }
@@ -1140,6 +1144,7 @@
         }
         var code = (resp.returnCode === undefined || resp.returnCode === null) ? '' : String(resp.returnCode);
         if (code === 'portal200001') {
+          sawVersionGone = true;
           failedHosts.push(host);
           return tryHost();
         }
@@ -2746,7 +2751,7 @@
 
   var liveResolveCache = {};
   // A category can hold more channels than one page (50): the rest used to be left out without a word
-  var LIVE_MAX_PAGES = 20;
+  var LIVE_MAX_PAGES = 40;
 
   /**
    * Every channel of a category: its pages one after another, up to LIVE_MAX_PAGES. callback(err, channels).
@@ -4048,6 +4053,11 @@
     // Nothing running or waiting: background work (title details for a focused card) starts only then
     isIdle: function () { return !session.busy && !queue.length && !lowQueue.length; },
     getRelayMode: function () { return relayMode; },
+    /** How the session in use reaches the portal: 'direct', 'relay', or 'none' before a session exists */
+    getConnection: function () {
+      if (!session.ready) return 'none';
+      return session.directOnly && !session.forceRelay ? 'direct' : 'relay';
+    },
     setRelayMode: function (m) {
       relayMode = (m === 'off' || m === 'play-only' || m === 'full') ? m : 'full';
       return relayMode;
