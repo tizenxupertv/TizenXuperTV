@@ -19,6 +19,7 @@ export const CACHE = process.env.IMG_CACHE_DIR || path.join(DIR, 'img-cache');
 const DATA = path.join(DIR, 'site-data');
 const STATE = path.join(CACHE, 'published.json');
 const SITE_STATE = path.join(CACHE, 'site-state.json');
+const HASHES = path.join(CACHE, 'site-hashes.json');
 const PROJECT = 'tizenxuper-img';
 export const PUBLIC_BASE = `https://${PROJECT}.pages.dev`;
 const MIN_GAP_MS = 90 * 60 * 1000;
@@ -43,33 +44,53 @@ function loadEnv() {
 async function deploy(env, entries) {
   const api = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}`;
   const auth = { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` };
-  const tokenRes = await (await fetch(`${api}/upload-token`, { headers: auth })).json();
-  if (!tokenRes.success) throw new Error('upload-token: ' + JSON.stringify(tokenRes.errors));
-  const jwt = { Authorization: `Bearer ${tokenRes.result.jwt}`, 'Content-Type': 'application/json' };
+  // The upload token is short-lived: a fresh one for each request of a long upload
+  const jwt = async () => {
+    const t = await (await fetch(`${api}/upload-token`, { headers: auth })).json();
+    if (!t.success) throw new Error('upload-token: ' + JSON.stringify(t.errors));
+    return { Authorization: `Bearer ${t.result.jwt}`, 'Content-Type': 'application/json' };
+  };
 
+  // Only hashes stay in memory: holding every file in base64 (~240 MB for 1,800 images) ran the B+ out of memory.
+  // A hash is reused while the file's size and date are the same.
+  const known = (() => { try { return JSON.parse(fs.readFileSync(HASHES, 'utf8')); } catch { return {}; } })();
+  const hashes = {};
   const manifest = {};
-  const assets = new Map();
+  const fileOf = new Map();
   for (const e of entries) {
-    const b64 = fs.readFileSync(e.file).toString('base64');
-    const hash = crypto.createHash('sha256').update(b64 + path.extname(e.file).slice(1)).digest('hex').slice(0, 32);
+    const st = fs.statSync(e.file);
+    const sig = `${st.size}:${Math.round(st.mtimeMs)}`;
+    let hash = known[e.file] && known[e.file].sig === sig ? known[e.file].hash : null;
+    if (!hash) {
+      const b64 = fs.readFileSync(e.file).toString('base64');
+      hash = crypto.createHash('sha256').update(b64 + path.extname(e.file).slice(1)).digest('hex').slice(0, 32);
+    }
+    hashes[e.file] = { sig, hash };
     manifest[e.path] = hash;
-    assets.set(hash, { b64, type: e.type });
+    fileOf.set(hash, e);
   }
-  const hashes = [...assets.keys()];
+  fs.writeFileSync(HASHES, JSON.stringify(hashes));
+  const all = [...fileOf.keys()];
   const missing = await (await fetch('https://api.cloudflare.com/client/v4/pages/assets/check-missing', {
-    method: 'POST', headers: jwt, body: JSON.stringify({ hashes })
+    method: 'POST', headers: await jwt(), body: JSON.stringify({ hashes: all })
   })).json();
   if (!missing.success) throw new Error('check-missing: ' + JSON.stringify(missing.errors));
   const toUpload = missing.result || [];
-  for (let i = 0; i < toUpload.length; i += 40) {
-    const batch = toUpload.slice(i, i + 40).map((h) => ({ key: h, value: assets.get(h).b64, metadata: { contentType: assets.get(h).type }, base64: true }));
+  log(`${all.length} files, ${toUpload.length} to upload`);
+  // Small batches, each file read only when its batch goes up
+  for (let i = 0; i < toUpload.length; i += 20) {
+    const batch = toUpload.slice(i, i + 20).map((h) => {
+      const e = fileOf.get(h);
+      return { key: h, value: fs.readFileSync(e.file).toString('base64'), metadata: { contentType: e.type }, base64: true };
+    });
     const up = await (await fetch('https://api.cloudflare.com/client/v4/pages/assets/upload', {
-      method: 'POST', headers: jwt, body: JSON.stringify(batch)
+      method: 'POST', headers: await jwt(), body: JSON.stringify(batch)
     })).json();
     if (!up.success) throw new Error('upload: ' + JSON.stringify(up.errors));
+    if ((i / 20) % 10 === 0) log(`uploaded ${Math.min(i + 20, toUpload.length)}/${toUpload.length} · heap ${Math.round(process.memoryUsage().heapUsed / 1048576)} MB`);
   }
   await fetch('https://api.cloudflare.com/client/v4/pages/assets/upsert-hashes', {
-    method: 'POST', headers: jwt, body: JSON.stringify({ hashes })
+    method: 'POST', headers: await jwt(), body: JSON.stringify({ hashes: all })
   });
   const form = new FormData();
   form.append('manifest', JSON.stringify(manifest));
