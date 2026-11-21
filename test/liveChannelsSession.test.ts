@@ -42,9 +42,11 @@ test('live channels on a direct session go to the portal with that session\'s us
   });
 
   const answers: any[] = [];
+  assert.equal(client.getConnection(), 'none', 'no session yet');
   client.getLiveChannels(76206, 1, 50, (err: any, list: any[]) => answers.push({ err, list }));
   for (let i = 0; i < 20; i++) advance(300);
 
+  assert.equal(client.getConnection(), 'direct', 'Network diagnostics shows the direct connection');
   assert.equal(answers.length, 1, 'the caller gets an answer');
   assert.equal(answers[0].err, null);
   assert.deepEqual(Array.from(answers[0].list, (c: any) => c.channelCode), ['c1']);

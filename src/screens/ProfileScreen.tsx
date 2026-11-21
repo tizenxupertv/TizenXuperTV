@@ -781,6 +781,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           sub: reached ? (report!.portalMs !== null ? 'Responde' : 'Caído o bloqueado') : tested ? 'No se pudo probar' : 'Sin analizar',
           cls: reached ? (report!.portalMs !== null ? 'ok' : 'bad') : ''
         },
+        (() => {
+          const conn: string = (window as any).MagisClient?.getConnection?.() ?? 'none';
+          return {
+            label: 'Conexión al portal',
+            value: conn === 'direct' ? 'Directa' : conn === 'relay' ? 'Alternativa' : '—',
+            sub: conn === 'direct' ? 'Sin intermediarios' : conn === 'relay' ? 'Ruta de respaldo' : tested ? 'Sin sesión todavía' : 'Sin analizar',
+            cls: conn === 'direct' ? 'ok' : conn === 'relay' ? 'warn' : ''
+          };
+        })(),
         {
           label: 'Servidores de video',
           value: reached && report!.portalMs !== null ? String(report!.cdns) : '—',

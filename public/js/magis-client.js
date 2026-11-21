@@ -4053,6 +4053,11 @@
     // Nothing running or waiting: background work (title details for a focused card) starts only then
     isIdle: function () { return !session.busy && !queue.length && !lowQueue.length; },
     getRelayMode: function () { return relayMode; },
+    /** How the session in use reaches the portal: 'direct', 'relay', or 'none' before a session exists */
+    getConnection: function () {
+      if (!session.ready) return 'none';
+      return session.directOnly && !session.forceRelay ? 'direct' : 'relay';
+    },
     setRelayMode: function (m) {
       relayMode = (m === 'off' || m === 'play-only' || m === 'full') ? m : 'full';
       return relayMode;
