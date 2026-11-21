@@ -65,7 +65,8 @@ const HeroShowcaseComponent: React.FC<HeroShowcaseProps> = ({
     <div className={`home-showcase apple-showcase ${isDimmed ? 'is-dimmed' : ''}`}>
       <div
         className="showcase-bg"
-        style={{ backgroundImage: `url('${bgUrl}')` }}
+        // The tiny preview sits under the real backdrop: it shows at once, the backdrop covers it when it arrives
+        style={{ backgroundImage: item.backdropThumb ? `url('${bgUrl}'), url('${item.backdropThumb}')` : `url('${bgUrl}')` }}
       />
       <div className="showcase-gradient" />
 
