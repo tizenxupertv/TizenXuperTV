@@ -20,6 +20,9 @@ const DATA = path.join(DIR, 'site-data');
 const STATE = path.join(CACHE, 'published.json');
 const SITE_STATE = path.join(CACHE, 'site-state.json');
 const HASHES = path.join(CACHE, 'site-hashes.json');
+const SEEN = path.join(CACHE, 'image-seen.json');
+// Kept this long after no published file points at it: TVs may still hold an older catalog or title page
+const KEEP_UNSEEN_MS = 14 * 24 * 3600 * 1000;
 const PROJECT = 'tizenxuper-img';
 export const PUBLIC_BASE = `https://${PROJECT}.pages.dev`;
 const MIN_GAP_MS = 90 * 60 * 1000;
@@ -30,6 +33,28 @@ const log = (msg) => console.log(`[pages-site] ${msg}`);
 /** Image keys already live on the site: the catalog may only point at these */
 export function publishedKeys() {
   try { return new Set(JSON.parse(fs.readFileSync(STATE, 'utf8'))); } catch { return new Set(); }
+}
+
+/**
+ * Splits the cached images into the ones still in use and the ones no catalog, See-all page or title page has pointed
+ * at for KEEP_UNSEEN_MS. Without this every image ever made stayed in each deployment (free Pages: 20,000 files).
+ * A copy not published yet counts as in use: the data still has its original address until it goes up.
+ */
+function splitStale(keys, dataFiles) {
+  const now = Date.now();
+  const seen = (() => { try { return JSON.parse(fs.readFileSync(SEEN, 'utf8')); } catch { return {}; } })();
+  // One file at a time: the catalog and the details together are several MB
+  for (const f of dataFiles) {
+    for (const m of fs.readFileSync(path.join(DATA, f), 'utf8').matchAll(/\/([a-f0-9]{20})\.jpg/g)) seen[m[1]] = now;
+  }
+  const live = [];
+  const stale = [];
+  const next = {};
+  for (const k of keys) {
+    next[k] = seen[k] || now;
+    (now - next[k] > KEEP_UNSEEN_MS ? stale : live).push(k);
+  }
+  return { live, stale, seen: next };
 }
 
 function loadEnv() {
@@ -104,20 +129,23 @@ async function deploy(env, entries) {
 async function main() {
   const force = process.argv.includes('--force');
   const site = (() => { try { return JSON.parse(fs.readFileSync(SITE_STATE, 'utf8')); } catch { return { lastDeployAt: 0 }; } })();
-  const keys = fs.readdirSync(CACHE).filter((f) => /^[a-f0-9]{20}\.jpg$/.test(f)).map((f) => f.slice(0, -4));
+  const allKeys = fs.readdirSync(CACHE).filter((f) => /^[a-f0-9]{20}\.jpg$/.test(f)).map((f) => f.slice(0, -4));
   // The catalog files, the titles' details (generate-details.mjs) and the See-all pages (generate-columns.mjs)
   const listJson = (sub) => {
     const dir = path.join(DATA, sub);
     return fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => (sub ? `${sub}/${f}` : f)) : [];
   };
   const dataFiles = [...listJson(''), ...listJson('detail'), ...listJson('column')];
+  const { live: keys, stale, seen } = splitStale(allKeys, dataFiles);
+  fs.writeFileSync(SEEN, JSON.stringify(seen));
   const published = publishedKeys();
   const newImages = keys.filter((k) => !published.has(k)).length;
+  const goneImages = stale.filter((k) => published.has(k)).length;
   const newData = dataFiles.some((f) => fs.statSync(path.join(DATA, f)).mtimeMs > (site.lastDeployAt || 0));
 
-  if (!newImages && !newData) return log('nothing new to publish');
+  if (!newImages && !newData && !goneImages) return log('nothing new to publish');
   const wait = (site.lastDeployAt || 0) + MIN_GAP_MS - Date.now();
-  if (wait > 0 && !force) return log(`changes waiting (${newImages} images${newData ? ', catalog' : ''}); next deployment allowed in ${Math.ceil(wait / 60000)} min`);
+  if (wait > 0 && !force) return log(`changes waiting (${newImages} images${goneImages ? `, ${goneImages} to remove` : ''}${newData ? ', catalog' : ''}); next deployment allowed in ${Math.ceil(wait / 60000)} min`);
 
   const entries = [
     ...keys.map((k) => ({ path: `/${k}.jpg`, file: path.join(CACHE, `${k}.jpg`), type: 'image/jpeg' })),
@@ -126,7 +154,9 @@ async function main() {
   const { uploaded, id } = await deploy(loadEnv(), entries);
   fs.writeFileSync(STATE, JSON.stringify(keys));
   fs.writeFileSync(SITE_STATE, JSON.stringify({ lastDeployAt: Date.now(), deployment: id }));
-  log(`deployed ${keys.length} images and ${dataFiles.length} data files (${uploaded} uploaded), ${id}`);
+  // Off the site now: the local copies go too (optimize-images makes a new one if the image comes back)
+  for (const k of stale) fs.rmSync(path.join(CACHE, `${k}.jpg`), { force: true });
+  log(`deployed ${keys.length} images and ${dataFiles.length} data files (${uploaded} uploaded, ${stale.length} old images removed), ${id}`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
