@@ -8,12 +8,26 @@
  *   node tools/generate-static-catalog.mjs --out build/static-data
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Epic+ device id: the server cuts the connection for the fixed 'a1b2c3d4' this script used to send (seen on
+// 2026-11-21), while a fresh id is answered. Like the app, which makes one per TV, it is made once and kept.
+function epicAparato() {
+  const file = path.join(os.homedir(), '.tizenxuper-epic-aparato');
+  try {
+    const id = fs.readFileSync(file, 'utf8').trim();
+    if (/^[a-f0-9]{16}$/.test(id)) return id;
+  } catch {}
+  const id = crypto.randomBytes(8).toString('hex');
+  fs.writeFileSync(file, id);
+  return id;
+}
 const ROOT_DIR = fs.existsSync(path.join(__dirname, 'public')) ? __dirname : path.resolve(__dirname, '..');
 const OUT_ARG_IDX = process.argv.indexOf('--out');
 const OUT_DIR = OUT_ARG_IDX !== -1 && process.argv[OUT_ARG_IDX + 1]
@@ -237,7 +251,7 @@ async function main() {
       headers: {
         'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)',
         'X-Llave': '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq',
-        'X-Aparato': 'a1b2c3d4',
+        'X-Aparato': epicAparato(),
         'X-Pulsera': '1',
         'Accept': 'application/json'
       }
@@ -342,7 +356,7 @@ async function main() {
       headers: {
         'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)',
         'X-Llave': '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq',
-        'X-Aparato': 'a1b2c3d4',
+        'X-Aparato': epicAparato(),
         'X-Pulsera': '1',
         'Accept': 'application/json'
       }

@@ -100,6 +100,13 @@ else
   cp "$OUT_DIR/live-channels.json" "$OUT_DIR/portal-catalog.json" "$SCRIPT_DIR/site-data/"
 fi
 
+# Epic+ fallback snapshots, read by TVs when Epic+ does not answer them (tizenxuper-tv.pages.dev/data redirects here).
+# Only a complete answer replaces the published one; a failed fetch keeps the last good copy.
+for f in epic-channels.json epic-agenda.json; do
+  [ -s "$OUT_DIR/$f" ] || continue
+  cmp -s "$OUT_DIR/$f" "$SCRIPT_DIR/site-data/$f" || cp "$OUT_DIR/$f" "$SCRIPT_DIR/site-data/$f"
+done
+
 # See-all pages for Pages: only the ones that changed are rewritten, so an unchanged run triggers no deployment
 mkdir -p "$SCRIPT_DIR/site-data/column"
 for f in "$OUT_DIR"/column/*.json; do
