@@ -102,6 +102,6 @@ for f in "$OUT_DIR"/column/*.json; do
   cmp -s "$f" "$dest" || cp "$f" "$dest"
 done
 
-# Images and catalog to Cloudflare Pages: at most one deployment every 90 min, never fails the run
+# Images and catalog to Cloudflare Pages: at most one deployment every 3 h (300 a month), never fails the run
 cd "$SCRIPT_DIR"
 node "$SCRIPT_DIR/pages-site.mjs" 2>&1

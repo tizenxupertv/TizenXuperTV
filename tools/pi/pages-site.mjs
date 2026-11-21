@@ -4,7 +4,8 @@
  * latest static catalog (site-data/*.json, served at /data/ with CORS), in one deployment so the catalog there never
  * points at an image that is not up yet. tizenxuper-tv.pages.dev/data/ redirects its catalog files here.
  *
- * Free Pages allows 500 deployments a month: at most one every 90 minutes (~480), and only when something changed.
+ * Free Pages allows 500 deployments a month: at most one every 3 hours, only when something changed, and no more than
+ * MONTH_BUDGET automatic ones in a calendar month.
  * Uses the direct-upload API (the calls wrangler makes; wrangler does not run on ARMv6).
  *
  * Usage: node pages-site.mjs [--force]
@@ -25,7 +26,11 @@ const SEEN = path.join(CACHE, 'image-seen.json');
 const KEEP_UNSEEN_MS = 14 * 24 * 3600 * 1000;
 const PROJECT = 'tizenxuper-img';
 export const PUBLIC_BASE = `https://${PROJECT}.pages.dev`;
-const MIN_GAP_MS = 90 * 60 * 1000;
+// Almost every hourly run has something new (an image, addresses moved to a light copy): with 90 minutes between
+// deployments that was ~480 a month, at the free plan's 500. Three hours makes at most 248 (31 days x 8).
+const MIN_GAP_MS = 3 * 3600 * 1000;
+// Hard stop for automatic deployments in a calendar month, leaving the rest of the 500 for --force by hand
+const MONTH_BUDGET = 300;
 const HEADERS = '/data/*\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n';
 
 const log = (msg) => console.log(`[pages-site] ${msg}`);
@@ -146,6 +151,9 @@ async function main() {
   if (!newImages && !newData && !goneImages) return log('nothing new to publish');
   const wait = (site.lastDeployAt || 0) + MIN_GAP_MS - Date.now();
   if (wait > 0 && !force) return log(`changes waiting (${newImages} images${goneImages ? `, ${goneImages} to remove` : ''}${newData ? ', catalog' : ''}); next deployment allowed in ${Math.ceil(wait / 60000)} min`);
+  const month = new Date().toISOString().slice(0, 7);
+  const monthCount = site.month === month ? site.monthCount || 0 : 0;
+  if (monthCount >= MONTH_BUDGET && !force) return log(`monthly budget used (${monthCount}/${MONTH_BUDGET} deployments in ${month}); waiting for next month or --force`);
 
   const entries = [
     ...keys.map((k) => ({ path: `/${k}.jpg`, file: path.join(CACHE, `${k}.jpg`), type: 'image/jpeg' })),
@@ -153,7 +161,7 @@ async function main() {
   ];
   const { uploaded, id } = await deploy(loadEnv(), entries);
   fs.writeFileSync(STATE, JSON.stringify(keys));
-  fs.writeFileSync(SITE_STATE, JSON.stringify({ lastDeployAt: Date.now(), deployment: id }));
+  fs.writeFileSync(SITE_STATE, JSON.stringify({ lastDeployAt: Date.now(), deployment: id, month, monthCount: monthCount + 1 }));
   // Off the site now: the local copies go too (optimize-images makes a new one if the image comes back)
   for (const k of stale) fs.rmSync(path.join(CACHE, `${k}.jpg`), { force: true });
   log(`deployed ${keys.length} images and ${dataFiles.length} data files (${uploaded} uploaded, ${stale.length} old images removed), ${id}`);
