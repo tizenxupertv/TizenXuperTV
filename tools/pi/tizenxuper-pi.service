@@ -1,0 +1,20 @@
+# systemd user unit: dashboard + health monitor + Telegram bot in one process, restarted if it dies.
+# Installed by install-cron.sh into ~/.config/systemd/user/. Starting at boot without a login needs,
+# once: sudo loginctl enable-linger pi
+[Unit]
+Description=TizenXuper Pi (panel, monitor de salud y bot de Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=%h/tizenxuper
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/node pi-services.mjs
+Restart=on-failure
+RestartSec=15
+# Each service writes its own log; stderr keeps crash traces
+StandardOutput=null
+StandardError=append:%h/tizenxuper/pi-services.log
+
+[Install]
+WantedBy=default.target

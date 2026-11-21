@@ -17,8 +17,10 @@ const JOBS = [
 const SERVICES = [
   { script: 'health-monitor.mjs', name: 'Monitor de salud', log: 'health-monitor.log' },
   { script: 'tg-listener.mjs', name: 'Bot de Telegram', log: 'tg-listener.log' },
-  { script: 'session-watcher.mjs', name: 'Vigilante de sesiones', log: 'session-watcher.log' },
+  { script: 'session-watcher.mjs', name: 'Vigilante de sesiones', log: 'session-watcher.log', optional: true },
 ];
+
+const svcPill = (s) => (s.proc ? pill('ok', 'Activo') : s.optional ? pill('idle', 'Apagado') : pill('bad', 'Detenido'));
 
 const running = new Map();
 
@@ -57,6 +59,10 @@ async function processes() {
     const startTicks = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] || 0);
     found.set(script, { pid, rssMb: rssKb / 1024, upSec: startTicks ? os.uptime() - startTicks / CLK_TCK : 0 });
   }));
+  // Services loaded inside this same process by pi-services.mjs
+  for (const script of globalThis.__piServices ?? []) {
+    if (!found.has(script)) found.set(script, { pid: process.pid, rssMb: process.memoryUsage().rss / 1048576, upSec: process.uptime(), shared: true });
+  }
   return found;
 }
 
@@ -219,7 +225,7 @@ async function status() {
     return { ...j, out, isRunning, failed, state, next: nextRun(j) };
   });
   const services = SERVICES.map((s) => ({ ...s, proc: procs.get(s.script) }));
-  return { jobs, services, jobProblems: jobs.filter((j) => j.failed).length, svcProblems: services.filter((s) => !s.proc).length };
+  return { jobs, services, jobProblems: jobs.filter((j) => j.failed).length, svcProblems: services.filter((s) => !s.proc && !s.optional).length };
 }
 
 function jobTable(jobs) {
@@ -240,9 +246,9 @@ function jobTable(jobs) {
 function serviceTable(services) {
   const rows = services.map((s) => `<tr>
       <td><div class="name">${esc(s.name)}</div><code>${esc(s.script)}</code></td>
-      <td data-l="Estado">${s.proc ? pill('ok', 'Activo') : pill('bad', 'Detenido')}</td>
+      <td data-l="Estado">${svcPill(s)}</td>
       <td data-l="PID">${s.proc ? esc(s.proc.pid) : '—'}</td>
-      <td data-l="Memoria">${s.proc ? s.proc.rssMb.toFixed(1) + ' MB' : '—'}</td>
+      <td data-l="Memoria">${s.proc ? s.proc.rssMb.toFixed(1) + ' MB' + (s.proc.shared ? ' <span class="muted">(compartida)</span>' : '') : '—'}</td>
       <td data-l="Activo desde">${s.proc?.upSec ? esc(dur(s.proc.upSec)) : '—'}</td>
       <td class="act"><a class="btn ghost" href="/registros?log=${esc(s.script.replace('.mjs', ''))}">Ver log</a></td></tr>`).join('');
   return `<div class="card"><table>
@@ -269,7 +275,7 @@ async function pageResumen(st) {
     <div class="card box"><div class="box-head"><h3>${icon('tasks')}Tareas programadas</h3><a href="/tareas">Ver todas →</a></div>
       <ul class="status">${list(st.jobs.map((j) => ({ name: j.name, pill: j.state })))}</ul></div>
     <div class="card box"><div class="box-head"><h3>${icon('server')}Servicios</h3><a href="/servicios">Ver todos →</a></div>
-      <ul class="status">${list(st.services.map((s) => ({ name: s.name, pill: s.proc ? pill('ok', 'Activo') : pill('bad', 'Detenido') })))}</ul></div>
+      <ul class="status">${list(st.services.map((s) => ({ name: s.name, pill: svcPill(s) })))}</ul></div>
   </div>`;
 }
 

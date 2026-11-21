@@ -145,5 +145,6 @@ async function runChecks() {
 }
 
 log('TizenXuper Health Monitor iniciado');
-runChecks();
+// Wait out the startup load: on the single-core B+ a check right at boot times out and sends a false alert
+setTimeout(runChecks, 60_000);
 setInterval(runChecks, CHECK_INTERVAL);
