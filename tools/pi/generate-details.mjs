@@ -23,21 +23,27 @@ const CALL_TIMEOUT_MS = 30_000;
 const log = (msg) => console.log(`[details] ${msg}`);
 const keyOf = (url) => crypto.createHash('sha1').update(url).digest('hex').slice(0, 20);
 
+/** Each title's id and the getItemData type to ask first, as detail() in magis-client.js: '1' for movies, '0' for the rest */
 function catalogIds(catalog) {
-  const ids = new Set();
+  const ids = new Map();
   const visit = (n) => {
     if (Array.isArray(n)) return n.forEach(visit);
     if (!n || typeof n !== 'object') return;
-    if (typeof n.id === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(n.id) && !n.collectionId && (n.poster || n.title)) ids.add(n.id);
+    if (typeof n.id === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(n.id) && !n.collectionId && (n.poster || n.title)) {
+      if (!ids.has(n.id)) ids.set(n.id, n.type === 'movie' || n.kind === 'película' ? '1' : '0');
+    }
     Object.values(n).forEach(visit);
   };
   visit(catalog.itemsByRoot || {});
   visit(catalog.recommends || {});
-  return [...ids];
+  return ids;
 }
 
-/** v4/getItemData for a title, trying the other type when the portal says it is the wrong one (as detail() does) */
-function fetchItem(client, id, type) {
+/**
+ * v4/getItemData for a title, trying the other type once when the portal says it is the wrong one (as detail() does).
+ * Always asking type '0' first failed for every movie: 197 of 526 calls on 2026-11-21.
+ */
+function fetchItem(client, id, type, retried = false) {
   return new Promise((resolve) => {
     let done = false;
     const timer = setTimeout(() => { if (!done) { done = true; resolve(null); } }, CALL_TIMEOUT_MS);
@@ -45,8 +51,8 @@ function fetchItem(client, id, type) {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      if (err && (err.portalCode === 'portal100006' || err.portalCode === 'portal100008') && type === '0') {
-        return resolve(fetchItem(client, id, '1'));
+      if (err && (err.portalCode === 'portal100006' || err.portalCode === 'portal100008') && !retried) {
+        return resolve(fetchItem(client, id, type === '0' ? '1' : '0', true));
       }
       resolve(!err && res && res.assetData ? res : null);
     });
@@ -69,16 +75,16 @@ async function main() {
   fs.mkdirSync(OUT, { recursive: true });
   const published = publishedKeys();
   const now = Date.now();
-  const due = ids.filter((id) => {
+  const due = [...ids.keys()].filter((id) => {
     try { return now - fs.statSync(path.join(OUT, `${id}.json`)).mtimeMs > MAX_AGE_MS; } catch { return true; }
   });
-  log(`${ids.length} titles in the catalog, ${due.length} to refresh`);
+  log(`${ids.size} titles in the catalog, ${due.length} to refresh`);
 
   const client = due.length ? createPortalClient() : null;
   let written = 0;
   let failed = 0;
   for (const id of due) {
-    const res = await fetchItem(client, id, '0');
+    const res = await fetchItem(client, id, ids.get(id));
     if (!res) { failed++; continue; }
     lightenImages(res, published);
     const file = path.join(OUT, `${id}.json`);
@@ -89,7 +95,7 @@ async function main() {
   }
 
   // Titles that left the catalog: kept a week for TVs still holding an older catalog
-  const keep = new Set(ids);
+  const keep = new Set(ids.keys());
   let removed = 0;
   for (const f of fs.readdirSync(OUT)) {
     const id = f.replace(/\.json(\.part)?$/, '');
