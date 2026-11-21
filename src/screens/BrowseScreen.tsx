@@ -811,9 +811,13 @@ export const BrowseScreen: React.FC<BrowseScreenProps> = ({
         {/* Right Column: Cards Grid */}
         <div className="browse-col-grid" ref={gridContainerRef}>
           {portalCols === null || gridState === 'loading' ? (
-            <div className="browse-empty-category">
-              <div className="browse-empty-icon">⏳</div>
-              <div className="browse-empty-text">Cargando títulos…</div>
+            // Cards of the same size as the titles (as in Filtros): the grid does not jump when they arrive
+            <div className="browse-cards-grid-track">
+              <div className="browse-cards-grid" aria-label="Cargando títulos">
+                {Array.from({ length: COLS * 3 }, (_, i) => (
+                  <div key={i} className="filter-skeleton skeleton-shimmer" style={{ height: CARD_H }} />
+                ))}
+              </div>
             </div>
           ) : gridState === 'error' ? (
             <div className="browse-empty-category">
