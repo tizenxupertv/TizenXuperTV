@@ -642,7 +642,11 @@ export const VodDetailView: React.FC<VodDetailViewProps> = ({
   return (
     <div className="vod-detail-screen" ref={rootScrollRef}>
       {/* Immersive Cinema Backdrop */}
-      <div className="vod-detail-backdrop">
+      <div
+        className="vod-detail-backdrop"
+        // The tiny preview under the backdrop while it loads (no CSS blur: the upscaling blurs it)
+        style={currentItem.backdropThumb ? { backgroundImage: `url('${currentItem.backdropThumb}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+      >
         <img
           className="vod-detail-backdrop-img"
           src={backdropUrl}

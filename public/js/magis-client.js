@@ -2390,6 +2390,38 @@
     'https://cdn.jsdelivr.net/gh/tizenxupertv/TizenXuperTV@catalog-data',
     'https://raw.githubusercontent.com/tizenxupertv/TizenXuperTV/catalog-data'
   ];
+  // A title's details as the portal returns them (v4/getItemData), published by the Pi for the catalog's titles
+  var STATIC_DETAIL_BASE = 'https://tizenxuper-img.pages.dev/data/detail/';
+
+  /** callback(data) with the published details, or callback(null) when missing, slow or the static catalog is off */
+  function fetchStaticDetail(cid, callback) {
+    if (window.__XUPER_SKIP_STATIC_CATALOG__ || typeof fetch !== 'function') return callback(null);
+    var done = false;
+    var tTry = Date.now();
+    var timer = setTimeout(function () {
+      if (done) return;
+      done = true;
+      logCall('json/detail', 'tizenxuper-img.pages.dev', new Error('sin respuesta'), Date.now() - tTry);
+      callback(null);
+    }, 2500);
+    fetch(STATIC_DETAIL_BASE + encodeURIComponent(cid) + '.json').then(function (res) {
+      return res && res.ok ? res.json() : null;
+    }).then(function (data) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      var ok = !!(data && data.assetData);
+      if (ok) logCall('json/detail', 'tizenxuper-img.pages.dev', null, Date.now() - tTry);
+      // Out of the promise chain: an error while building the detail must not be swallowed by .catch below
+      setTimeout(function () { callback(ok ? data : null); }, 0);
+    }).catch(function () {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      callback(null);
+    });
+  }
+
   var staticLiveData = null;
   var staticLiveInflight = null;
   var staticLiveFailedAt = 0;
@@ -3084,8 +3116,7 @@
   function detail(contentId, callback) {
     var cid = trim(contentId);
     if (!cid) return callback(new Error('Missing contentId'));
-    ensureSession(function (err) {
-      if (err) return callback(err);
+    {
       var local = findItemInLocalCatalogs(cid) || itemCache[cid];
       var initialType = (local && (local.kind === 'película' || local.type === 'movie' || local.programType === 'movie')) ? '1' : '0';
 
@@ -3107,7 +3138,7 @@
         });
       }
 
-      requestItem(initialType, function (dErr, dRes) {
+      function onItem(dErr, dRes) {
         if (dErr) {
           if (local) {
             return callback(null, { item: local, episodes: [], seasons: [] });
@@ -3120,6 +3151,10 @@
           return callback(new Error('No item data returned'));
         }
         var item = itemFromAsset(asset, local ? local.category : '', null);
+        if (!item) {
+          if (local) return callback(null, { item: local, episodes: [], seasons: [] });
+          return callback(new Error('No item data returned'));
+        }
         if (local) {
           item.row = local.row;
           item.category = local.category;
@@ -3192,8 +3227,18 @@
           }
         }
         callback(null, { item: item, episodes: episodes, seasons: seasons });
+      }
+
+      // The Pi publishes the details of the catalog's titles (tools/pi/generate-details.mjs): when one is there,
+      // no session and no portal call
+      fetchStaticDetail(cid, function (staticRes) {
+        if (staticRes) return onItem(null, staticRes);
+        ensureSession(function (err) {
+          if (err) return callback(err);
+          requestItem(initialType, onItem);
+        });
       });
-    });
+    }
   }
 
   /* Size of a ranked row from its name ("Películas TOP15 clasificadas" → 15), 0 for any other row */

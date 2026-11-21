@@ -437,9 +437,13 @@ class CatalogService {
         }
         if (res && res.item) {
           const detailItem = normalizeItem(res.item, 0);
-          if (!detailItem.backdrop && item.backdrop) detailItem.backdrop = item.backdrop;
+          // The page opened with the catalog's light copy: swapping it for the details' artwork (another picture,
+          // the 2-4 MB original) made the backdrop blink
+          if ((!detailItem.backdrop || isLightCopy(item.backdrop)) && item.backdrop) detailItem.backdrop = item.backdrop;
           if (!detailItem.poster && item.poster) detailItem.poster = item.poster;
-          if (!detailItem.landscape && item.landscape) detailItem.landscape = item.landscape;
+          if ((!detailItem.landscape || isLightCopy(item.landscape)) && item.landscape) detailItem.landscape = item.landscape;
+          if (!detailItem.posterThumb) detailItem.posterThumb = item.posterThumb;
+          if (!detailItem.backdropThumb) detailItem.backdropThumb = item.backdropThumb;
           detailItem.posterAlternates = collectPosterAlternates(
             detailItem.poster,
             detailItem.posterAlternates,

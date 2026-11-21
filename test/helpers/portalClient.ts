@@ -21,7 +21,7 @@ export interface FakeRequest {
  * The portal client (public/js/magis-client.js) loaded as on a TV, with a clock the test moves and requests the test
  * answers. `onRequest` is called for each request the client sends.
  */
-export function loadPortalClient(onRequest: (req: FakeRequest) => void) {
+export function loadPortalClient(onRequest: (req: FakeRequest) => void, globals: Record<string, unknown> = {}) {
   let now = 1_800_000_000_000;
   let nextId = 1;
   const timers = new Map<number, { at: number; fn: () => void }>();
@@ -84,6 +84,8 @@ export function loadPortalClient(onRequest: (req: FakeRequest) => void) {
       removeItem: (k: string) => { delete stored[k]; }
     }
   };
+  // Extra globals for a test, such as a fake fetch for the static files
+  Object.assign(sandbox, globals);
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(JS_DIR, 'crypto-js.min.js'), 'utf8'), sandbox);
