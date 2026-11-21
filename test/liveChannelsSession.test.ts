@@ -55,3 +55,27 @@ test('live channels on a direct session go to the portal with that session\'s us
   assert.equal(livePayloads[0].userToken, 'tok_1');
   assert.equal(String(livePayloads[0].columnId), '76206');
 });
+
+test('a category with more than 1000 channels comes back whole', () => {
+  // "Todos los canales" has about 1035: 20 full pages and a short one. The cap used to stop at 20 pages
+  const { client, advance } = loadPortalClient(req => {
+    const endpoint = req.url.split('/api/portalCore/')[1] || '';
+    if (endpoint === 'v3/snToken') return req.respond(200, JSON.stringify({ returnCode: '0', data: { snToken: 's' } }));
+    if (endpoint === 'v8/active') return req.respond(200, JSON.stringify({ returnCode: '0', data: { userId: 'u', userToken: 't' } }));
+    if (endpoint === 'v6/getLiveData') {
+      const page = Number(secUnwrap(req.body || '').pageNum);
+      const count = page <= 20 ? 50 : page === 21 ? 35 : 0;
+      const channelList = Array.from({ length: count }, (_, i) => ({ channelCode: `p${page}c${i}`, name: 'x', channelNumber: i }));
+      return req.respond(200, JSON.stringify({ returnCode: '0', data: { channelList } }));
+    }
+    req.fail();
+  });
+
+  const answers: any[] = [];
+  client.getAllLiveChannels(76182, (err: any, list: any[]) => answers.push({ err, list }));
+  for (let i = 0; i < 200; i++) advance(300);
+
+  assert.equal(answers.length, 1);
+  assert.equal(answers[0].err, null);
+  assert.equal(answers[0].list.length, 1035);
+});

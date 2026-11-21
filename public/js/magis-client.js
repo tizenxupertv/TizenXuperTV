@@ -2746,7 +2746,7 @@
 
   var liveResolveCache = {};
   // A category can hold more channels than one page (50): the rest used to be left out without a word
-  var LIVE_MAX_PAGES = 20;
+  var LIVE_MAX_PAGES = 40;
 
   /**
    * Every channel of a category: its pages one after another, up to LIVE_MAX_PAGES. callback(err, channels).
