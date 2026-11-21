@@ -5,7 +5,7 @@
  * points at an image that is not up yet. tizenxuper-tv.pages.dev/data/ redirects its catalog files here.
  *
  * Free Pages allows 500 deployments a month. A change a TV would show (titles, rows, details) goes out at most every
- * 3 hours; images alone wait up to 12 hours to ride along with one; and no more than MONTH_BUDGET automatic
+ * 3 hours; images and the Epic+ fallback snapshots wait up to 12 hours to ride along with one; and no more than MONTH_BUDGET automatic
  * deployments go out in a calendar month.
  * Uses the direct-upload API (the calls wrangler makes; wrangler does not run on ARMv6).
  *
@@ -181,10 +181,14 @@ async function main() {
   // What a TV would see differently: titles, rows, details. Compared with what the last deployment carried.
   const sigs = contentSigs(dataFiles);
   const before = site.sigs || {};
-  const changedFiles = dataFiles.filter((f) => before[f] !== sigs[f]).length + Object.keys(before).filter((f) => !(f in sigs)).length;
+  const changed = [...dataFiles.filter((f) => before[f] !== sigs[f]), ...Object.keys(before).filter((f) => !(f in sigs))];
+  // The Epic+ snapshots are only the TVs' fallback and the agenda changes all day: they wait like images
+  const minor = (f) => /^epic-/.test(f);
+  const changedFiles = changed.filter((f) => !minor(f)).length;
+  const minorFiles = changed.filter(minor).length;
 
-  if (!changedFiles && !newImages && !goneImages && !newerFiles) return log('nothing new to publish');
-  const what = `${changedFiles} data files changed, ${newImages} new images${goneImages ? `, ${goneImages} to remove` : ''}`;
+  if (!changedFiles && !minorFiles && !newImages && !goneImages && !newerFiles) return log('nothing new to publish');
+  const what = `${changedFiles} data files changed, ${newImages} new images${goneImages ? `, ${goneImages} to remove` : ''}${minorFiles ? `, Epic+ snapshots changed` : ''}`;
   const gap = changedFiles ? MIN_GAP_MS : IMAGE_ONLY_GAP_MS;
   const wait = (site.lastDeployAt || 0) + gap - Date.now();
   if (wait > 0 && !force) return log(`changes waiting (${what}); next deployment allowed in ${Math.ceil(wait / 60000)} min`);
