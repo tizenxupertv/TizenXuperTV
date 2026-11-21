@@ -48,6 +48,43 @@ test('a title the Pi published opens without a session or a portal call', async 
   assert.match(asked[0], /^https:\/\/tizenxuper-img\.pages\.dev\/data\/detail\/SERIE1\.json$/);
 });
 
+test('the first See-all pages of a home row come from the Pi; later pages and adult columns from the portal', async () => {
+  const asked: string[] = [];
+  const page = { items: [{ id: 'T1', title: 'Uno', poster: 'https://x.invalid/p.jpg' }, { id: 'T2', title: 'Dos' }], total: 120 };
+  const fetchFake = (url: string) => {
+    asked.push(url);
+    const ok = /\/data\/column\/555-[12]\.json$/.test(url);
+    return Promise.resolve({ ok, status: ok ? 200 : 404, json: () => Promise.resolve(page) });
+  };
+  const portal: string[] = [];
+  const { client, advance } = loadPortalClient(req => {
+    const endpoint = req.url.split('/api/portalCore/')[1] || '';
+    portal.push(endpoint);
+    if (endpoint === 'v3/snToken') return req.respond(200, JSON.stringify({ returnCode: '0', data: { snToken: 's' } }));
+    if (endpoint === 'v8/active') return req.respond(200, JSON.stringify({ returnCode: '0', data: { userId: 'u', userToken: 't' } }));
+    if (endpoint === 'v3/getShelveData') return req.respond(200, JSON.stringify({ returnCode: '0', data: { assetList: [], assetListTotalSize: 0 } }));
+    req.fail();
+  }, { fetch: fetchFake });
+
+  const first: any[] = [];
+  client.columnPage(555, 1, 42, (err: any, res: any) => first.push({ err, res }));
+  await flush(advance);
+  assert.equal(first[0].err, null);
+  assert.deepEqual(Array.from(first[0].res.items, (i: any) => i.id), ['T1', 'T2']);
+  assert.equal(first[0].res.total, 120);
+  assert.equal(portal.length, 0, 'page 1 asked nothing of the portal');
+
+  client.columnPage(555, 3, 42, () => {});
+  await flush(advance);
+  assert.ok(portal.includes('v3/getShelveData'), 'page 3 goes to the portal');
+  assert.ok(!asked.some(u => /555-3/.test(u)), 'and is not looked for on the Pi');
+
+  const before = asked.length;
+  client.columnPage(555, 1, 42, () => {}, { restricted: true });
+  await flush(advance);
+  assert.equal(asked.length, before, 'an adult column is never read from the public site');
+});
+
 test('a title the Pi did not publish goes to the portal as before', async () => {
   const asked: string[] = [];
   const portal: string[] = [];

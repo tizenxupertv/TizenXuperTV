@@ -48,8 +48,11 @@ rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 node "$SCRIPT_DIR/generate-static-catalog.mjs" --out "$OUT_DIR" 2>&1
 
-# Light copies of the 2-4 MB backdrops (never fails the run: on error the original images stay)
-node "$SCRIPT_DIR/optimize-images.mjs" "$OUT_DIR/portal-catalog.json" 2>&1
+# First two See-all pages of every home row (a failure only leaves See-all to the portal)
+node "$SCRIPT_DIR/generate-columns.mjs" "$OUT_DIR/portal-catalog.json" "$OUT_DIR/column" 2>&1 || echo "[$(now)] Páginas de «Ver todo» omitidas"
+
+# Light copies of the 2-4 MB backdrops and previews, for the catalog and those pages (never fails the run)
+node "$SCRIPT_DIR/optimize-images.mjs" "$OUT_DIR/portal-catalog.json" "$OUT_DIR"/column/*.json 2>&1
 
 # Push a catalog-data en GitHub
 echo "[$(now)] Push a catalog-data..."
@@ -85,6 +88,14 @@ else
   mkdir -p "$SCRIPT_DIR/site-data"
   cp "$OUT_DIR/live-channels.json" "$OUT_DIR/portal-catalog.json" "$SCRIPT_DIR/site-data/"
 fi
+
+# See-all pages for Pages: only the ones that changed are rewritten, so an unchanged hour triggers no deployment
+mkdir -p "$SCRIPT_DIR/site-data/column"
+for f in "$OUT_DIR"/column/*.json; do
+  [ -f "$f" ] || continue
+  dest="$SCRIPT_DIR/site-data/column/$(basename "$f")"
+  cmp -s "$f" "$dest" || cp "$f" "$dest"
+done
 
 # Images and catalog to Cloudflare Pages: at most one deployment every 90 min, never fails the run
 cd "$SCRIPT_DIR"
