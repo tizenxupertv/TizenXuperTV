@@ -30,10 +30,13 @@ if crontab -l 2>/dev/null | grep -F "$SCRIPT_DIR/update-catalog.sh" | grep -qvxF
 fi
 add_cron "$CATALOG_CRON"
 
-# 3. Recortar los logs cada noche para no llenar la tarjeta SD
+# 3. Fichas de los títulos del catálogo, una vez al día (las publica la siguiente actualización del catálogo)
+add_cron "10 4 * * * cd $SCRIPT_DIR && PATH=$HOME/.local/bin:/usr/bin:/bin flock -w 3600 /tmp/tizenxuper-catalog.lock node generate-details.mjs >> $SCRIPT_DIR/details.log 2>&1"
+
+# 4. Recortar los logs cada noche para no llenar la tarjeta SD
 add_cron "15 3 * * * /bin/bash $SCRIPT_DIR/rotate-logs.sh"
 
-# 4. Los servicios permanentes ya no arrancan con @reboot: los lleva systemd (ver abajo)
+# 5. Los servicios permanentes ya no arrancan con @reboot: los lleva systemd (ver abajo)
 if crontab -l 2>/dev/null | grep -qF "@reboot cd $SCRIPT_DIR &&"; then
   crontab -l | grep -vF "@reboot cd $SCRIPT_DIR &&" | crontab -
   echo "   Quitadas las líneas @reboot antiguas"

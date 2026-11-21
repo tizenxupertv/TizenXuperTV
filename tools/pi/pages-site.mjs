@@ -84,7 +84,12 @@ async function main() {
   const force = process.argv.includes('--force');
   const site = (() => { try { return JSON.parse(fs.readFileSync(SITE_STATE, 'utf8')); } catch { return { lastDeployAt: 0 }; } })();
   const keys = fs.readdirSync(CACHE).filter((f) => /^[a-f0-9]{20}\.jpg$/.test(f)).map((f) => f.slice(0, -4));
-  const dataFiles = fs.existsSync(DATA) ? fs.readdirSync(DATA).filter((f) => f.endsWith('.json')) : [];
+  // The catalog files and the titles' details (generate-details.mjs), relative to site-data/
+  const listJson = (sub) => {
+    const dir = path.join(DATA, sub);
+    return fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => (sub ? `${sub}/${f}` : f)) : [];
+  };
+  const dataFiles = [...listJson(''), ...listJson('detail')];
   const published = publishedKeys();
   const newImages = keys.filter((k) => !published.has(k)).length;
   const newData = dataFiles.some((f) => fs.statSync(path.join(DATA, f)).mtimeMs > (site.lastDeployAt || 0));
@@ -100,7 +105,7 @@ async function main() {
   const { uploaded, id } = await deploy(loadEnv(), entries);
   fs.writeFileSync(STATE, JSON.stringify(keys));
   fs.writeFileSync(SITE_STATE, JSON.stringify({ lastDeployAt: Date.now(), deployment: id }));
-  log(`deployed ${keys.length} images and ${dataFiles.length} catalog files (${uploaded} uploaded), ${id}`);
+  log(`deployed ${keys.length} images and ${dataFiles.length} data files (${uploaded} uploaded), ${id}`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
