@@ -2607,11 +2607,8 @@
     function runGetLiveData(retried) {
       ensureSession(function (err) {
         if (err) return callback(err);
-        enqueue(function (release) {
+        (function () {
           var livePayload = {
-            userToken: session.userToken,
-            userId: session.userId,
-            portalCode: PORTAL_CODE,
             columnId: colKey,
             dataVersion: '',
             pageSize: pSize,
@@ -2620,7 +2617,6 @@
           };
 
           function handleLiveResponse(lErr, lRes) {
-            release();
             if (lErr) {
               if (!retried && isSessionError(lErr)) {
                 clearSession();
@@ -2676,8 +2672,10 @@
             callback(null, channels, hasMore);
           }
 
-          postHttp('v6/getLiveData', livePayload, handleLiveResponse);
-        });
+          // Through call() like every other portal request: a direct session keeps its user and token in
+          // directSession, so the relay-only postHttp sent this one with both empty and the portal refused it
+          call('v6/getLiveData', livePayload, { deviceFields: false }, handleLiveResponse);
+        })();
       });
     }
 
