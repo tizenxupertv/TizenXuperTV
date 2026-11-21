@@ -93,7 +93,6 @@ function createDirectMagisClient() {
   ctx.self = ctx;
   ctx.__XUPER_SKIP_STATIC_CATALOG__ = true;
 
-  let hostIdx = 0;
   function XMLHttpRequest() {
     this._headers = {};
   }
