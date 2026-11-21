@@ -2390,29 +2390,30 @@
     'https://cdn.jsdelivr.net/gh/tizenxupertv/TizenXuperTV@catalog-data',
     'https://raw.githubusercontent.com/tizenxupertv/TizenXuperTV/catalog-data'
   ];
-  // A title's details as the portal returns them (v4/getItemData), published by the Pi for the catalog's titles
-  var STATIC_DETAIL_BASE = 'https://tizenxuper-img.pages.dev/data/detail/';
+  // Files the Pi publishes for what the portal would answer the same to everyone: title details (detail/<id>.json,
+  // the v4/getItemData answer) and the first See-all pages of the home rows (column/<id>-<page>.json)
+  var STATIC_SITE_BASE = 'https://tizenxuper-img.pages.dev/data/';
 
-  /** callback(data) with the published details, or callback(null) when missing, slow or the static catalog is off */
-  function fetchStaticDetail(cid, callback) {
+  /** callback(data) with the published file when isValid(data), or callback(null) when missing, slow or off */
+  function fetchSiteJson(rel, route, isValid, callback) {
     if (window.__XUPER_SKIP_STATIC_CATALOG__ || typeof fetch !== 'function') return callback(null);
     var done = false;
     var tTry = Date.now();
     var timer = setTimeout(function () {
       if (done) return;
       done = true;
-      logCall('json/detail', 'tizenxuper-img.pages.dev', new Error('sin respuesta'), Date.now() - tTry);
+      logCall(route, 'tizenxuper-img.pages.dev', new Error('sin respuesta'), Date.now() - tTry);
       callback(null);
     }, 2500);
-    fetch(STATIC_DETAIL_BASE + encodeURIComponent(cid) + '.json').then(function (res) {
+    fetch(STATIC_SITE_BASE + rel).then(function (res) {
       return res && res.ok ? res.json() : null;
     }).then(function (data) {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      var ok = !!(data && data.assetData);
-      if (ok) logCall('json/detail', 'tizenxuper-img.pages.dev', null, Date.now() - tTry);
-      // Out of the promise chain: an error while building the detail must not be swallowed by .catch below
+      var ok = !!(data && isValid(data));
+      if (ok) logCall(route, 'tizenxuper-img.pages.dev', null, Date.now() - tTry);
+      // Out of the promise chain: an error while building the answer must not be swallowed by .catch below
       setTimeout(function () { callback(ok ? data : null); }, 0);
     }).catch(function () {
       if (done) return;
@@ -2420,6 +2421,10 @@
       clearTimeout(timer);
       callback(null);
     });
+  }
+
+  function fetchStaticDetail(cid, callback) {
+    fetchSiteJson('detail/' + encodeURIComponent(cid) + '.json', 'json/detail', function (d) { return !!d.assetData; }, callback);
   }
 
   var staticLiveData = null;
@@ -3614,6 +3619,28 @@
     var key = columnId + ':' + pageNum + ':' + pageSize;
     var hit = shelfCache[key];
     if (hit && Date.now() < hit.until) return callback(null, { items: hit.items, total: hit.total, cached: true });
+    // The first two See-all pages of the home rows come from the Pi (tools/pi/generate-columns.mjs): no session, no
+    // portal call. Other pages, sizes and the restricted columns ask the portal as before.
+    if (!isRestrictedCol && pageSize === 42 && pageNum <= 2) {
+      return fetchSiteJson('column/' + encodeURIComponent(String(columnId)) + '-' + pageNum + '.json', 'json/column', function (d) {
+        return Array.isArray(d.items);
+      }, function (data) {
+        if (!data) return fromPortal();
+        var staticItems = [];
+        for (var si = 0; si < data.items.length; si++) {
+          if (data.items[si] && data.items[si].id) {
+            remember(data.items[si]);
+            staticItems.push(data.items[si]);
+          }
+        }
+        var staticTotal = parseInt(data.total, 10) || staticItems.length;
+        if (staticItems.length) shelfCache[key] = { until: Date.now() + 600000, items: staticItems, total: staticTotal };
+        callback(null, { items: staticItems, total: staticTotal, cached: false });
+      });
+    }
+    fromPortal();
+
+    function fromPortal() {
     ensureSession(function (err) {
       if (err) return callback(err);
       var body = { columnId: columnId, columnType: '2', pageNum: pageNum, pageSize: pageSize, numDisplay: null, encryptVersion: 0 };
@@ -3651,6 +3678,7 @@
         callback(null, { items: items, total: total, cached: false });
       });
     });
+    }
   }
 
   // Full catalog of a root, page by page; filters: { tags, year, originalCountry, audio } (portal values: English names, audio key)

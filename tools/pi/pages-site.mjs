@@ -84,12 +84,12 @@ async function main() {
   const force = process.argv.includes('--force');
   const site = (() => { try { return JSON.parse(fs.readFileSync(SITE_STATE, 'utf8')); } catch { return { lastDeployAt: 0 }; } })();
   const keys = fs.readdirSync(CACHE).filter((f) => /^[a-f0-9]{20}\.jpg$/.test(f)).map((f) => f.slice(0, -4));
-  // The catalog files and the titles' details (generate-details.mjs), relative to site-data/
+  // The catalog files, the titles' details (generate-details.mjs) and the See-all pages (generate-columns.mjs)
   const listJson = (sub) => {
     const dir = path.join(DATA, sub);
     return fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => (sub ? `${sub}/${f}` : f)) : [];
   };
-  const dataFiles = [...listJson(''), ...listJson('detail')];
+  const dataFiles = [...listJson(''), ...listJson('detail'), ...listJson('column')];
   const published = publishedKeys();
   const newImages = keys.filter((k) => !published.has(k)).length;
   const newData = dataFiles.some((f) => fs.statSync(path.join(DATA, f)).mtimeMs > (site.lastDeployAt || 0));

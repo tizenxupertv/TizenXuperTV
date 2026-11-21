@@ -8,7 +8,7 @@
  * The catalog then points at the copy only once that copy is published: an image that failed
  * keeps its original address, so a TV never loses a picture.
  *
- * Usage: node optimize-images.mjs <portal-catalog.json>   (rewrites the file in place)
+ * Usage: node optimize-images.mjs <portal-catalog.json> [more .json…]   (rewrites the files in place)
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -122,8 +122,9 @@ async function addThumbs(catalog) {
 }
 
 async function main() {
-  const catalogPath = process.argv[2];
-  const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+  // The catalog and the See-all pages (generate-columns.mjs) together: one budget of new copies for all of them
+  const paths = process.argv.slice(2);
+  const catalog = paths.map((p) => JSON.parse(fs.readFileSync(p, 'utf8')));
   fs.mkdirSync(CACHE, { recursive: true });
   const published = publishedKeys();
 
@@ -172,7 +173,7 @@ async function main() {
   } catch (e) {
     log(`previews skipped: ${e.message}`);
   }
-  fs.writeFileSync(catalogPath, JSON.stringify(catalog));
+  paths.forEach((p, i) => fs.writeFileSync(p, JSON.stringify(catalog[i])));
 }
 
 main().catch((err) => {
