@@ -32,7 +32,7 @@ const CHECK_INTERVAL   = 15 * 60 * 1000;   // 15 min
 // The pool is renewed every 6 h and the catalog every 3 h: one missed run is tolerated before alerting
 const MAX_POOL_AGE     = 13 * 60 * 60 * 1000;
 const MAX_CATALOG_AGE  = 7 * 60 * 60 * 1000;
-const hoursAgo = (ms) => `hace ${Math.round((Date.now() - ms) / 3600000)} h`;
+const hoursAgo = (ms) => { const min = Math.round((Date.now() - ms) / 60000); return min < 60 ? `hace ${min} min` : `hace ${Math.round(min / 60)} h`; };
 
 // ── Load secrets ────────────────────────────────────────────────────────────
 function loadEnv() {
@@ -64,17 +64,20 @@ async function tgSend(token, text) {
 }
 
 // ── Checks ───────────────────────────────────────────────────────────────────
+// Each returns { ok, text }: text is what the log line shows for it, whether it passed or not
 async function checkRelay() {
+  const t0 = Date.now();
   try {
     // /health and /session/ping never existed: the relay answered 401 to them, a false alarm on every restart
     const res = await fetch(`${RELAY_URL}/time`, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return { ok: false, reason: `HTTP ${res.status}` };
+    const ms = Date.now() - t0;
+    if (!res.ok) return { ok: false, text: `HTTP ${res.status}` };
     const body = await res.json().catch(() => null);
-    if (!body || body.ok !== true) return { ok: false, reason: 'respuesta inesperada de /time' };
-    if (body.relayMode === 'off') return { ok: false, reason: 'relay apagado (relayMode off)' };
-    return { ok: true };
+    if (!body || body.ok !== true) return { ok: false, text: 'respuesta inesperada de /time' };
+    if (body.relayMode === 'off') return { ok: false, text: 'apagado (relayMode off)' };
+    return { ok: true, text: `${ms} ms${body.relayMode && body.relayMode !== 'full' ? ` · modo ${body.relayMode}` : ''}` };
   } catch (e) {
-    return { ok: false, reason: e.message };
+    return { ok: false, text: e.message };
   }
 }
 
@@ -83,70 +86,58 @@ async function checkSessionPool() {
   try {
     const st = fs.statSync(POOL_FILE);
     const count = (fs.readFileSync(POOL_FILE, 'utf8').match(/"snToken"/g) || []).length;
-    if (!count) return { ok: false, reason: 'El pool desplegado no tiene sesiones' };
-    if (Date.now() - st.mtimeMs > MAX_POOL_AGE) return { ok: false, reason: `Pool sin renovar desde ${hoursAgo(st.mtimeMs)} (${count} sesiones)` };
-    return { ok: true };
+    const text = `${count} sesiones (${hoursAgo(st.mtimeMs)})`;
+    if (!count) return { ok: false, text: 'sin sesiones' };
+    return { ok: Date.now() - st.mtimeMs <= MAX_POOL_AGE, text };
   } catch (e) {
-    return { ok: false, reason: e.message };
+    return { ok: false, text: e.message };
   }
 }
 
 async function checkCatalog() {
   try {
     const st = fs.statSync(CATALOG_STAMP);
-    if (Date.now() - st.mtimeMs > MAX_CATALOG_AGE) return { ok: false, reason: `Última actualización completa ${hoursAgo(st.mtimeMs)}` };
-    return { ok: true };
+    return { ok: Date.now() - st.mtimeMs <= MAX_CATALOG_AGE, text: hoursAgo(st.mtimeMs) };
   } catch {
-    return { ok: false, reason: 'Ninguna actualización completa registrada todavía' };
+    return { ok: false, text: 'ninguna actualización completa todavía' };
   }
 }
 
 // ── Main loop ─────────────────────────────────────────────────────────────────
+const NAMES = { relay: 'relay', sessions: 'pool', catalog: 'catálogo' };
+const ALERTS = {
+  relay:    '🔴 <b>Relay Worker caído</b>',
+  sessions: '⚠️ <b>Pool de sesiones vacío o sin renovar</b>',
+  catalog:  '📋 <b>Catálogo sin actualizar (>7 h)</b>',
+};
+const RECOVERIES = {
+  relay:    '🟢 Relay Worker recuperado',
+  sessions: '🟢 Pool de sesiones OK',
+  catalog:  '🟢 Catálogo actualizado',
+};
+const plain = (html) => html.replace(/<[^>]+>/g, '');
 const alertState = { relay: false, sessions: false, catalog: false };
 
 async function runChecks() {
-  const env = loadEnv();
-  const token = env.TELEGRAM_TOKEN;
-
-  const [relay, sessions, catalog] = await Promise.all([
-    checkRelay(),
-    checkSessionPool(),
-    checkCatalog(),
-  ]);
-
+  const token = loadEnv().TELEGRAM_TOKEN;
+  const [relay, sessions, catalog] = await Promise.all([checkRelay(), checkSessionPool(), checkCatalog()]);
   const results = { relay, sessions, catalog };
-  const labels  = {
-    relay:    '🔴 <b>Relay Worker caído</b>',
-    sessions: '⚠️ <b>Pool de sesiones vacío o expirado</b>',
-    catalog:  '📋 <b>Catálogo sin actualizar (>7 h)</b>',
-  };
-  const recovLabels = {
-    relay:    '🟢 Relay Worker recuperado',
-    sessions: '🟢 Pool de sesiones OK',
-    catalog:  '🟢 Catálogo actualizado',
-  };
+
+  // One line per round: "✓ relay 180 ms · ✓ pool 200 sesiones (hace 1 h) · ✓ catálogo hace 1 h"
+  log(Object.entries(results).map(([k, r]) => `${r.ok ? '✓' : '✗'} ${NAMES[k]} ${r.text}`).join(' · '));
 
   for (const [key, result] of Object.entries(results)) {
-    if (!result.ok && !alertState[key]) {
-      // Nueva falla — alertar
-      alertState[key] = true;
-      log(`ALERT ${key}: ${result.reason}`);
-      await tgSend(token, `${labels[key]}\n\n<code>${result.reason}</code>\n\n— Pi Monitor`);
-    } else if (result.ok && alertState[key]) {
-      // Recuperado — notificar
-      alertState[key] = false;
-      log(`RECOVERED ${key}`);
-      await tgSend(token, `${recovLabels[key]}\n\n— Pi Monitor`);
-    } else if (!result.ok) {
-      // Already alerted: no new message, but the log must not say OK
-      log(`STILL FAILING ${key}: ${result.reason}`);
-    } else {
-      log(`OK ${key}`);
-    }
+    let msg = null;
+    if (!result.ok && !alertState[key]) msg = `${ALERTS[key]}\n\n<code>${result.text}</code>\n\n— Pi Monitor`;
+    else if (result.ok && alertState[key]) msg = `${RECOVERIES[key]}\n\n— Pi Monitor`;
+    if (!msg) continue;
+    alertState[key] = !result.ok;
+    const sent = await tgSend(token, msg).catch(() => false);
+    log(`📨 Telegram${sent ? '' : ' (no se pudo enviar)'}: ${plain(result.ok ? RECOVERIES[key] : ALERTS[key]).replace(/^\S+\s/, '')}`);
   }
 }
 
-log('TizenXuper Health Monitor iniciado');
+log('Monitor de salud iniciado: revisa relay, pool y catálogo cada 15 min');
 // Wait out the startup load: on the single-core B+ a check right at boot times out and sends a false alert
 setTimeout(runChecks, 60_000);
 setInterval(runChecks, CHECK_INTERVAL);
