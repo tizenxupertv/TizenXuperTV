@@ -1055,14 +1055,18 @@
     var tStart = Date.now();
     var lastStatus = 0;
     var failedHosts = [];
+    var sawVersionGone = false;
 
     function tryHost() {
       if (finished) return;
       if (idx >= DIRECT_HOSTS.length || Date.now() - tStart >= REQUEST_MAX_MS) {
         finished = true;
-        var e = new Error(directPath + ': el portal no respondió');
+        var e = new Error(directPath + (sawVersionGone ? ' -> portal200001 versión no admitida en este endpoint' : ': el portal no respondió'));
         e.httpStatus = lastStatus;
         e.failedHostCount = failedHosts.length;
+        // Keep the code: without it the caller takes it for a network failure and sends the rest of the session
+        // through the relay, when only this endpoint refuses our version
+        if (sawVersionGone) e.portalCode = 'portal200001';
         logInfo = idx + ' hosts probados' + (lastStatus ? ', último HTTP ' + lastStatus : '');
         return done(e);
       }
@@ -1140,6 +1144,7 @@
         }
         var code = (resp.returnCode === undefined || resp.returnCode === null) ? '' : String(resp.returnCode);
         if (code === 'portal200001') {
+          sawVersionGone = true;
           failedHosts.push(host);
           return tryHost();
         }
