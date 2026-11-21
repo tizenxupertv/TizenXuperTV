@@ -11,8 +11,9 @@ const DIR = path.dirname(fileURLToPath(import.meta.url));
 const CLK_TCK = 100;
 
 const JOBS = [
-  { id: 'refresh', name: 'Renovar pool de sesiones', minute: 0, hourStep: 6, every: 'Cada 6 h', script: 'refresh-and-deploy.sh', log: 'relay-refresh.log' },
-  { id: 'catalog', name: 'Actualizar catálogo', minute: 30, hourStep: 1, every: 'Cada hora (:30)', script: 'update-catalog.sh', log: 'catalog.log' },
+  // The schedule is read from the crontab (scheduleOf), so the panel follows install-cron.sh without edits here
+  { id: 'refresh', name: 'Renovar pool de sesiones', script: 'refresh-and-deploy.sh', log: 'relay-refresh.log' },
+  { id: 'catalog', name: 'Actualizar catálogo', script: 'update-catalog.sh', log: 'catalog.log' },
 ];
 
 const SERVICES = [
@@ -139,12 +140,31 @@ function deviceCard() {
     <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div>`;
 }
 
-function nextRun(job, now = new Date()) {
+/**
+ * A job's schedule from its crontab line: a fixed minute and an hour field of '*', '*\/N', 'H' or 'H1,H2'.
+ * Returns { every, hours } (hours: the hours of the day it runs), or null when the job is not in the crontab.
+ */
+function scheduleOf(job, cronText) {
+  const line = cronText.split('\n').find((l) => l.includes(`/${job.script}`));
+  const f = line && line.trim().split(/\s+/);
+  if (!f || !/^\d+$/.test(f[0]) || f[2] !== '*' || f[3] !== '*' || f[4] !== '*') return line ? { every: f.slice(0, 5).join(' '), hours: null } : null;
+  const minute = Number(f[0]);
+  const mm = String(minute).padStart(2, '0');
+  let hours = null;
+  let every = f.slice(0, 5).join(' ');
+  if (f[1] === '*') { hours = [...Array(24).keys()]; every = `Cada hora (:${mm})`; }
+  else if (/^\*\/\d+$/.test(f[1])) { const n = Number(f[1].slice(2)); hours = [...Array(24).keys()].filter((h) => h % n === 0); every = `Cada ${n} h (:${mm})`; }
+  else if (/^\d+(,\d+)*$/.test(f[1])) { hours = f[1].split(',').map(Number); every = hours.length === 1 ? `Diario, ${hours[0]}:${mm}` : `A las ${hours.map((h) => `${h}:${mm}`).join(', ')}`; }
+  return { every, hours, minute };
+}
+
+function nextRun(sched, now = new Date()) {
+  if (!sched || !sched.hours) return null;
   const d = new Date(now);
   d.setSeconds(0, 0);
   for (let i = 0; i < 1500; i++) {
     d.setMinutes(d.getMinutes() + 1);
-    if (d.getMinutes() === job.minute && d.getHours() % job.hourStep === 0) return d;
+    if (d.getMinutes() === sched.minute && sched.hours.includes(d.getHours())) return d;
   }
   return null;
 }
@@ -217,13 +237,14 @@ const PAGES = [
 ];
 
 async function status() {
-  const [procs, jobLogs] = await Promise.all([processes(), Promise.all(JOBS.map((j) => tail(j.log, 6)))]);
+  const [procs, jobLogs, cron] = await Promise.all([processes(), Promise.all(JOBS.map((j) => tail(j.log, 6))), crontab()]);
   const jobs = JOBS.map((j, i) => {
     const out = jobLogs[i];
     const isRunning = running.has(j.id) || procs.has(j.script);
     const failed = !isRunning && looksFailed(out.text);
     const state = isRunning ? pill('info', 'Ejecutando') : failed ? pill('bad', 'Falló') : out.mtime ? pill('ok', 'OK') : pill('idle', 'Sin datos');
-    return { ...j, out, isRunning, failed, state, next: nextRun(j) };
+    const sched = scheduleOf(j, cron);
+    return { ...j, out, isRunning, failed, state, every: sched ? sched.every : 'No programada', next: nextRun(sched) };
   });
   const services = SERVICES.map((s) => ({ ...s, proc: procs.get(s.script) }));
   return { jobs, services, jobProblems: jobs.filter((j) => j.failed).length, svcProblems: services.filter((s) => !s.proc && !s.optional).length };
