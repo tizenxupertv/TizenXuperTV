@@ -1225,14 +1225,21 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         <div className="live-col-header">
           <div className="live-header-lead">
             <span className="live-header-title">{activeCategory.name}</span>
-            <span className="live-header-sub">{channels.length} canales</span>
+            <span className="live-header-sub">
+              {channels.length === 0 && isLoadingChannels
+                ? (activeCategory.iptvListId ? 'Descargando la lista…' : 'Cargando…')
+                : `${channels.length} canales`}
+            </span>
           </div>
           {categoryBadge(activeCategory) && <span className="beta-pill">{categoryBadge(activeCategory)}</span>}
         </div>
 
         <div className="live-channel-vlist" ref={channelListRef}>
           {channels.length === 0 && isLoadingChannels ? (
-            <div className="live-loading-msg">{activeCategory.iptvListId ? 'Descargando la lista de canales...' : 'Cargando canales...'}</div>
+            // Rows of the channel cards' size: the list does not jump when the channels arrive
+            Array.from({ length: 10 }, (_, i) => (
+              <div key={i} className="row-skeleton skeleton-shimmer" style={{ height: CHANNEL_PITCH - 8 }} />
+            ))
           ) : channels.length === 0 ? (
             <div className="live-empty-msg">
               {activeCategory.isFav
