@@ -19,6 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { logTime } from './log-time.mjs';
+import { checkRelay, checkSessionPool, checkCatalog } from './health-checks.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REFRESH_LOG = path.join(__dirname, 'relay-refresh.log');
@@ -36,6 +37,8 @@ function loadEnv() {
   }
   return env;
 }
+
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 function log(msg) {
   const line = `[${logTime()}] ${msg}`;
@@ -64,13 +67,12 @@ async function getUpdates(token, offset) {
 // ── Command handlers ─────────────────────────────────────────────────────────
 async function handleRefresh(token, chatId) {
   await tgSend(token, chatId, '⏳ Iniciando renovación del pool de sesiones (unos 15 min en la Pi)...');
-  log('CMD /refresh — ejecutando refresh-and-deploy.sh');
-  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  log('/refresh: renovando el pool');
   try {
     const script = path.join(__dirname, 'refresh-and-deploy.sh');
     let out = '';
     const fd = fs.openSync(REFRESH_LOG, 'a');
-    fs.writeSync(fd, `\n[${logTime()}] ▶ Ejecutado desde Telegram (/refresh)\n`);
+    fs.writeSync(fd, `────────────────────────────────────────────────────────────\n[${logTime()}] ▶ Ejecutado desde Telegram (/refresh)\n`);
     const code = await new Promise((resolve, reject) => {
       const child = spawn('bash', [script], { cwd: __dirname });
       const onData = (b) => {
@@ -83,7 +85,7 @@ async function handleRefresh(token, chatId) {
       child.on('close', resolve);
     }).finally(() => fs.closeSync(fd));
     const tail = out.slice(-800); // últimas 800 chars para no exceder límite de TG
-    log(`CMD /refresh — terminó con código ${code}`);
+    log(`/refresh: terminó ${code === 0 ? 'bien' : `con código ${code}`}`);
     if (code !== 0) {
       await tgSend(token, chatId, `❌ <b>La renovación falló</b> (código ${code})\n\n<code>${esc(tail)}</code>`);
     } else if (/Omitido/.test(out)) {
@@ -92,30 +94,29 @@ async function handleRefresh(token, chatId) {
       await tgSend(token, chatId, `✅ <b>Pool renovado</b>\n\n<code>${esc(tail)}</code>`);
     }
   } catch (e) {
-    log(`CMD /refresh — ERROR: ${e.message}`);
+    log(`/refresh: error — ${e.message}`);
     await tgSend(token, chatId, `❌ Error en /refresh:\n<code>${esc(e.message.slice(0, 500))}</code>`);
   }
 }
 
 async function handleStatus(token, chatId) {
-  log('CMD /status');
-  const relay   = await fetch('https://tizenxuper-relay.tizenxupertv.workers.dev/health', { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? '✅ OK' : `❌ HTTP ${r.status}`).catch(e => `❌ ${e.message}`);
-  const pool    = await fetch('https://tizenxuper-relay.tizenxupertv.workers.dev/session/ping', { signal: AbortSignal.timeout(8000) }).then(r => r.status === 200 ? '✅ Sesiones vivas' : '⚠️ Pool vacío o expirado').catch(e => `❌ ${e.message}`);
+  const [relay, pool, catalog] = await Promise.all([checkRelay(), checkSessionPool(), checkCatalog()]);
+  const show = (r) => `${r.ok ? '✅' : '❌'} ${esc(r.text)}`;
   const uptime  = process.uptime();
   const h = Math.floor(uptime / 3600);
   const m = Math.floor((uptime % 3600) / 60);
   await tgSend(token, chatId,
     `📊 <b>Estado TizenXuper Pi</b>\n\n` +
-    `Worker relay: ${relay}\n` +
-    `Pool sesiones: ${pool}\n` +
+    `Relay: ${show(relay)}\n` +
+    `Pool de sesiones: ${show(pool)}\n` +
+    `Catálogo: ${show(catalog)}\n` +
     `Pi uptime: ${h}h ${m}m\n\n` +
     `— Pi Monitor`
   );
 }
 
 async function handlePing(token, chatId) {
-  log('CMD /ping');
-  await tgSend(token, chatId, `🟢 Pi viva — ${new Date().toUTCString()}`);
+  await tgSend(token, chatId, `🟢 Pi viva — ${logTime()}`);
 }
 
 // ── Main polling loop ─────────────────────────────────────────────────────────
@@ -123,12 +124,15 @@ async function main() {
   const env   = loadEnv();
   const token = env.TELEGRAM_TOKEN;
   let offset  = 0;
+  let pollErrors = 0;
 
-  log('TizenXuper Telegram Listener iniciado (long polling)');
+  log('Bot de Telegram iniciado: /status, /ping y /refresh');
 
   while (true) {
     try {
       const updates = await getUpdates(token, offset);
+      if (pollErrors >= 3) log(`Conexión con Telegram recuperada tras ${pollErrors} intentos fallidos`);
+      pollErrors = 0;
       for (const update of updates) {
         offset = update.update_id + 1;
         const msg = update.message;
@@ -140,7 +144,7 @@ async function main() {
 
         const cmd  = msg.text.split('@')[0].trim().toLowerCase();
         const chatId = msg.chat.id;
-        log(`CMD recibido: ${cmd} de ${fromId}`);
+        log(`Comando recibido: ${cmd}`);
 
         // Not awaited: a refresh takes ~15 min and /status or /ping must keep answering meanwhile
         if (cmd === '/refresh') handleRefresh(token, chatId);
@@ -149,7 +153,9 @@ async function main() {
       }
     } catch (e) {
       if (!e.message?.includes('AbortError')) {
-        log(`Poll error: ${e.message} — reintentando en 10s`);
+        // A short network drop fails one or two polls: only a run of failures is worth a line
+        pollErrors++;
+        if (pollErrors === 3) log(`Sin conexión con Telegram (${e.message}): reintentando cada 10 s`);
         await new Promise(r => setTimeout(r, 10000));
       }
     }

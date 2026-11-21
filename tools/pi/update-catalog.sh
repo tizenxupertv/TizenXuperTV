@@ -17,6 +17,9 @@ export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/.env.pi"
 OUT_DIR="/tmp/tizenxuper-catalog"
+took() { local s=$(( $(date +%s) - START )); echo "$((s / 60)) min $((s % 60)) s"; }
+# Portal calls, warnings and per-session lines are folded into summaries (log-filter.mjs)
+quiet() { node "$SCRIPT_DIR/log-filter.mjs"; }
 now() {
   # Same format as log-time.mjs: "Nov 21, 2026 12:58:27 am", the Pi's local time
   local m=(Ene Feb Mar Abr May Jun Jul Ago Sep Oct Nov Dic) mo d y t p
@@ -46,21 +49,24 @@ if [ -z "$GITHUB_TOKEN_TIZENXUPERTV" ]; then
   exit 1
 fi
 
-echo "[$(now)] Generando catálogo estático..."
+START=$(date +%s)
+RESULT="sin cambios"
+# A rule between runs, so each one stands apart in the log
+echo "────────────────────────────────────────────────────────────"
+echo "[$(now)] ▶ Catálogo: inicio"
 
 # Generar JSONs
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
-node "$SCRIPT_DIR/generate-static-catalog.mjs" --out "$OUT_DIR" 2>&1
+node "$SCRIPT_DIR/generate-static-catalog.mjs" --out "$OUT_DIR" 2>&1 | quiet
 
 # First two See-all pages of every home row (a failure only leaves See-all to the portal)
-node "$SCRIPT_DIR/generate-columns.mjs" "$OUT_DIR/portal-catalog.json" "$OUT_DIR/column" 2>&1 || echo "[$(now)] Páginas de «Ver todo» omitidas"
+node "$SCRIPT_DIR/generate-columns.mjs" "$OUT_DIR/portal-catalog.json" "$OUT_DIR/column" 2>&1 | quiet || echo "[$(now)] Páginas de «Ver todo» omitidas"
 
 # Light copies of the 2-4 MB backdrops and previews, for the catalog and those pages (never fails the run)
-node "$SCRIPT_DIR/optimize-images.mjs" "$OUT_DIR/portal-catalog.json" "$OUT_DIR"/column/*.json 2>&1
+node "$SCRIPT_DIR/optimize-images.mjs" "$OUT_DIR/portal-catalog.json" "$OUT_DIR"/column/*.json 2>&1 | quiet
 
 # Push a catalog-data en GitHub
-echo "[$(now)] Push a catalog-data..."
 rm -rf /tmp/pub-repo
 git clone -q --depth 1 --branch catalog-data \
   "https://x-access-token:${GITHUB_TOKEN_TIZENXUPERTV}@github.com/tizenxupertv/TizenXuperTV.git" \
@@ -78,7 +84,7 @@ same_content() {
   ' "$1" "$2"
 }
 if same_content live-channels.json "$OUT_DIR/live-channels.json" && same_content portal-catalog.json "$OUT_DIR/portal-catalog.json"; then
-  echo "[$(now)] Sin cambios en el catálogo"
+  :
 else
   # One commit that replaces the branch, so the public repository does not grow by a catalog copy every hour
   git checkout -q --orphan catalog-new
@@ -88,7 +94,7 @@ else
   git add live-channels.json portal-catalog.json
   git commit -q -m "chore(data): auto-update catalog from Pi ($(date -u +'%Y-%m-%d %H:%M UTC'))"
   git push -q --force origin HEAD:catalog-data 2>&1
-  echo "[$(now)] DONE — catálogo actualizado"
+  RESULT="catálogo nuevo en GitHub"
   # The same files for the Cloudflare Pages copy, which TVs read first (tizenxuper-tv.pages.dev/data redirects there)
   mkdir -p "$SCRIPT_DIR/site-data"
   cp "$OUT_DIR/live-channels.json" "$OUT_DIR/portal-catalog.json" "$SCRIPT_DIR/site-data/"
@@ -104,7 +110,8 @@ done
 
 # Images and catalog to Cloudflare Pages, only when something changed (see pages-site.mjs); never fails the run
 cd "$SCRIPT_DIR"
-node "$SCRIPT_DIR/pages-site.mjs" 2>&1
+node "$SCRIPT_DIR/pages-site.mjs" 2>&1 | quiet
 
 # Seen by health-monitor.mjs: the last run that got this far
 touch "$SCRIPT_DIR/.catalog-ok"
+echo "[$(now)] ■ Fin en $(took) · $RESULT"

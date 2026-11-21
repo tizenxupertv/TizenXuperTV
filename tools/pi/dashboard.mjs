@@ -10,6 +10,9 @@ const PORT = Number(process.env.DASHBOARD_PORT || 8080);
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const CLK_TCK = 100;
 
+// The panel's own log: starts, jobs run by hand and page errors (the service sends stdout nowhere)
+const dlog = (msg) => fs.appendFile(path.join(DIR, 'dashboard.log'), `[${logTime()}] ${msg}\n`).catch(() => {});
+
 const JOBS = [
   // The schedule is read from the crontab (scheduleOf), so the panel follows install-cron.sh without edits here
   { id: 'refresh', name: 'Renovar pool de sesiones', script: 'refresh-and-deploy.sh', log: 'relay-refresh.log' },
@@ -172,7 +175,8 @@ function nextRun(sched, now = new Date()) {
 function runJob(job) {
   if (running.has(job.id)) return;
   fs.open(path.join(DIR, job.log), 'a').then((fh) => {
-    fh.write(`\n[${logTime()}] ▶ Ejecutado manualmente desde el dashboard\n`);
+    fh.write(`────────────────────────────────────────────────────────────\n[${logTime()}] ▶ Ejecutado manualmente desde el panel\n`);
+    dlog(`Ejecución manual: ${job.name}`);
     const child = spawn('/bin/bash', [path.join(DIR, job.script)], { cwd: DIR, stdio: ['ignore', fh.fd, fh.fd] });
     running.set(job.id, child.pid);
     child.on('exit', (code) => {
@@ -528,9 +532,10 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(layout({ page: page.path, title: page.label, body, st, live: page.path === '/registros' }));
   } catch (e) {
+    dlog(`Error en ${req.url}: ${e.message}`);
     res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Error: ' + e.message);
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`Dashboard en http://0.0.0.0:${PORT}`));
+server.listen(PORT, '0.0.0.0', () => dlog(`Panel iniciado en el puerto ${PORT}`));

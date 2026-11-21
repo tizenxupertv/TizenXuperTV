@@ -17,6 +17,10 @@ now() {
   echo "${m[mo-1]} $d, $y $t ${p,,}"
 }
 
+took() { local s=$(( $(date +%s) - START )); echo "$((s / 60)) min $((s % 60)) s"; }
+# Portal calls, warnings and per-session lines are folded into summaries (log-filter.mjs)
+quiet() { node "$SCRIPT_DIR/log-filter.mjs"; }
+
 # Asegurar Node en PATH
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -40,13 +44,16 @@ if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
   exit 1
 fi
 
-echo "[$(now)] START — minando $SESSION_COUNT sesiones desde la Pi..."
+START=$(date +%s)
+# A rule between runs, so each one stands apart in the log
+echo "────────────────────────────────────────────────────────────"
+echo "[$(now)] ▶ Pool: minando $SESSION_COUNT sesiones"
 
 # 1. Minar sesiones (mint-worker sale con error y no toca el pool si no consigue suficientes)
-node "$SCRIPT_DIR/mint-worker.mjs" "$SESSION_COUNT" 1 "$POOL_FILE" 2>&1
+node "$SCRIPT_DIR/mint-worker.mjs" "$SESSION_COUNT" 1 "$POOL_FILE" 2>&1 | quiet
 
 # 2. Desplegar el Worker en Cloudflare directamente vía API REST
-echo "[$(now)] Desplegando Worker a Cloudflare..."
-node "$SCRIPT_DIR/deploy-via-api.mjs" 2>&1
+echo "[$(now)] Desplegando el Worker en Cloudflare"
+node "$SCRIPT_DIR/deploy-via-api.mjs" 2>&1 | quiet
 
-echo "[$(now)] DONE — Pool renovado y desplegado con éxito"
+echo "[$(now)] ■ Pool renovado y desplegado en $(took)"
