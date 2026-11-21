@@ -252,16 +252,18 @@ class EpicSportsService {
         }
 
         const normalizeEpicRegion = (c: any): string => {
-          const folder = String(c.folder || '').trim();
+          const folder = String(c.pais || c.folder || '').trim();
           if (!folder || folder.includes(',') || folder.toLowerCase() === 'otros') {
             return 'Latinoamérica';
           }
           return folder;
         };
 
-        // Match Epic+ PWA Canales tab: only stable Perelman channels, grouped by region
+        // Match Epic+ PWA Canales tab: stable Perelman channels, grouped by region
         // (Latinoamérica first, then Colombia, then remaining countries alphabetically)
-        const playable = rawList.filter((c: any) => c && c.fuente === 'perelman' && typeof c.url === 'string');
+        const playable = rawList.filter((c: any) =>
+          c && (c.fuente === 'perelman' || String(c.id || '').startsWith('pere-') || String(c.url || '').includes('/perelman/')) && typeof c.url === 'string'
+        );
 
         const regionOrder = (r: string) => {
           if (r === 'Colombia') return '0';

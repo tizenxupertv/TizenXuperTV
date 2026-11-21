@@ -246,18 +246,35 @@ async function main() {
 
   console.log('4. Fetching Epic+ Perelman channels...');
   try {
-    const epicRes = await fetch('https://epictvparaiphone.top/canales', {
+    const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+    const LOGO_BASE = 'https://epictvparaiphone.top';
+
+    let epicCookie = '';
+    try {
+      const pRes = await fetch(`${LOGO_BASE}/iphone/pulsera`, {
+        method: 'POST',
+        headers: {
+          'User-Agent': IPHONE_UA,
+          'Referer': `${LOGO_BASE}/iphone/`,
+          'Origin': LOGO_BASE
+        }
+      });
+      const setCookie = pRes.headers.get('set-cookie') || '';
+      const m = setCookie.match(/(__Host-pulsera=[^;]+)/);
+      if (m) epicCookie = m[1];
+    } catch (_) {}
+
+    const epicRes = await fetch(`${LOGO_BASE}/iphone/canales?pais=CO`, {
       headers: {
-        'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)',
-        'X-Llave': '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq',
-        'X-Aparato': epicAparato(),
-        'X-Pulsera': '1',
+        'User-Agent': IPHONE_UA,
+        'Referer': `${LOGO_BASE}/iphone/`,
+        ...(epicCookie ? { 'Cookie': epicCookie } : {}),
         'Accept': 'application/json'
       }
     });
     if (epicRes.ok) {
-      const epicRaw = await epicRes.json();
-      const LOGO_BASE = 'https://epictvparaiphone.top';
+      const epicData = await epicRes.json();
+      const epicRaw = Array.isArray(epicData) ? epicData : (epicData && epicData.canales ? epicData.canales : []);
       const logoById = {
         'epic-espn': `${LOGO_BASE}/logos/canales/ESPN_color.png?v=18`,
         'epic-espn2': `${LOGO_BASE}/logos/canales/ESPN_2_color.png?v=18`,
@@ -302,7 +319,7 @@ async function main() {
         'epic-dsportsplus': 'DSports+'
       };
       const normalizeRegion = (c) => {
-        const f = String(c.folder || '').trim();
+        const f = String(c.pais || c.folder || '').trim();
         return (!f || f.includes(',') || f.toLowerCase() === 'otros') ? 'Latinoamérica' : f;
       };
       const regionOrder = (r) => r === 'Latinoamérica' ? '0' : r === 'Colombia' ? '1' : '2' + r.toLowerCase();
@@ -314,7 +331,8 @@ async function main() {
       const seenEpic = new Set();
       const channels = [];
       for (const c of (Array.isArray(epicRaw) ? epicRaw : [])) {
-        if (!c || c.fuente !== 'perelman' || typeof c.url !== 'string') continue;
+        const isPerelman = (c && (c.fuente === 'perelman' || String(c.id || '').startsWith('pere-') || String(c.url || '').includes('/perelman/')));
+        if (!c || !isPerelman || typeof c.url !== 'string') continue;
         const rawId = String(c.id || '').replace(/^pere-/, '');
         const id = `epic-${rawId}`;
         if (!rawId || seenEpic.has(id)) continue;
