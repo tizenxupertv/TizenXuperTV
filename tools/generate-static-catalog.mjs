@@ -68,7 +68,11 @@ function createDirectMagisClient() {
       removeItem(k) { delete this._d[k]; }
     },
     location: { hostname: 'tizen.tv', protocol: 'file:' },
-    navigator: { userAgent: 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 9.0) AppleWebKit/537.36' }
+    navigator: { userAgent: 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 9.0) AppleWebKit/537.36' },
+    // Run as a TV so the client opens a direct session: from a residential IP (the Pi) the portal gives the full
+    // channel list there, while sessions and requests through the relay get a shorter one. From a datacenter the
+    // direct start is refused and the client falls back to the relay and its pool as before.
+    tizen: {}
   });
   ctx.window = ctx;
   ctx.globalThis = ctx;
@@ -164,6 +168,13 @@ async function main() {
       console.warn(`   [${cat.id}] ${cat.name}: FAILED (${e.message})`);
       channelsByCategory[String(cat.id)] = [];
     }
+  }
+
+  // Never publish a live catalog that lost its channels: every TV reads this file, an empty one empties them all
+  const totalChannels = Object.values(channelsByCategory).reduce((n, list) => n + list.length, 0);
+  const minChannels = Number(process.env.MIN_LIVE_CHANNELS || 200);
+  if (totalChannels < minChannels) {
+    throw new Error(`only ${totalChannels} live channels (minimum ${minChannels}); not writing live-channels.json`);
   }
 
   const liveOut = {
