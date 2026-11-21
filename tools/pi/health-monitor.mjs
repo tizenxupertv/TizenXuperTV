@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { logTime } from './log-time.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENV_FILE = path.join(__dirname, '.env.pi');
@@ -43,7 +44,7 @@ function loadEnv() {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function log(msg) {
-  const line = `[${new Date().toISOString()}] ${msg}`;
+  const line = `[${logTime()}] ${msg}`;
   console.log(line);
   fs.appendFileSync(LOG_FILE, line + '\n');
 }
