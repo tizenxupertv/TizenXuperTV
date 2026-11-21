@@ -57,15 +57,26 @@ git clone -q --depth 1 --branch catalog-data \
 cd /tmp/pub-repo
 git config user.name "TizenXuper Pi"
 git config user.email "pi@tizenxupertv.local"
-git checkout catalog-data 2>/dev/null || git checkout --orphan catalog-data
-git rm -rf . > /dev/null 2>&1 || true
+
+# generatedAt changes on every run: compare the content without it, or every hour would publish the same catalog
+same_content() {
+  node -e '
+    const fs = require("fs");
+    const read = (f) => { try { const j = JSON.parse(fs.readFileSync(f, "utf8")); delete j.generatedAt; return JSON.stringify(j); } catch { return null; } };
+    process.exit(read(process.argv[1]) !== null && read(process.argv[1]) === read(process.argv[2]) ? 0 : 1);
+  ' "$1" "$2"
+}
+if same_content live-channels.json "$OUT_DIR/live-channels.json" && same_content portal-catalog.json "$OUT_DIR/portal-catalog.json"; then
+  echo "[$(now)] Sin cambios en el catálogo"
+  exit 0
+fi
+
+# One commit that replaces the branch, so the public repository does not grow by a catalog copy every hour
+git checkout -q --orphan catalog-new
+git rm -rfq . > /dev/null 2>&1 || true
 cp "$OUT_DIR/live-channels.json" .
 cp "$OUT_DIR/portal-catalog.json" .
 git add live-channels.json portal-catalog.json
-if ! git diff --cached --quiet; then
-  git commit -m "chore(data): auto-update catalog from Pi ($(date -u +'%Y-%m-%d %H:%M UTC'))"
-  git push -q origin catalog-data --force 2>&1
-  echo "[$(now)] DONE — catálogo actualizado"
-else
-  echo "[$(now)] Sin cambios en el catálogo"
-fi
+git commit -q -m "chore(data): auto-update catalog from Pi ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+git push -q --force origin HEAD:catalog-data 2>&1
+echo "[$(now)] DONE — catálogo actualizado"
