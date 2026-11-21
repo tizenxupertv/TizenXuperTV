@@ -105,3 +105,6 @@ done
 # Images and catalog to Cloudflare Pages, only when something changed (see pages-site.mjs); never fails the run
 cd "$SCRIPT_DIR"
 node "$SCRIPT_DIR/pages-site.mjs" 2>&1
+
+# Seen by health-monitor.mjs: the last run that got this far
+touch "$SCRIPT_DIR/.catalog-ok"
