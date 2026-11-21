@@ -3,9 +3,9 @@
  * TizenXuper Pi — Health Monitor + Telegram Alerter
  *
  * Checks every 15 minutes:
- *   1. Cloudflare relay worker is responding
- *   2. Session pool has valid (non-expired) sessions
- *   3. Static catalog was updated recently (< 5 hours)
+ *   1. Cloudflare relay worker is responding (its open /time route: every other route needs a TV's signature)
+ *   2. The session pool the Pi last deployed is recent and not empty (relay-worker/src/sessionPool.js)
+ *   3. The catalog update ran recently (update-catalog.sh touches .catalog-ok when it finishes)
  *
  * Sends a Telegram message to the admin (SUPPORT_CHAT_ID) on failure.
  * Sends a recovery message when the service is back up.
@@ -25,10 +25,14 @@ const LOG_FILE = path.join(__dirname, 'health-monitor.log');
 
 // ── Config ─────────────────────────────────────────────────────────────────
 const RELAY_URL        = 'https://tizenxuper-relay.tizenxupertv.workers.dev';
-const CATALOG_RAW_URL  = 'https://raw.githubusercontent.com/tizenxupertv/TizenXuperTV/catalog-data/live-channels.json';
+const POOL_FILE        = path.join(__dirname, 'relay-worker', 'src', 'sessionPool.js');
+const CATALOG_STAMP    = path.join(__dirname, '.catalog-ok');
 const ADMIN_CHAT_ID    = '68683111';
 const CHECK_INTERVAL   = 15 * 60 * 1000;   // 15 min
-const MAX_CATALOG_AGE  = 5 * 60 * 60 * 1000; // 5 h
+// The pool is renewed every 6 h and the catalog every 3 h: one missed run is tolerated before alerting
+const MAX_POOL_AGE     = 13 * 60 * 60 * 1000;
+const MAX_CATALOG_AGE  = 7 * 60 * 60 * 1000;
+const hoursAgo = (ms) => `hace ${Math.round((Date.now() - ms) / 3600000)} h`;
 
 // ── Load secrets ────────────────────────────────────────────────────────────
 function loadEnv() {
@@ -62,8 +66,12 @@ async function tgSend(token, text) {
 // ── Checks ───────────────────────────────────────────────────────────────────
 async function checkRelay() {
   try {
-    const res = await fetch(`${RELAY_URL}/health`, { signal: AbortSignal.timeout(10000) });
+    // /health and /session/ping never existed: the relay answered 401 to them, a false alarm on every restart
+    const res = await fetch(`${RELAY_URL}/time`, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return { ok: false, reason: `HTTP ${res.status}` };
+    const body = await res.json().catch(() => null);
+    if (!body || body.ok !== true) return { ok: false, reason: 'respuesta inesperada de /time' };
+    if (body.relayMode === 'off') return { ok: false, reason: 'relay apagado (relayMode off)' };
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: e.message };
@@ -71,12 +79,13 @@ async function checkRelay() {
 }
 
 async function checkSessionPool() {
+  // The relay has no open route for its pool; the Pi's last deployed copy tells its age and size
   try {
-    // /session/ping returns 200 if at least one valid session exists in the pool
-    const res = await fetch(`${RELAY_URL}/session/ping`, { signal: AbortSignal.timeout(10000) });
-    if (res.status === 200) return { ok: true };
-    if (res.status === 503) return { ok: false, reason: 'Pool vacío o todas las sesiones expiradas' };
-    return { ok: false, reason: `HTTP ${res.status}` };
+    const st = fs.statSync(POOL_FILE);
+    const count = (fs.readFileSync(POOL_FILE, 'utf8').match(/"snToken"/g) || []).length;
+    if (!count) return { ok: false, reason: 'El pool desplegado no tiene sesiones' };
+    if (Date.now() - st.mtimeMs > MAX_POOL_AGE) return { ok: false, reason: `Pool sin renovar desde ${hoursAgo(st.mtimeMs)} (${count} sesiones)` };
+    return { ok: true };
   } catch (e) {
     return { ok: false, reason: e.message };
   }
@@ -84,22 +93,11 @@ async function checkSessionPool() {
 
 async function checkCatalog() {
   try {
-    const res = await fetch(CATALOG_RAW_URL, {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!res.ok) return { ok: false, reason: `HTTP ${res.status}` };
-    const lastModified = res.headers.get('last-modified');
-    if (lastModified) {
-      const age = Date.now() - new Date(lastModified).getTime();
-      if (age > MAX_CATALOG_AGE) {
-        const horas = Math.round(age / 3600000);
-        return { ok: false, reason: `Catálogo no actualizado hace ${horas}h (máx 5h)` };
-      }
-    }
+    const st = fs.statSync(CATALOG_STAMP);
+    if (Date.now() - st.mtimeMs > MAX_CATALOG_AGE) return { ok: false, reason: `Última actualización completa ${hoursAgo(st.mtimeMs)}` };
     return { ok: true };
-  } catch (e) {
-    return { ok: false, reason: e.message };
+  } catch {
+    return { ok: false, reason: 'Ninguna actualización completa registrada todavía' };
   }
 }
 
@@ -120,7 +118,7 @@ async function runChecks() {
   const labels  = {
     relay:    '🔴 <b>Relay Worker caído</b>',
     sessions: '⚠️ <b>Pool de sesiones vacío o expirado</b>',
-    catalog:  '📋 <b>Catálogo sin actualizar (>5h)</b>',
+    catalog:  '📋 <b>Catálogo sin actualizar (>7 h)</b>',
   };
   const recovLabels = {
     relay:    '🟢 Relay Worker recuperado',
@@ -139,6 +137,9 @@ async function runChecks() {
       alertState[key] = false;
       log(`RECOVERED ${key}`);
       await tgSend(token, `${recovLabels[key]}\n\n— Pi Monitor`);
+    } else if (!result.ok) {
+      // Already alerted: no new message, but the log must not say OK
+      log(`STILL FAILING ${key}: ${result.reason}`);
     } else {
       log(`OK ${key}`);
     }
