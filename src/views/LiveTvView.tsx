@@ -145,6 +145,38 @@ export const ESPN_DEFAULT_FEEDS: LiveChannel[] = [
     url: 'https://d3b6q2ou5kp8ke.cloudfront.net/ESPNTheOcho.m3u8',
     logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
     time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-mx',
+    code: 'wiwy-espn-mx',
+    name: '10 · ESPN México',
+    url: 'http://168.228.44.241:9997/play/a06p/index.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-usa',
+    code: 'wiwy-espn-usa',
+    name: '11 · ESPN USA HD',
+    url: 'http://85.237.89.160:9590/usa-s/ESPN-HD/index.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-us.png',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'wiwy-espn-2-usa',
+    code: 'wiwy-espn-2-usa',
+    name: '12 · ESPN 2 USA HD',
+    url: 'http://85.237.89.160:9590/usa-s/ESPN-2-HD/index.m3u8',
+    logo: 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-2-us.png',
+    time: 'EN VIVO'
+  },
+  {
+    id: 'extra-espnu',
+    code: 'extra-espnu',
+    name: '13 · ESPN U HD',
+    url: 'http://85.237.89.160:9590/usa-s/ESPN-U-HD/index.m3u8',
+    logo: 'http://schedulesdirect-api20141201-logos.s3.dualstack.us-east-1.amazonaws.com/stationLogos/s45654_dark_360w_270h.png',
+    time: 'EN VIVO'
   }
 ];
 
@@ -1085,13 +1117,14 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
   const focusedChannel = channels[focus.channelIndex] || tunedChannel || channels[0] || null;
 
   // Zero-Latency Zapping: Pre-warm network connection and stream URL on cursor dwell (~350ms)
+  // Only prewarm when the user is actively viewing the TV tab
   useEffect(() => {
-    if (!focusedChannel || isSameChannel(focusedChannel, tunedChannel)) return;
+    if (!isActiveTab || !focusedChannel || isSameChannel(focusedChannel, tunedChannel)) return;
     const timer = setTimeout(() => {
       playerService.prewarm(focusedChannel);
     }, 350);
     return () => clearTimeout(timer);
-  }, [focusedChannel, tunedChannel]);
+  }, [isActiveTab, focusedChannel, tunedChannel]);
 
   // The info panel always describes the channel that is playing in the preview
   const displayChannel = tunedChannel || focusedChannel;
@@ -1192,14 +1225,21 @@ const LiveTvViewInner: React.FC<LiveTvViewProps> = ({
         <div className="live-col-header">
           <div className="live-header-lead">
             <span className="live-header-title">{activeCategory.name}</span>
-            <span className="live-header-sub">{channels.length} canales</span>
+            <span className="live-header-sub">
+              {channels.length === 0 && isLoadingChannels
+                ? (activeCategory.iptvListId ? 'Descargando la lista…' : 'Cargando…')
+                : `${channels.length} canales`}
+            </span>
           </div>
           {categoryBadge(activeCategory) && <span className="beta-pill">{categoryBadge(activeCategory)}</span>}
         </div>
 
         <div className="live-channel-vlist" ref={channelListRef}>
           {channels.length === 0 && isLoadingChannels ? (
-            <div className="live-loading-msg">{activeCategory.iptvListId ? 'Descargando la lista de canales...' : 'Cargando canales...'}</div>
+            // Rows of the channel cards' size: the list does not jump when the channels arrive
+            Array.from({ length: 10 }, (_, i) => (
+              <div key={i} className="row-skeleton skeleton-shimmer" style={{ height: CHANNEL_PITCH - 8 }} />
+            ))
           ) : channels.length === 0 ? (
             <div className="live-empty-msg">
               {activeCategory.isFav

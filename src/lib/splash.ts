@@ -36,7 +36,7 @@ function hideSplash(): void {
   // First screen reached: a downloaded update that got this far is good (public/js/boot.js)
   if (window.XuperBoot) window.XuperBoot.ok();
   fill(100);
-  console.log(`[startup] splash hidden at ${Math.round(performance.now())} ms (done: ${Array.from(done).join(', ') || 'none'})`);
+  console.log(`[System:splash] hidden at ${Math.round(performance.now())} ms (done: ${Array.from(done).join(', ') || 'none'})`);
   const el = document.getElementById('xuper-splash');
   if (!el) return;
   // Let the bar reach 100% before fading out

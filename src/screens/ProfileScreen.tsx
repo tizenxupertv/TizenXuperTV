@@ -10,6 +10,7 @@ import { settingsService, SUBTITLE_MODES, subtitleModeIndex, applySubtitleMode }
 import { parentalService } from '../services/parentalService';
 import { diagnosticService, DiagReport } from '../services/diagnosticService';
 import { getTvCapabilities } from '../lib/tvCapabilities';
+import { readDeviceResources, resourcesLevel, resourcesLine, type DeviceResources } from '../lib/deviceResources';
 import { iptvService, IPTV_LISTS } from '../services/iptvService';
 import { HIDEABLE_TABS, tabPrefs } from '../services/tabPrefs';
 import { accountService, tvBuildInfo } from '../services/accountService';
@@ -145,6 +146,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [reportState, setReportState] = useState<'idle' | 'diagnosing' | 'sending' | 'ok' | 'too_many' | 'signed_out' | 'error'>('idle');
   /** When the last network check finished: a report sent within REPORT_DIAG_FRESH_MS of it does not run another */
   const diagAtRef = useRef(0);
+  // Memory, CPU and storage at the last check; the report reads the ref, set before it is sent
+  const [resources, setResources] = useState<DeviceResources | null>(null);
+  const resourcesRef = useRef<DeviceResources | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   // "Borrar historial": confirmation (0 = Cancelar, selected first; 1 = Sí, borrar) and the result message
   const [confirmClear, setConfirmClear] = useState(false);
@@ -224,6 +228,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       ...(caps ? [{ at: now.getTime(), local, kind: 'info', channel: 'Formatos del reproductor', detail: caps }] : []),
       ...(imgDiag ? [{ at: now.getTime(), local, kind: 'info', channel: 'Carátulas / CDN', detail: imgDiag }] : []),
       { at: now.getTime(), local, kind: 'info', channel: 'Caché de carátulas', detail: coverStatsLine() },
+      ...(resourcesRef.current ? [{ at: now.getTime(), local, kind: 'info', channel: 'Recursos de la TV', detail: resourcesLine(resourcesRef.current) }] : []),
       ...(speed ? [{
         at: now.getTime(), local, kind: 'info', channel: 'Velocidad de internet',
         detail: `${formatSpeed(speed.mbps)}${speed.latencyMs !== null ? ` · latencia ${speed.latencyMs} ms` : ''}`
@@ -288,14 +293,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     if (diagRunning) return Promise.resolve(report);
     setDiagRunning(true);
     const sample = catalogItems.find(it => it && it.poster && !it.poster.includes('placeholder')) || catalogItems[0];
-    return diagnosticService.run(sample)
-      .catch((): DiagReport => ({ verdict: 'portal-down', hosts: [], portalMs: null, cdns: 0 }))
-      .then(r => {
-        diagAtRef.current = Date.now();
-        setReport(r);
-        setDiagRunning(false);
-        return r;
-      });
+    return Promise.all([
+      diagnosticService.run(sample).catch((): DiagReport => ({ verdict: 'portal-down', hosts: [], portalMs: null, cdns: 0 })),
+      readDeviceResources().catch(() => null)
+    ]).then(([r, res]) => {
+      diagAtRef.current = Date.now();
+      resourcesRef.current = res;
+      setResources(res);
+      setReport(r);
+      setDiagRunning(false);
+      return r;
+    });
   };
 
   /** Measures the speed; resolves with the result, null when it failed or one is already running */
@@ -781,6 +789,24 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           sub: reached ? (report!.portalMs !== null ? 'Responde' : 'Caído o bloqueado') : tested ? 'No se pudo probar' : 'Sin analizar',
           cls: reached ? (report!.portalMs !== null ? 'ok' : 'bad') : ''
         },
+        (() => {
+          const r = resources;
+          const free = r && r.memAvailMb !== undefined ? `${r.memAvailMb} MB` : r && r.appMb !== undefined ? `${r.appMb} MB` : '—';
+          const sub = !r
+            ? (tested ? 'No disponible' : 'Sin analizar')
+            : [r.memAvailMb !== undefined ? 'RAM libre' : 'Memoria de la app', r.appMb !== undefined && r.memAvailMb !== undefined ? `app ${r.appMb} MB` : '', r.cpuPct !== undefined ? `CPU ${r.cpuPct} %` : '']
+              .filter(Boolean).join(' · ');
+          return { label: 'Recursos de la TV', value: free, sub, cls: resourcesLevel(r) };
+        })(),
+        (() => {
+          const conn: string = (window as any).MagisClient?.getConnection?.() ?? 'none';
+          return {
+            label: 'Conexión al portal',
+            value: conn === 'direct' ? 'Directa' : conn === 'relay' ? 'Alternativa' : '—',
+            sub: conn === 'direct' ? 'Sin intermediarios' : conn === 'relay' ? 'Ruta de respaldo' : tested ? 'Sin sesión todavía' : 'Sin analizar',
+            cls: conn === 'direct' ? 'ok' : conn === 'relay' ? 'warn' : ''
+          };
+        })(),
         {
           label: 'Servidores de video',
           value: reached && report!.portalMs !== null ? String(report!.cdns) : '—',

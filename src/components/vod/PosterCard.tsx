@@ -166,7 +166,7 @@ const PosterCardComponent: React.FC<PosterCardProps> = ({
       <div className="poster-card-img">
         <img
           className="poster-card-placeholder-img"
-          src={placeholder}
+          src={(isWide ? item.backdropThumb : item.posterThumb) || placeholder}
           alt=""
           loading="eager"
         />

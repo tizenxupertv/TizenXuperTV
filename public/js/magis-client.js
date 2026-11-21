@@ -32,20 +32,83 @@
   var relayMode = 'full';
   var relayCooldownUntil = 0;
   var DIRECT_HOSTS = [
+    'neqpsx.6dqtl974.com',
+    'lvmcmb.6dqtl974.com',
+    'dqbvvb.wg5h6vjz.com',
+    'eajmnp.hcgv1dt8.com',
     'fuxok.nguvmqhpk.com',
     'ftmrmy.jdfey0cd.com',
     'mptec.dhkrxuzcy.com',
-    'eajmnp.hcgv1dt8.com',
     'hinumz.a878kkoyc.com',
     'krdwvd.swcaw7qx.com',
     'osuhk.m3x8o50te.com',
     'oogoy.f30c96w8.com'
   ];
-  var DIRECT_APK_VERSION = '49902';
-  var DIRECT_APK_VER_HEADER = '43404';
-  var DIRECT_SPKG_VER = '2024-09-10 06:25:30_33_13_';
+  var DIRECT_APK_VERSION = '49920';
+  var DIRECT_APK_VER_HEADER = '49920';
+  var DIRECT_SPKG_VER = '2022-06-22 10:06:33_33_13_5.15.137-00001-gfdae1bb0ce90';
+  var DIRECT_META_SALT = '213f24ac-14b7-4c03-a209-383ead1b014f';
   var DIRECT_RESERVE1 = '583442714b345572434a4d5769637461545a735936413d3d';
   var DIRECT_SESSION_KEY = 'xuper_magis_direct_v1';
+
+  function generateClientMeta() {
+    var trace = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0;
+      var v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+    var meta = '';
+    try {
+      if (typeof CryptoJS !== 'undefined' && CryptoJS.MD5) {
+        meta = CryptoJS.MD5(trace + DIRECT_META_SALT).toString().toLowerCase();
+      }
+    } catch (_) {}
+    return { trace: trace, meta: meta };
+  }
+  /**
+   * One console entry per request: `[MagisClient:<route>] <via> ✓|✗ <ms> ms · <info>`, the same format as
+   * src/lib/callLog.ts. With the debug log on (localhost, or localStorage['xuper.debugLog'] = '1') the response
+   * follows as an object to expand, with session secrets hidden. Off on the TV by default: the console keeps
+   * every object it was given in memory.
+   */
+  var DEBUG_LOG_KEY = 'xuper.debugLog';
+  function debugLogEnabled() {
+    try {
+      var h = window.location.hostname;
+      if (h === 'localhost' || h === '127.0.0.1') return true;
+      return window.localStorage.getItem(DEBUG_LOG_KEY) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+  var SECRET_KEY_RE = /token|^sn$|^sn[A-Z_]|userid|password|secret|sign|^mac|drmid|^b29$|reserve/i;
+  /** A copy for the console with session secrets replaced; past 6 levels deep, left out */
+  function withoutSecrets(value, depth) {
+    depth = depth || 0;
+    if (value === null || typeof value !== 'object') return value;
+    if (depth > 6) return '…';
+    if (Array.isArray(value)) {
+      var arr = [];
+      for (var i = 0; i < value.length; i++) arr.push(withoutSecrets(value[i], depth + 1));
+      return arr;
+    }
+    var out = {};
+    for (var k in value) {
+      if (!Object.prototype.hasOwnProperty.call(value, k)) continue;
+      out[k] = SECRET_KEY_RE.test(k) && value[k] !== '' && value[k] !== null ? '[oculto]' : withoutSecrets(value[k], depth + 1);
+    }
+    return out;
+  }
+  function logCall(route, via, err, ms, info, data) {
+    if (typeof console === 'undefined') return;
+    var line = '[MagisClient:' + route + '] ' + via + ' ' + (err ? '✗' : '✓') + ' ' + ms + ' ms' + (info ? ' · ' + info : '');
+    var detail = data !== undefined && debugLogEnabled() ? withoutSecrets(data) : undefined;
+    if (!err) return detail === undefined ? console.log(line) : console.log(line, detail);
+    var why = err.portalCode
+      ? err.portalCode + (err.portalText ? ' ' + err.portalText : '')
+      : String(err.message || err).replace(/^[\w/]+:\s*/, '');
+    console.warn(line + ' · ' + why);
+  }
   function isCatalogBrowseEndpoint(path) {
     return /(?:^|\/)(getColumnContents|getShelveData|getRecommends|filterByContent|filterGenre|getHome|getShortVideo)$/i.test(String(path || ''));
   }
@@ -669,6 +732,14 @@
 
   function postHttp(path, payload, done, opts) {
     opts = opts || {};
+    // Every way out of this function, early refusals included, writes its line
+    var tCall = Date.now();
+    var logInfo = '';
+    var finish = done;
+    done = function (err, res) {
+      logCall(path, 'relay', err, Date.now() - tCall, logInfo + (opts.low ? (logInfo ? ', ' : '') + 'fondo' : ''), res);
+      finish(err, res);
+    };
     if (relayMode === 'off') {
       return done(new Error('Relay disabled (off)'));
     }
@@ -822,6 +893,7 @@
             pErr.portalCode = code;
             pErr.portalText = text(resp.errorMessage);
             finished = true;
+            logInfo = 'host ' + host;
             return done(pErr);
           }
 
@@ -833,13 +905,14 @@
               if (finished) return;
               if (dErr) return tryNextHost();
               finished = true;
-              console.log('[portal] ' + path + ' ' + kb + 'KB red=' + (tNet - tStart) + 'ms descifrado=' + (Date.now() - tNet) + 'ms' + (opts.low ? ' (fondo)' : ''));
+              logInfo = 'host ' + host + ', ' + kb + ' KB, red ' + (tNet - tStart) + ' ms, descifrado ' + (Date.now() - tNet) + ' ms';
               done(null, decData);
             }, !!opts.low);
             return;
           }
 
           finished = true;
+          logInfo = 'host ' + host;
           return done(null, resp.data !== undefined && resp.data !== null ? resp.data : resp);
         } else {
           lastStatus = xhr.status;
@@ -863,6 +936,7 @@
         if (lastStatus === 0 && isBrowserEnv && typeof fetch === 'function') {
           relayCooldownUntil = Date.now() + 90000;
         }
+        logInfo = idx + ' hosts probados' + (lastStatus ? ', último HTTP ' + lastStatus : '');
         return done(httpError(path + ': el portal no respondió'));
       }
       sendToHost(hosts[idx++], false);
@@ -882,9 +956,40 @@
     return /aaa10002[0-9]|未登录|sesi[oó]n|login|token/i.test(err.portalCode + ' ' + (err.portalText || ''));
   }
 
+  /**
+   * Breakers for relay sessions. When the portal refuses to start a session (for example portal100024, region
+   * blacklisted) or still says "not logged in" right after a new session, asking again only repeats the refusal:
+   * every live channel used to start session after session (snToken, active, pool) in a loop, also from other tabs.
+   * - session starts: no new v3/snToken + v8/active for SESSION_BLOCK_MS after the portal refused one;
+   * - relay calls: fail at once for SESSION_BLOCK_MS after a call failed again with a brand-new session.
+   * After the pause, the next call tries once more.
+   */
+  var SESSION_BLOCK_MS = 5 * 60 * 1000;
+  var sessionStartBlock = { until: 0, err: null };
+  var relayCallBlock = { until: 0, err: null };
+  function blockFor(block, err, what) {
+    block.until = Date.now() + SESSION_BLOCK_MS;
+    block.err = err;
+    logCall('session', 'relay', err, 0, what + ': sin reintentos durante ' + Math.round(SESSION_BLOCK_MS / 60000) + ' min');
+  }
+  /** The stored refusal, marked so callers know it is the pause and not a new answer of the portal */
+  function blockedError(block) {
+    var src = block.err || {};
+    var e = new Error(String(src.message || 'sesión rechazada por el portal') + ' (en pausa)');
+    e.portalCode = src.portalCode;
+    e.portalText = src.portalText;
+    e.sessionBlocked = true;
+    return e;
+  }
+  function isBlocked(block) {
+    return block.until > Date.now();
+  }
+
   var directSession = { ready: false, sn: '', snToken: '', userId: '', userToken: '', portalCode: 'masnew' };
   var directSessionStarting = false;
   var directSessionWaiters = [];
+  // Set once this run made a new device identity because the portal refused even a session it had just given
+  var identityRenewed = false;
 
   (function loadDirectSession() {
     try {
@@ -933,9 +1038,16 @@
   function postDirectHttp(path, payload, done, opts) {
     opts = opts || {};
     var directPath = (path === 'v5/startPlayLive') ? 'v4/startPlayLive' : path;
-    var bodyHex;
+    var tCall = Date.now();
+    var logInfo = '';
+    var finish = done;
+    done = function (err, res) {
+      logCall(directPath, 'direct', err, Date.now() - tCall, logInfo + (opts.low ? (logInfo ? ', ' : '') + 'fondo' : ''), res);
+      finish(err, res);
+    };
+    var bodyStr;
     try {
-      bodyHex = encryptBody(JSON.stringify(payload));
+      bodyStr = secWrap(JSON.stringify(payload), SEC.keyHex, SEC.alpha);
     } catch (e) {
       return done(new Error(directPath + ': error cifrando cuerpo directo: ' + e.message));
     }
@@ -944,13 +1056,20 @@
     var finished = false;
     var tStart = Date.now();
     var lastStatus = 0;
+    var failedHosts = [];
+    var sawVersionGone = false;
 
     function tryHost() {
       if (finished) return;
       if (idx >= DIRECT_HOSTS.length || Date.now() - tStart >= REQUEST_MAX_MS) {
         finished = true;
-        var e = new Error(directPath + ': el portal no respondió');
+        var e = new Error(directPath + (sawVersionGone ? ' -> portal200001 versión no admitida en este endpoint' : ': el portal no respondió'));
         e.httpStatus = lastStatus;
+        e.failedHostCount = failedHosts.length;
+        // Keep the code: without it the caller takes it for a network failure and sends the rest of the session
+        // through the relay, when only this endpoint refuses our version
+        if (sawVersionGone) e.portalCode = 'portal200001';
+        logInfo = idx + ' hosts probados' + (lastStatus ? ', último HTTP ' + lastStatus : '');
         return done(e);
       }
       var host = DIRECT_HOSTS[idx++];
@@ -983,28 +1102,60 @@
       xhr.onprogress = arm;
       xhr.onreadystatechange = function () { if (xhr.readyState >= 2) arm(); };
       try { xhr.setRequestHeader('Content-Type', 'application/json;charset=utf-8'); } catch (e) {}
-      try { xhr.setRequestHeader('apk', 'com.android.msandroid'); } catch (e) {}
-      try { xhr.setRequestHeader('apkVer', DIRECT_APK_VER_HEADER); } catch (e) {}
-      try { xhr.setRequestHeader('spkgVer', DIRECT_SPKG_VER); } catch (e) {}
+      try {
+        var metaPair = generateClientMeta();
+        var traceId = (metaPair && metaPair.trace) || '';
+        var clientMeta = (metaPair && metaPair.meta) || '';
+        var hdrLines = [
+          'apk: ' + APK_TRANSPORT_APP_ID,
+          'apkVer: ' + APK_VER_HEADER,
+          'spkgVer: ' + SPKG_VER,
+          'Content-type: application/json;charset=utf-8',
+          'Cache-Control: no-store',
+          'X-Request-Trace: ' + traceId,
+          'X-Client-Meta: ' + clientMeta
+        ];
+        var dVal = secWrap(hdrLines.join('\r\n') + '\r\n', SEC.keyHex, SEC.alpha);
+        var cookieStr = 'd=' + dVal + '; s=' + SEC.s + '; t=' + SEC.t;
+        if (isLocalDevHost) {
+          xhr.setRequestHeader('X-Magis-Cookie', cookieStr);
+        } else {
+          try { xhr.setRequestHeader('Cookie', cookieStr); } catch (_) {}
+        }
+      } catch (e) {}
 
       xhr.onload = function () {
         if (settled || finished) return;
         settled = true;
         disarm();
         lastStatus = xhr.status;
-        if (xhr.status < 200 || xhr.status >= 300) return tryHost();
+        if (xhr.status < 200 || xhr.status >= 300) {
+          failedHosts.push(host);
+          return tryHost();
+        }
+        var rawTxt = trim(xhr.responseText);
         var resp;
         try {
-          resp = JSON.parse(trim(xhr.responseText));
+          if (rawTxt && rawTxt.charAt(0) !== '{') {
+            rawTxt = secUnwrap(rawTxt, SEC.keyHex, SEC.alpha);
+          }
+          resp = JSON.parse(rawTxt);
         } catch (e) {
+          failedHosts.push(host);
           return tryHost();
         }
         var code = (resp.returnCode === undefined || resp.returnCode === null) ? '' : String(resp.returnCode);
+        if (code === 'portal200001') {
+          sawVersionGone = true;
+          failedHosts.push(host);
+          return tryHost();
+        }
         if (code !== '' && code !== '0') {
           var pErr = new Error(directPath + ' -> ' + code + ' ' + text(resp.errorMessage));
           pErr.portalCode = code;
           pErr.portalText = text(resp.errorMessage);
           finished = true;
+          logInfo = 'host ' + host;
           return done(pErr);
         }
         if (typeof resp.data === 'string' && resp.data !== '') {
@@ -1012,12 +1163,13 @@
             if (finished) return;
             if (dErr) return tryHost();
             finished = true;
-            console.log('[portal-direct-43404] ' + directPath + ' host=' + host + ' (' + (Date.now() - tStart) + 'ms)');
+            logInfo = 'host ' + host;
             done(null, decData);
           }, !!opts.low);
           return;
         }
         finished = true;
+        logInfo = 'host ' + host;
         done(null, resp.data !== undefined && resp.data !== null ? resp.data : resp);
       };
       xhr.onerror = xhr.ontimeout = function () {
@@ -1026,7 +1178,7 @@
         disarm();
         tryHost();
       };
-      xhr.send(bodyHex);
+      xhr.send(bodyStr);
     }
 
     tryHost();
@@ -1065,7 +1217,7 @@
       deviceToken: '',
       drmId: identity.drmId || '',
       sdkVer: 33,
-      sn: identity.serialNumber || identity.androidId || '0000111122223333'
+      sn: ''
     };
 
     postDirectHttp('v3/snToken', snPayload, function (err, res) {
@@ -1074,24 +1226,24 @@
       if (!snToken) return finishDirect(new Error('Direct v3/snToken: missing snToken'));
       var snMd5 = String(md5(snToken + SNTOKEN_SALT)).toLowerCase();
       var activePayload = {
-        appId: 'com.android.msandroid',
-        apkVersion: DIRECT_APK_VERSION,
-        loginType: '2',
-        appLanguage: 'es',
-        hardwareInfo: 'ranchu',
-        model: 'sdk_gphone64_arm64',
-        product: 'sdk_gphone64_arm64',
-        cpu: 'arm64-v8a',
-        B29: '',
-        reserve1: DIRECT_RESERVE1,
-        deviceToken: '',
-        drmId: identity.drmId || '',
-        sdkVer: 33,
         sn: snMd5,
         snToken: snToken,
-        portalCode: 'masnew',
+        loginType: '2',
+        authVersion: '',
+        authCode: '',
+        preCode: '',
         macAddr: identity.etheMac,
-        wlanMac: identity.wifiMac
+        wlanMac: identity.wifiMac,
+        reserve1: DIRECT_RESERVE1,
+        openNum: 0,
+        channel: 'default',
+        matadata: '',
+        signdata: '',
+        portalCode: 'masnew',
+        drmId: identity.drmId || '',
+        appLanguage: 'es',
+        appId: 'com.android.msandroid',
+        apkVersion: DIRECT_APK_VERSION
       };
       postDirectHttp('v8/active', activePayload, function (aErr, aRes) {
         if (aErr) return finishDirect(aErr);
@@ -1104,10 +1256,12 @@
           snToken: snToken,
           userId: uId,
           userToken: uTok,
-          portalCode: trim(aRes && aRes.portalCode) || 'masnew'
+          portalCode: trim(aRes && aRes.portalCode) || 'masnew',
+          // Made in this run, not one saved by an earlier run (see callDirect43404)
+          fresh: true
         };
         saveDirectSession();
-        console.log('[MagisClient] Direct 43404 session established');
+        console.log('[MagisClient:session] Direct session established');
         finishDirect(null, directSession);
       });
     });
@@ -1137,6 +1291,27 @@
           opts._directRetried = true;
           return callDirect43404(endpoint, payload, opts, callback);
         }
+        // A session saved by an earlier run can be answered portal200001 ("version not supported") on every call
+        // and every host, while a new session works (seen on 2026-11-21: a TV with no series, no live, until
+        // reinstalled). Not a session code, so it was never renewed. Renewed once; a new session answered
+        // portal200001 is the endpoint's own refusal and goes on to the relay as before.
+        if (err && err.portalCode === 'portal200001' && !ds.fresh && !opts._directRetried) {
+          console.warn('[MagisClient:session] saved direct session answered portal200001: new session');
+          clearDirectSession();
+          opts._directRetried = true;
+          return callDirect43404(endpoint, payload, opts, callback);
+        }
+        // Refused again with a session made a moment ago: the portal no longer takes this device identity, and
+        // every new session would give the same refused user (seen on 2026-11-21: aaa100028 on everything, for good,
+        // on one TV). A new identity is a new portal user. Once per run, so a portal refusing everyone does not
+        // make this TV change identity in a loop.
+        if (isSessionError(err) && !identityRenewed) {
+          identityRenewed = true;
+          console.warn('[MagisClient:session] direct session refused right after it was made: new device identity');
+          deviceIdentity(true);
+          clearDirectSession();
+          return callDirect43404(endpoint, payload, opts, callback);
+        }
         callback(err, res);
       }, opts);
     });
@@ -1151,6 +1326,9 @@
     var prof = resolveProfile(opts.profile);
 
     function callViaRelay() {
+      if (!opts.sessionStart && isBlocked(relayCallBlock)) {
+        return setTimeout(function () { callback(blockedError(relayCallBlock)); }, 0);
+      }
       enqueue(function (release) {
         var fullPayload = {};
         if (opts.baseFields !== false) {
@@ -1177,7 +1355,7 @@
         postHttp(endpoint, fullPayload, function (err, res) {
           releaseOnce();
           if (isRelayUnavailableError(err) && canUseDirect43404 && !opts.sessionStart) {
-            console.warn('[MagisClient] relay unavailable for ' + endpoint + ', falling back to direct 43404');
+            console.warn('[MagisClient:' + endpoint + '] relay unavailable, falling back to direct 43404');
             return callDirect43404(endpoint, payload, opts, callback);
           }
           // Not for the two requests that start the session: their retry would wait for the very session start that
@@ -1189,6 +1367,10 @@
               opts._retried = true;
               call(endpoint, payload, opts, callback);
             });
+          }
+          // Refused again with the session just started: the portal does not accept our sessions now
+          if (isSessionError(err) && opts._retried && !opts.sessionStart) {
+            blockFor(relayCallBlock, err, endpoint + ' rechazado también con sesión nueva');
           }
           callback(err, res);
         }, { onNet: releaseOnce, low: !!opts.low });
@@ -1207,10 +1389,15 @@
             return callback(dErr);
           }
           if (relayMode !== 'off' && relayCooldownUntil <= Date.now() && dErr.httpStatus !== 0) {
-            console.warn('[MagisClient] direct 43404 failed for ' + endpoint + ', falling back to relay');
+            var hostSummary = dErr.failedHostCount ? ' (' + dErr.failedHostCount + ' hosts probados)' : '';
+            console.warn('[MagisClient:' + endpoint + '] direct 43404 failed' + hostSummary + ', falling back to relay');
             if (dErr.portalCode !== 'portal200001') session.forceRelay = true;
             if (!session.userId || !session.userToken) {
-              if (directSession.ready && directSession.userId && directSession.userToken) {
+              // Direct 43404 just told us this very session is invalid (aaa100027/aaa100028) — reusing its
+              // userId/userToken for the relay call would hand the portal the same rejected identity and get
+              // rejected again on every single call. Only reuse it when direct failed for another reason
+              // (network flake, portal200001) and the portal never said this session was bad.
+              if (!isSessionError(dErr) && directSession.ready && directSession.userId && directSession.userToken) {
                 session.userId = directSession.userId;
                 session.userToken = directSession.userToken;
                 return callViaRelay();
@@ -1284,7 +1471,9 @@
       if (relayMode === 'off') {
         return callback(new Error('Relay disabled (off)'));
       }
-      startSession(false, function (err, res) {
+      // Relay calls are paused (the portal refused them even with a new session): no pool or catalog session either
+      if (isBlocked(relayCallBlock)) return callback(blockedError(relayCallBlock));
+      startSession(function (err, res) {
         if (!err) {
           session.directOnly = false;
           return callback(null, res);
@@ -1347,7 +1536,11 @@
     startRelaySession();
   }
 
-  function startSession(freshIdentity, callback) {
+  function startSession(callback) {
+    // The portal refused the last start: do not ask again before the pause ends (see sessionStartBlock)
+    if (isBlocked(sessionStartBlock)) {
+      return setTimeout(function () { callback(blockedError(sessionStartBlock)); }, 0);
+    }
     sessionWaiters.push(callback);
     if (sessionStarting) return;
 
@@ -1364,7 +1557,7 @@
       notifyWaiters(new Error('inicio de sesión: el portal no respondió'));
     }, SESSION_START_MAX_MS);
 
-    var identity = deviceIdentity(freshIdentity);
+    var identity = deviceIdentity(false);
     var sh = identity.shortHash || 'a1b2c3d4';
     var fp = {
       androidId: identity.androidId,
@@ -1407,6 +1600,7 @@
 
     call('v3/snToken', fp, { baseFields: false, sessionStart: true }, function (err, res) {
       if (attempt !== sessionAttempt) return;
+      if (err && err.portalCode) blockFor(sessionStartBlock, err, 'v3/snToken rechazado');
       if (err) return notifyWaiters(err);
       var snToken = trim(res && res.snToken);
       if (!snToken) return notifyWaiters(new Error('No snToken returned'));
@@ -1425,7 +1619,7 @@
         macAddr: identity.etheMac,
         wlanMac: identity.wifiMac,
         reserve1: DEVICE_FIXED.reserve1 || DIRECT_RESERVE1,
-        openNum: freshIdentity ? 1 : 0,
+        openNum: 0,
         channel: 'default',
         matadata: '',
         signdata: '',
@@ -1436,19 +1630,9 @@
 
       call('v8/active', activePayload, { baseFields: false, sessionStart: true }, function (aErr, aRes) {
         if (attempt !== sessionAttempt) return;
-        // Activation refused for this identity (seen as code 100024): try once more as a new device
-        if (aErr && !freshIdentity && /100024$/.test(String(aErr.portalCode || ''))) {
-          console.warn('[MagisClient] v8/active refused (' + aErr.portalCode + '), retrying with a new device identity');
-          clearTimeout(watchdog);
-          sessionStarting = false;
-          var waiting = sessionWaiters.slice(0);
-          sessionWaiters = [];
-          return startSession(true, function (rErr, rRes) {
-            for (var w = 0; w < waiting.length; w++) {
-              try { waiting[w](rErr, rRes); } catch (e) {}
-            }
-          });
-        }
+        // Activation refused (portal100024 is "region blacklisted"): the answer is the same for any device we could
+        // claim to be, so no retry with a new identity; the pool session (ensureSession) is the only way left
+        if (aErr && aErr.portalCode) blockFor(sessionStartBlock, aErr, 'v8/active rechazado');
         if (aErr) return notifyWaiters(aErr);
         var uId = trim(aRes && (aRes.userId || aRes.id || (aRes.userInfo && aRes.userInfo.userId)));
         var uTok = trim(aRes && (aRes.userToken || aRes.token || (aRes.userInfo && aRes.userInfo.userToken)));
@@ -1885,7 +2069,7 @@
         var diag = summarizeStartPlayDiag(cid, seriesContentId, epNum, pRes, matchedEp, tracks);
         publishStartPlayDiag(diag);
         if (typeof console !== 'undefined' && console.info) {
-          console.info('[MagisClient] startPlayVOD variants', diag);
+          console.info('[MagisClient:v10/startPlayVOD] variants', diag);
         }
         if (!tracks.length) return doneAll(new Error('No video tracks returned'));
         var data = { play: pRes, episode: ep, tracks: tracks, diag: diag };
@@ -2231,6 +2415,43 @@
     'https://cdn.jsdelivr.net/gh/tizenxupertv/TizenXuperTV@catalog-data',
     'https://raw.githubusercontent.com/tizenxupertv/TizenXuperTV/catalog-data'
   ];
+  // Files the Pi publishes for what the portal would answer the same to everyone: title details (detail/<id>.json,
+  // the v4/getItemData answer) and the first See-all pages of the home rows (column/<id>-<page>.json)
+  var STATIC_SITE_BASE = 'https://tizenxuper-img.pages.dev/data/';
+
+  /** callback(data) with the published file when isValid(data), or callback(null) when missing, slow or off */
+  function fetchSiteJson(rel, route, isValid, callback) {
+    if (window.__XUPER_SKIP_STATIC_CATALOG__ || typeof fetch !== 'function') return callback(null);
+    var done = false;
+    var tTry = Date.now();
+    var timer = setTimeout(function () {
+      if (done) return;
+      done = true;
+      logCall(route, 'tizenxuper-img.pages.dev', new Error('sin respuesta'), Date.now() - tTry);
+      callback(null);
+    }, 2500);
+    fetch(STATIC_SITE_BASE + rel).then(function (res) {
+      return res && res.ok ? res.json() : null;
+    }).then(function (data) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      var ok = !!(data && isValid(data));
+      if (ok) logCall(route, 'tizenxuper-img.pages.dev', null, Date.now() - tTry);
+      // Out of the promise chain: an error while building the answer must not be swallowed by .catch below
+      setTimeout(function () { callback(ok ? data : null); }, 0);
+    }).catch(function () {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      callback(null);
+    });
+  }
+
+  function fetchStaticDetail(cid, callback) {
+    fetchSiteJson('detail/' + encodeURIComponent(cid) + '.json', 'json/detail', function (d) { return !!d.assetData; }, callback);
+  }
+
   var staticLiveData = null;
   var staticLiveInflight = null;
   var staticLiveFailedAt = 0;
@@ -2245,10 +2466,14 @@
         return callback(new Error('all static mirrors failed'));
       }
       var url = STATIC_DATA_BASES[idx++] + '/' + filename;
+      var mirror = url.replace(/^https?:\/\//, '').split('/')[0];
+      var route = 'json/' + filename;
+      var tTry = Date.now();
       var done = false;
       var timer = setTimeout(function () {
         if (done) return;
         done = true;
+        logCall(route, mirror, new Error('sin respuesta'), Date.now() - tTry);
         tryNext();
       }, 6000);
       try {
@@ -2259,17 +2484,20 @@
           if (done) return;
           done = true;
           clearTimeout(timer);
+          logCall(route, mirror, null, Date.now() - tTry, '', data);
           callback(null, data);
-        }).catch(function () {
+        }).catch(function (fErr) {
           if (done) return;
           done = true;
           clearTimeout(timer);
+          logCall(route, mirror, fErr || new Error('falló'), Date.now() - tTry);
           tryNext();
         });
       } catch (e) {
         if (done) return;
         done = true;
         clearTimeout(timer);
+        logCall(route, mirror, e, Date.now() - tTry);
         tryNext();
       }
     }
@@ -2446,11 +2674,8 @@
     function runGetLiveData(retried) {
       ensureSession(function (err) {
         if (err) return callback(err);
-        enqueue(function (release) {
+        (function () {
           var livePayload = {
-            userToken: session.userToken,
-            userId: session.userId,
-            portalCode: PORTAL_CODE,
             columnId: colKey,
             dataVersion: '',
             pageSize: pSize,
@@ -2459,7 +2684,6 @@
           };
 
           function handleLiveResponse(lErr, lRes) {
-            release();
             if (lErr) {
               if (!retried && isSessionError(lErr)) {
                 clearSession();
@@ -2515,8 +2739,10 @@
             callback(null, channels, hasMore);
           }
 
-          postHttp('v6/getLiveData', livePayload, handleLiveResponse);
-        });
+          // Through call() like every other portal request: a direct session keeps its user and token in
+          // directSession, so the relay-only postHttp sent this one with both empty and the portal refused it
+          call('v6/getLiveData', livePayload, { deviceFields: false }, handleLiveResponse);
+        })();
       });
     }
 
@@ -2587,7 +2813,7 @@
 
   var liveResolveCache = {};
   // A category can hold more channels than one page (50): the rest used to be left out without a word
-  var LIVE_MAX_PAGES = 20;
+  var LIVE_MAX_PAGES = 40;
 
   /**
    * Every channel of a category: its pages one after another, up to LIVE_MAX_PAGES. callback(err, channels).
@@ -2643,6 +2869,14 @@
 
   // opts.fresh: the link just handed out stopped working (401/403, stream dropped): ask the portal again. Without it
   // the "new" link came from this cache and was the same dead one for up to two minutes
+  /** opts.isCancelled() turned true (the viewer left the channel or the tab): stop before the next request */
+  function cancelledError() {
+    var e = new Error('cancelled');
+    e.cancelled = true;
+    return e;
+  }
+
+  // opts.isCancelled: checked before each request, so a tune the viewer left stops asking the portal
   function resolveLive(channelCode, callback, opts) {
     var code = trim(channelCode);
     if (!code) return callback(new Error('channelCode required'));
@@ -2656,6 +2890,9 @@
       return setTimeout(function () { callback(null, cached.stream); }, 0);
     }
 
+    if (opts && typeof opts.isCancelled === 'function' && opts.isCancelled()) {
+      return setTimeout(function () { callback(cancelledError()); }, 0);
+    }
     ensureSession(function (err) {
       if (err) return callback(err);
 
@@ -2671,8 +2908,13 @@
         while (aIdx < attempts.length - 1 && routeMissing(attempts[aIdx].path)) aIdx++;
         if (aIdx >= attempts.length) return callback(lastErr || new Error('startPlayLive failed'));
         var att = attempts[aIdx++];
+        if (opts && typeof opts.isCancelled === 'function' && opts.isCancelled()) {
+          return callback(cancelledError());
+        }
         call(att.path, att.bean, function (sErr, sRes) {
           noteRouteFailure(att.path, sErr);
+          // Paused sessions or a cancelled tune: the next variants would get the same answer
+          if (sErr && (sErr.sessionBlocked || isSessionError(sErr))) return callback(sErr);
           if (sErr) return tryStartLive(sErr);
           var addrList = sRes && sRes.liveAddressList || [];
           var validAddrs = addrList.filter(function (a) { return a && a.playCode && a.license; });
@@ -2904,8 +3146,7 @@
   function detail(contentId, callback) {
     var cid = trim(contentId);
     if (!cid) return callback(new Error('Missing contentId'));
-    ensureSession(function (err) {
-      if (err) return callback(err);
+    {
       var local = findItemInLocalCatalogs(cid) || itemCache[cid];
       var initialType = (local && (local.kind === 'película' || local.type === 'movie' || local.programType === 'movie')) ? '1' : '0';
 
@@ -2927,7 +3168,7 @@
         });
       }
 
-      requestItem(initialType, function (dErr, dRes) {
+      function onItem(dErr, dRes) {
         if (dErr) {
           if (local) {
             return callback(null, { item: local, episodes: [], seasons: [] });
@@ -2940,6 +3181,10 @@
           return callback(new Error('No item data returned'));
         }
         var item = itemFromAsset(asset, local ? local.category : '', null);
+        if (!item) {
+          if (local) return callback(null, { item: local, episodes: [], seasons: [] });
+          return callback(new Error('No item data returned'));
+        }
         if (local) {
           item.row = local.row;
           item.category = local.category;
@@ -3012,8 +3257,18 @@
           }
         }
         callback(null, { item: item, episodes: episodes, seasons: seasons });
+      }
+
+      // The Pi publishes the details of the catalog's titles (tools/pi/generate-details.mjs): when one is there,
+      // no session and no portal call
+      fetchStaticDetail(cid, function (staticRes) {
+        if (staticRes) return onItem(null, staticRes);
+        ensureSession(function (err) {
+          if (err) return callback(err);
+          requestItem(initialType, onItem);
+        });
       });
-    });
+    }
   }
 
   /* Size of a ranked row from its name ("Películas TOP15 clasificadas" → 15), 0 for any other row */
@@ -3129,20 +3384,31 @@
     }
     root = ROOT_CODES[root] ? root : 'movies';
     pageNum = Math.max(1, parseInt(pageNum, 10) || 1);
+    // Where this section came from (memory, this session's cache, the catalog JSON, the relay or the bundled backup),
+    // as res.via: catalogService logs every section of the home screen in one line
+    var homeVia = '';
+    var answer = callback;
+    callback = function (err, res) {
+      if (res) res.via = homeVia || (res.fromStatic ? 'respaldo' : 'relay');
+      answer(err, res);
+    };
     var cacheKey = root + ':' + pageNum;
     if (treeCache[cacheKey] && Date.now() - treeCache[cacheKey].at < TREE_TTL) {
+      homeVia = 'memoria';
       return callback(null, { root: root, pageNum: pageNum, items: treeCache[cacheKey].items, cached: true });
     }
     var ssHit = readHomeSessionCache(cacheKey);
     if (ssHit) {
       treeCache[cacheKey] = { at: ssHit.at, items: ssHit.items };
       for (var ssi = 0; ssi < ssHit.items.length; ssi++) remember(ssHit.items[ssi]);
+      homeVia = 'caché de sesión';
       return callback(null, { root: root, pageNum: pageNum, items: ssHit.items, cached: true });
     }
 
     if (pageNum === 1 && !opts.forceRelay && !window.__XUPER_SKIP_STATIC_CATALOG__ && typeof fetch === 'function') {
       return ensurePortalCatalogJson(function (snapErr, snap) {
         if (!snapErr && snap && snap.itemsByRoot && Array.isArray(snap.itemsByRoot[root]) && snap.itemsByRoot[root].length) {
+          homeVia = 'json';
           return callback(null, { root: root, pageNum: pageNum, items: snap.itemsByRoot[root], cached: true, fromStatic: true });
         }
         fetchHomeFromRelay();
@@ -3378,6 +3644,28 @@
     var key = columnId + ':' + pageNum + ':' + pageSize;
     var hit = shelfCache[key];
     if (hit && Date.now() < hit.until) return callback(null, { items: hit.items, total: hit.total, cached: true });
+    // The first two See-all pages of the home rows come from the Pi (tools/pi/generate-columns.mjs): no session, no
+    // portal call. Other pages, sizes and the restricted columns ask the portal as before.
+    if (!isRestrictedCol && pageSize === 42 && pageNum <= 2) {
+      return fetchSiteJson('column/' + encodeURIComponent(String(columnId)) + '-' + pageNum + '.json', 'json/column', function (d) {
+        return Array.isArray(d.items);
+      }, function (data) {
+        if (!data) return fromPortal();
+        var staticItems = [];
+        for (var si = 0; si < data.items.length; si++) {
+          if (data.items[si] && data.items[si].id) {
+            remember(data.items[si]);
+            staticItems.push(data.items[si]);
+          }
+        }
+        var staticTotal = parseInt(data.total, 10) || staticItems.length;
+        if (staticItems.length) shelfCache[key] = { until: Date.now() + 600000, items: staticItems, total: staticTotal };
+        callback(null, { items: staticItems, total: staticTotal, cached: false });
+      });
+    }
+    fromPortal();
+
+    function fromPortal() {
     ensureSession(function (err) {
       if (err) return callback(err);
       var body = { columnId: columnId, columnType: '2', pageNum: pageNum, pageSize: pageSize, numDisplay: null, encryptVersion: 0 };
@@ -3415,6 +3703,7 @@
         callback(null, { items: items, total: total, cached: false });
       });
     });
+    }
   }
 
   // Full catalog of a root, page by page; filters: { tags, year, originalCountry, audio } (portal values: English names, audio key)
@@ -3655,14 +3944,22 @@
   function getTabRecommends(root, callback) {
     var codes = TAB_RECOMMEND_CODES[root];
     if (!codes || !codes.length) return callback(null, []);
+    // Where the list came from, as a third argument: catalogService logs every tab in one line
+    var recVia = 'relay';
+    var answer = callback;
+    callback = function (err, items) {
+      answer(err, items, recVia);
+    };
     var cacheKey = root;
     if (recommendCache[cacheKey] && Date.now() - recommendCache[cacheKey].at < RECOMMEND_TTL) {
+      recVia = 'memoria';
       return callback(null, recommendCache[cacheKey].items);
     }
     if (!window.__XUPER_SKIP_STATIC_CATALOG__ && typeof fetch === 'function') {
       return ensurePortalCatalogJson(function (snapErr, snap) {
         if (!snapErr && snap && snap.recommends && Array.isArray(snap.recommends[root]) && snap.recommends[root].length) {
           recommendCache[cacheKey] = { at: Date.now(), items: snap.recommends[root] };
+          recVia = 'json';
           return callback(null, snap.recommends[root]);
         }
         fetchTabRecommendsFromRelay();
@@ -3854,6 +4151,11 @@
     // Nothing running or waiting: background work (title details for a focused card) starts only then
     isIdle: function () { return !session.busy && !queue.length && !lowQueue.length; },
     getRelayMode: function () { return relayMode; },
+    /** How the session in use reaches the portal: 'direct', 'relay', or 'none' before a session exists */
+    getConnection: function () {
+      if (!session.ready) return 'none';
+      return session.directOnly && !session.forceRelay ? 'direct' : 'relay';
+    },
     setRelayMode: function (m) {
       relayMode = (m === 'off' || m === 'play-only' || m === 'full') ? m : 'full';
       return relayMode;
@@ -3861,5 +4163,5 @@
     call: call
   };
 
-  console.log('[MagisClient] Initialized successfully.');
+  console.log('[MagisClient:init] Ready.');
 })(window);

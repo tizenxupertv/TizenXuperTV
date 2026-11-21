@@ -8,13 +8,27 @@
  *   node tools/generate-static-catalog.mjs --out build/static-data
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = path.resolve(__dirname, '..');
+
+// Epic+ device id: the server cuts the connection for the fixed 'a1b2c3d4' this script used to send (seen on
+// 2026-11-21), while a fresh id is answered. Like the app, which makes one per TV, it is made once and kept.
+function epicAparato() {
+  const file = path.join(os.homedir(), '.tizenxuper-epic-aparato');
+  try {
+    const id = fs.readFileSync(file, 'utf8').trim();
+    if (/^[a-f0-9]{16}$/.test(id)) return id;
+  } catch {}
+  const id = crypto.randomBytes(8).toString('hex');
+  fs.writeFileSync(file, id);
+  return id;
+}
+const ROOT_DIR = fs.existsSync(path.join(__dirname, 'public')) ? __dirname : path.resolve(__dirname, '..');
 const OUT_ARG_IDX = process.argv.indexOf('--out');
 const OUT_DIR = OUT_ARG_IDX !== -1 && process.argv[OUT_ARG_IDX + 1]
   ? path.resolve(process.cwd(), process.argv[OUT_ARG_IDX + 1])
@@ -68,14 +82,17 @@ function createDirectMagisClient() {
       removeItem(k) { delete this._d[k]; }
     },
     location: { hostname: 'tizen.tv', protocol: 'file:' },
-    navigator: { userAgent: 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 9.0) AppleWebKit/537.36' }
+    navigator: { userAgent: 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 9.0) AppleWebKit/537.36' },
+    // Run as a TV so the client opens a direct session: from a residential IP (the Pi) the portal gives the full
+    // channel list there, while sessions and requests through the relay get a shorter one. From a datacenter the
+    // direct start is refused and the client falls back to the relay and its pool as before.
+    tizen: {}
   });
   ctx.window = ctx;
   ctx.globalThis = ctx;
   ctx.self = ctx;
   ctx.__XUPER_SKIP_STATIC_CATALOG__ = true;
 
-  let hostIdx = 0;
   function XMLHttpRequest() {
     this._headers = {};
   }
@@ -91,7 +108,7 @@ function createDirectMagisClient() {
     let u = this._u;
     const h = Object.assign({}, this._headers);
     if (u.includes('/api/portalCore/')) {
-      const targetHost = h['X-Target-Host'] || PORTAL_HOSTS[hostIdx++ % PORTAL_HOSTS.length];
+      const targetHost = h['X-Target-Host'] || PORTAL_HOSTS[0];
       u = u.replace('https://tizenxuper-relay.tizenxupertv.workers.dev', 'https://' + targetHost);
       if (h['X-Cookie']) {
         h['Cookie'] = h['X-Cookie'];
@@ -166,6 +183,13 @@ async function main() {
     }
   }
 
+  // Never publish a live catalog that lost its channels: every TV reads this file, an empty one empties them all
+  const totalChannels = Object.values(channelsByCategory).reduce((n, list) => n + list.length, 0);
+  const minChannels = Number(process.env.MIN_LIVE_CHANNELS || 200);
+  if (totalChannels < minChannels) {
+    throw new Error(`only ${totalChannels} live channels (minimum ${minChannels}); not writing live-channels.json`);
+  }
+
   const liveOut = {
     generatedAt: new Date().toISOString(),
     categories,
@@ -226,7 +250,7 @@ async function main() {
       headers: {
         'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)',
         'X-Llave': '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq',
-        'X-Aparato': 'a1b2c3d4',
+        'X-Aparato': epicAparato(),
         'X-Pulsera': '1',
         'Accept': 'application/json'
       }
@@ -331,7 +355,7 @@ async function main() {
       headers: {
         'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)',
         'X-Llave': '7hA4oMy1vmGSFJjbrAWx-xneFQEY_PAq',
-        'X-Aparato': 'a1b2c3d4',
+        'X-Aparato': epicAparato(),
         'X-Pulsera': '1',
         'Accept': 'application/json'
       }
