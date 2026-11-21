@@ -109,7 +109,7 @@ function createDirectMagisClient() {
     let u = this._u;
     const h = Object.assign({}, this._headers);
     if (u.includes('/api/portalCore/')) {
-      const targetHost = h['X-Target-Host'] || PORTAL_HOSTS[hostIdx++ % PORTAL_HOSTS.length];
+      const targetHost = h['X-Target-Host'] || PORTAL_HOSTS[0];
       u = u.replace('https://tizenxuper-relay.tizenxupertv.workers.dev', 'https://' + targetHost);
       if (h['X-Cookie']) {
         h['Cookie'] = h['X-Cookie'];
