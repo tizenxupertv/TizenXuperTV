@@ -988,6 +988,8 @@
   var directSession = { ready: false, sn: '', snToken: '', userId: '', userToken: '', portalCode: 'masnew' };
   var directSessionStarting = false;
   var directSessionWaiters = [];
+  // Set once this run made a new device identity because the portal refused even a session it had just given
+  var identityRenewed = false;
 
   (function loadDirectSession() {
     try {
@@ -1285,6 +1287,17 @@
         if (isSessionError(err) && !opts._directRetried) {
           clearDirectSession();
           opts._directRetried = true;
+          return callDirect43404(endpoint, payload, opts, callback);
+        }
+        // Refused again with a session made a moment ago: the portal no longer takes this device identity, and
+        // every new session would give the same refused user (seen on 2026-11-21: aaa100028 on everything, for good,
+        // on one TV). A new identity is a new portal user. Once per run, so a portal refusing everyone does not
+        // make this TV change identity in a loop.
+        if (isSessionError(err) && !identityRenewed) {
+          identityRenewed = true;
+          console.warn('[MagisClient:session] direct session refused right after it was made: new device identity');
+          deviceIdentity(true);
+          clearDirectSession();
           return callDirect43404(endpoint, payload, opts, callback);
         }
         callback(err, res);
