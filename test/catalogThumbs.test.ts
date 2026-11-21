@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { thumbOf } from '../src/services/catalogService.ts';
+import { thumbOf, isLightCopy } from '../src/services/catalogService.ts';
+
+test('the hero recognises the light copies the Pi publishes', () => {
+  assert.equal(isLightCopy('https://tizenxuper-img.pages.dev/0123456789abcdef0123.jpg'), true);
+  assert.equal(isLightCopy('https://joqotx.p27i1en9.com/public/images/x.jpg'), false, 'a portal original');
+  assert.equal(isLightCopy(undefined), false);
+});
 
 test('a tiny inline JPEG preview from the catalog is kept', () => {
   const thumb = 'data:image/jpeg;base64,' + 'A'.repeat(400);

@@ -4,6 +4,7 @@ import { historyService } from '../../services/historyService';
 import { formatDuration, getResumeTarget } from '../../lib/vodResume';
 import { formatQualityTag, firstQuality } from '../../lib/subtitles';
 import { useTitleMeta } from '../../lib/titleMetaCache';
+import { isLightCopy } from '../../services/catalogService';
 
 interface HeroShowcaseProps {
   item: VodItem;
@@ -44,7 +45,9 @@ const HeroShowcaseComponent: React.FC<HeroShowcaseProps> = ({
 
   if (!item) return null;
 
-  const rawBg = cachedMeta?.backdrop || item.backdrop || item.landscape || item.poster || 'assets/placeholder_landscape.png';
+  // The catalog's light copy (~150 KB) wins over the title details' backdrop, the portal original of 2-4 MB
+  const lightBackdrop = isLightCopy(item.backdrop) ? item.backdrop : '';
+  const rawBg = lightBackdrop || cachedMeta?.backdrop || item.backdrop || item.landscape || item.poster || 'assets/placeholder_landscape.png';
   const isLocal = typeof window !== 'undefined' && (
     import.meta.env.DEV ||
     window.location.hostname === 'localhost' ||
