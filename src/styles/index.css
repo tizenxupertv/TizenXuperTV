@@ -7432,6 +7432,15 @@ html.no-flexgap .browse-cards-grid > .browse-grid-spacer {
   border: 1.5px solid rgba(255, 255, 255, 0.07);
 }
 
+/* A list row while its list loads (live channels, catch-up programs): the height comes inline from the real row */
+.row-skeleton {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(255, 255, 255, 0.07);
+}
+
 /* Buscar's card inside the filter grid: fixed height, the poster takes what the info leaves */
 .filter-grid .search-vod-card { height: 384px; box-sizing: border-box; }
 .filter-grid .svc-poster-wrap { aspect-ratio: auto; flex: 1; min-height: 0; }

@@ -279,10 +279,10 @@ export const CatchupModal: React.FC<CatchupModalProps> = ({
         {/* Program List */}
         <div className="catchup-list-container" ref={listRef}>
           {loading ? (
-            <div className="catchup-empty-wrap">
-              <span className="catchup-spinner" />
-              <span>Cargando lista de repeticiones del canal…</span>
-            </div>
+            // Rows of the program cards' size, as in the channel list
+            Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="row-skeleton skeleton-shimmer" style={{ height: 70, borderRadius: 14 }} aria-label={i === 0 ? 'Cargando repeticiones' : undefined} />
+            ))
           ) : errorMessage ? (
             <div className="catchup-empty-wrap is-error">
               <span>{errorMessage}</span>
