@@ -30,43 +30,47 @@ if crontab -l 2>/dev/null | grep -F "$SCRIPT_DIR/update-catalog.sh" | grep -qvxF
 fi
 add_cron "$CATALOG_CRON"
 
-# 3. Arrancar dashboard y servicios al encender la Pi (cron no tiene ~/.local/bin en PATH)
-NODE_BIN="$(command -v node || echo "$HOME/.local/bin/node")"
-for svc in dashboard health-monitor tg-listener session-watcher; do
-  add_cron "@reboot cd $SCRIPT_DIR && $NODE_BIN $svc.mjs >> $SCRIPT_DIR/$svc.log 2>&1"
-done
+# 3. Recortar los logs cada noche para no llenar la tarjeta SD
+add_cron "15 3 * * * /bin/bash $SCRIPT_DIR/rotate-logs.sh"
+
+# 4. Los servicios permanentes ya no arrancan con @reboot: los lleva systemd (ver abajo)
+if crontab -l 2>/dev/null | grep -qF "@reboot cd $SCRIPT_DIR &&"; then
+  crontab -l | grep -vF "@reboot cd $SCRIPT_DIR &&" | crontab -
+  echo "   Quitadas las líneas @reboot antiguas"
+fi
 
 echo ""
 echo "==> Crons instalados:"
 crontab -l | grep -v "^#" | grep -v "^$"
 
 echo ""
-echo "==> Iniciando servicios en background (health monitor + telegram listener + session watcher)..."
+echo "==> Servicio systemd (panel + monitor de salud + bot de Telegram en un solo proceso)..."
 
-# Matar instancias anteriores si las hay
-pkill -f "health-monitor.mjs" 2>/dev/null || true
-pkill -f "tg-listener.mjs" 2>/dev/null || true
-pkill -f "session-watcher.mjs" 2>/dev/null || true
-pkill -f "dashboard.mjs" 2>/dev/null || true
+# Parar las instancias sueltas de la instalación anterior
+pkill -f "node .*dashboard.mjs" 2>/dev/null || true
+pkill -f "node .*health-monitor.mjs" 2>/dev/null || true
+pkill -f "node .*tg-listener.mjs" 2>/dev/null || true
 sleep 1
 
-nohup node "$SCRIPT_DIR/dashboard.mjs" >> "$SCRIPT_DIR/dashboard.log" 2>&1 &
-echo "   dashboard PID: $! (http://$(hostname -I | awk '{print $1}'):8080)"
+mkdir -p "$HOME/.config/systemd/user"
+cp "$SCRIPT_DIR/tizenxuper-pi.service" "$HOME/.config/systemd/user/"
+systemctl --user daemon-reload
+systemctl --user enable tizenxuper-pi.service
+systemctl --user restart tizenxuper-pi.service
+systemctl --user --no-pager status tizenxuper-pi.service | head -5
 
-# Iniciar los 3 servicios en background con nohup
-nohup node "$SCRIPT_DIR/health-monitor.mjs" >> "$SCRIPT_DIR/health-monitor.log" 2>&1 &
-echo "   health-monitor PID: $!"
-
-nohup node "$SCRIPT_DIR/tg-listener.mjs" >> "$SCRIPT_DIR/tg-listener.log" 2>&1 &
-echo "   tg-listener PID: $!"
-
-nohup node "$SCRIPT_DIR/session-watcher.mjs" >> "$SCRIPT_DIR/session-watcher.log" 2>&1 &
-echo "   session-watcher PID: $!"
+if [ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" != "yes" ]; then
+  echo ""
+  echo "   ⚠️  Para que arranque al encender la Pi sin iniciar sesión, ejecuta una vez:"
+  echo "       sudo loginctl enable-linger $USER"
+fi
 
 echo ""
-echo "==> ¡Todo listo! Logs disponibles en:"
+echo "==> ¡Todo listo! Panel: http://$(hostname -I | awk '{print $1}'):8080"
 echo "   relay-refresh.log    — Renovación del pool cada 6h"
-echo "   catalog.log          — Actualización del catálogo cada 1h"
+echo "   catalog.log          — Actualización del catálogo cada hora (:30)"
 echo "   health-monitor.log   — Alertas de salud cada 15 min"
 echo "   tg-listener.log      — Comandos de Telegram (/refresh, /status, /ping)"
-echo "   session-watcher.log  — Medición de vida útil de sesiones"
+echo "   pi-services.log      — Errores del proceso de servicios"
+echo "   session-watcher.mjs  — Experimento opcional, no se arranca solo:"
+echo "                          nohup node session-watcher.mjs >> session-watcher.log 2>&1 &"
