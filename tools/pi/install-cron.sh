@@ -31,8 +31,14 @@ if crontab -l 2>/dev/null | grep -F "$SCRIPT_DIR/update-catalog.sh" | grep -qvxF
 fi
 add_cron "$CATALOG_CRON"
 
-# 3. Fichas de los títulos del catálogo, una vez al día (las publica la siguiente actualización del catálogo)
-add_cron "10 4 * * * cd $SCRIPT_DIR && PATH=$HOME/.local/bin:/usr/bin:/bin flock -w 3600 /tmp/tizenxuper-catalog.lock node generate-details.mjs >> $SCRIPT_DIR/details.log 2>&1"
+# 3. Fichas de los títulos del catálogo, una vez al día (las publica la siguiente actualización del catálogo).
+#    La salida pasa por log-filter.mjs: hora en cada línea y solo las llamadas al portal que fallan
+DETAILS_CRON="10 4 * * * cd $SCRIPT_DIR && PATH=$HOME/.local/bin:/usr/bin:/bin flock -w 3600 /tmp/tizenxuper-catalog.lock bash -c 'node generate-details.mjs 2>&1 | node log-filter.mjs' >> $SCRIPT_DIR/details.log 2>&1"
+if crontab -l 2>/dev/null | grep -F "generate-details.mjs" | grep -qvxF "$DETAILS_CRON"; then
+  crontab -l | grep -vF "generate-details.mjs" | crontab -
+  echo "   Quitado el horario anterior de las fichas"
+fi
+add_cron "$DETAILS_CRON"
 
 # 4. Recortar los logs cada noche para no llenar la tarjeta SD
 add_cron "15 3 * * * /bin/bash $SCRIPT_DIR/rotate-logs.sh"

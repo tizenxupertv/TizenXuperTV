@@ -70,6 +70,10 @@ function lightenImages(node, published) {
 }
 
 async function main() {
+  const t0 = Date.now();
+  // A rule between runs, so each one stands apart in the log
+  console.log('────────────────────────────────────────────────────────────');
+  log('▶ start');
   const catalogPath = process.argv[2] || path.join(DIR, 'site-data', 'portal-catalog.json');
   const ids = catalogIds(JSON.parse(fs.readFileSync(catalogPath, 'utf8')));
   fs.mkdirSync(OUT, { recursive: true });
@@ -102,7 +106,8 @@ async function main() {
     const p = path.join(OUT, f);
     if (f.endsWith('.part') || (!keep.has(id) && now - fs.statSync(p).mtimeMs > KEEP_UNUSED_MS)) { fs.rmSync(p, { force: true }); removed++; }
   }
-  log(`${written} details written, ${failed} failed, ${removed} old ones removed, ${fs.readdirSync(OUT).length} in total`);
+  const secs = Math.round((Date.now() - t0) / 1000);
+  log(`■ ${written} details written in ${Math.floor(secs / 60)} min ${secs % 60} s, ${failed} failed, ${removed} old ones removed, ${fs.readdirSync(OUT).length} in total`);
   process.exit(0);
 }
 
