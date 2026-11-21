@@ -35,6 +35,9 @@ export interface VodItem {
   poster?: string;
   landscape?: string;
   backdrop?: string;
+  /** Tiny blurred previews (data: URLs, a few hundred bytes) shown while the real artwork downloads */
+  posterThumb?: string;
+  backdropThumb?: string;
   /** Candidate artwork URLs in priority order for automatic fallback on load error */
   posterAlternates?: string[];
   streamUrl?: string;

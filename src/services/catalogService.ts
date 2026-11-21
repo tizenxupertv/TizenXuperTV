@@ -30,6 +30,16 @@ export interface PortalRow {
   items: VodItem[];
 }
 
+/** A light copy of portal artwork published by the Pi (tools/pi/optimize-images.mjs) */
+export function isLightCopy(url: unknown): url is string {
+  return typeof url === 'string' && url.startsWith('https://tizenxuper-img.pages.dev/');
+}
+
+/** Only inline JPEG previews from the static catalog; anything else is dropped */
+export function thumbOf(value: unknown): string | undefined {
+  return typeof value === 'string' && value.startsWith('data:image/jpeg;base64,') && value.length < 2000 ? value : undefined;
+}
+
 function normalizeItem(raw: any, index: number): VodItem {
   if (!raw) return { id: `item-${index}`, title: 'Sin título' };
   // Collection tile: no score, year or synopsis defaults (it is a column, not a title)
@@ -122,6 +132,8 @@ function normalizeItem(raw: any, index: number): VodItem {
     synopsis,
     poster,
     posterAlternates,
+    posterThumb: thumbOf(raw.posterThumb),
+    backdropThumb: thumbOf(raw.backdropThumb),
     landscape,
     backdrop,
     isSeries,

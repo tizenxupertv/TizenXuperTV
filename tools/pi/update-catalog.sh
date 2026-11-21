@@ -48,6 +48,9 @@ rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 node "$SCRIPT_DIR/generate-static-catalog.mjs" --out "$OUT_DIR" 2>&1
 
+# Light copies of the 2-4 MB backdrops (never fails the run: on error the original images stay)
+node "$SCRIPT_DIR/optimize-images.mjs" "$OUT_DIR/portal-catalog.json" 2>&1
+
 # Push a catalog-data en GitHub
 echo "[$(now)] Push a catalog-data..."
 rm -rf /tmp/pub-repo
@@ -68,15 +71,21 @@ same_content() {
 }
 if same_content live-channels.json "$OUT_DIR/live-channels.json" && same_content portal-catalog.json "$OUT_DIR/portal-catalog.json"; then
   echo "[$(now)] Sin cambios en el catálogo"
-  exit 0
+else
+  # One commit that replaces the branch, so the public repository does not grow by a catalog copy every hour
+  git checkout -q --orphan catalog-new
+  git rm -rfq . > /dev/null 2>&1 || true
+  cp "$OUT_DIR/live-channels.json" .
+  cp "$OUT_DIR/portal-catalog.json" .
+  git add live-channels.json portal-catalog.json
+  git commit -q -m "chore(data): auto-update catalog from Pi ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+  git push -q --force origin HEAD:catalog-data 2>&1
+  echo "[$(now)] DONE — catálogo actualizado"
+  # The same files for the Cloudflare Pages copy, which TVs read first (tizenxuper-tv.pages.dev/data redirects there)
+  mkdir -p "$SCRIPT_DIR/site-data"
+  cp "$OUT_DIR/live-channels.json" "$OUT_DIR/portal-catalog.json" "$SCRIPT_DIR/site-data/"
 fi
 
-# One commit that replaces the branch, so the public repository does not grow by a catalog copy every hour
-git checkout -q --orphan catalog-new
-git rm -rfq . > /dev/null 2>&1 || true
-cp "$OUT_DIR/live-channels.json" .
-cp "$OUT_DIR/portal-catalog.json" .
-git add live-channels.json portal-catalog.json
-git commit -q -m "chore(data): auto-update catalog from Pi ($(date -u +'%Y-%m-%d %H:%M UTC'))"
-git push -q --force origin HEAD:catalog-data 2>&1
-echo "[$(now)] DONE — catálogo actualizado"
+# Images and catalog to Cloudflare Pages: at most one deployment every 90 min, never fails the run
+cd "$SCRIPT_DIR"
+node "$SCRIPT_DIR/pages-site.mjs" 2>&1
