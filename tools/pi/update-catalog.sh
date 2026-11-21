@@ -48,6 +48,9 @@ rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 node "$SCRIPT_DIR/generate-static-catalog.mjs" --out "$OUT_DIR" 2>&1
 
+# Light copies of the 2-4 MB backdrops (never fails the run: on error the original images stay)
+node "$SCRIPT_DIR/optimize-images.mjs" "$OUT_DIR/portal-catalog.json" 2>&1
+
 # Push a catalog-data en GitHub
 echo "[$(now)] Push a catalog-data..."
 rm -rf /tmp/pub-repo
