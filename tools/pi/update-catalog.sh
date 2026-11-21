@@ -17,7 +17,12 @@ export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/.env.pi"
 OUT_DIR="/tmp/tizenxuper-catalog"
-now() { date '+%Y-%m-%d %H:%M:%S'; }
+now() {
+  # Same format as log-time.mjs: "Nov 21, 2026 12:58:27 am", the Pi's local time
+  local m=(Ene Feb Mar Abr May Jun Jul Ago Sep Oct Nov Dic) mo d y t p
+  read -r mo d y t p <<< "$(LC_ALL=C date '+%-m %-d %Y %-I:%M:%S %p')"
+  echo "${m[mo-1]} $d, $y $t ${p,,}"
+}
 
 # One run at a time: overlapping runs on the single-core B+ make the portal time out
 exec 9>/tmp/tizenxuper-catalog.lock

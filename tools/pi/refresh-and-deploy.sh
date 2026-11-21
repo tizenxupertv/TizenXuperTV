@@ -10,7 +10,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/.env.pi"
 POOL_FILE="$SCRIPT_DIR/relay-worker/src/sessionPool.js"
 SESSION_COUNT="${SESSION_COUNT:-120}"
-now() { date '+%Y-%m-%d %H:%M:%S'; }
+now() {
+  # Same format as log-time.mjs: "Nov 21, 2026 12:58:27 am", the Pi's local time
+  local m=(Ene Feb Mar Abr May Jun Jul Ago Sep Oct Nov Dic) mo d y t p
+  read -r mo d y t p <<< "$(LC_ALL=C date '+%-m %-d %Y %-I:%M:%S %p')"
+  echo "${m[mo-1]} $d, $y $t ${p,,}"
+}
 
 # Asegurar Node en PATH
 export PATH="$HOME/.local/bin:$PATH"

@@ -10,6 +10,12 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MAX_BYTES="${MAX_BYTES:-1048576}"
 KEEP_LINES="${KEEP_LINES:-3000}"
+now() {
+  # Same format as log-time.mjs: "Nov 21, 2026 12:58:27 am", the Pi's local time
+  local m=(Ene Feb Mar Abr May Jun Jul Ago Sep Oct Nov Dic) mo d y t p
+  read -r mo d y t p <<< "$(LC_ALL=C date '+%-m %-d %Y %-I:%M:%S %p')"
+  echo "${m[mo-1]} $d, $y $t ${p,,}"
+}
 
 for log in "$SCRIPT_DIR"/*.log; do
   [ -f "$log" ] || continue
@@ -18,6 +24,6 @@ for log in "$SCRIPT_DIR"/*.log; do
     tail -n "$KEEP_LINES" "$log" > "$log.tmp"
     cat "$log.tmp" > "$log"
     rm -f "$log.tmp"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] recortado $(basename "$log"): $size bytes -> $(stat -c %s "$log")"
+    echo "[$(now)] recortado $(basename "$log"): $size bytes -> $(stat -c %s "$log")"
   fi
 done
