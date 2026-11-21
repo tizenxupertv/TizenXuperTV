@@ -8,6 +8,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { logTime } from './log-time.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENV_FILE  = path.join(__dirname, '.env.pi');
@@ -34,7 +35,7 @@ function loadEnv() {
 }
 
 function log(msg) {
-  const line = '[' + new Date().toISOString() + '] ' + msg;
+  const line = '[' + logTime() + '] ' + msg;
   console.log(line);
   fs.appendFileSync(LOG_FILE, line + '\n');
 }

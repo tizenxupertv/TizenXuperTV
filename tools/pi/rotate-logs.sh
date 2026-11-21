@@ -18,6 +18,6 @@ for log in "$SCRIPT_DIR"/*.log; do
     tail -n "$KEEP_LINES" "$log" > "$log.tmp"
     cat "$log.tmp" > "$log"
     rm -f "$log.tmp"
-    echo "[$(date -u +%FT%TZ)] recortado $(basename "$log"): $size bytes -> $(stat -c %s "$log")"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] recortado $(basename "$log"): $size bytes -> $(stat -c %s "$log")"
   fi
 done

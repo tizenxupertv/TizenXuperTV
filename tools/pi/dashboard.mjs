@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { logTime } from './log-time.mjs';
 
 const PORT = Number(process.env.DASHBOARD_PORT || 8080);
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -151,11 +152,11 @@ function nextRun(job, now = new Date()) {
 function runJob(job) {
   if (running.has(job.id)) return;
   fs.open(path.join(DIR, job.log), 'a').then((fh) => {
-    fh.write(`\n[${new Date().toISOString()}] ▶ Ejecutado manualmente desde el dashboard\n`);
+    fh.write(`\n[${logTime()}] ▶ Ejecutado manualmente desde el dashboard\n`);
     const child = spawn('/bin/bash', [path.join(DIR, job.script)], { cwd: DIR, stdio: ['ignore', fh.fd, fh.fd] });
     running.set(job.id, child.pid);
     child.on('exit', (code) => {
-      fh.write(`[${new Date().toISOString()}] ■ Terminó con código ${code}\n`).finally(() => fh.close());
+      fh.write(`[${logTime()}] ■ Terminó con código ${code}\n`).finally(() => fh.close());
       running.delete(job.id);
     });
   });

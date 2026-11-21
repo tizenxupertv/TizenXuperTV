@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { logTime } from './log-time.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REFRESH_LOG = path.join(__dirname, 'relay-refresh.log');
@@ -37,7 +38,7 @@ function loadEnv() {
 }
 
 function log(msg) {
-  const line = `[${new Date().toISOString()}] ${msg}`;
+  const line = `[${logTime()}] ${msg}`;
   console.log(line);
   fs.appendFileSync(LOG_FILE, line + '\n');
 }
@@ -69,7 +70,7 @@ async function handleRefresh(token, chatId) {
     const script = path.join(__dirname, 'refresh-and-deploy.sh');
     let out = '';
     const fd = fs.openSync(REFRESH_LOG, 'a');
-    fs.writeSync(fd, `\n[${new Date().toISOString()}] ▶ Ejecutado desde Telegram (/refresh)\n`);
+    fs.writeSync(fd, `\n[${logTime()}] ▶ Ejecutado desde Telegram (/refresh)\n`);
     const code = await new Promise((resolve, reject) => {
       const child = spawn('bash', [script], { cwd: __dirname });
       const onData = (b) => {

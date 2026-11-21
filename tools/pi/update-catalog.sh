@@ -17,7 +17,7 @@ export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/.env.pi"
 OUT_DIR="/tmp/tizenxuper-catalog"
-now() { date -u +%FT%TZ; }
+now() { date '+%Y-%m-%d %H:%M:%S'; }
 
 # One run at a time: overlapping runs on the single-core B+ make the portal time out
 exec 9>/tmp/tizenxuper-catalog.lock

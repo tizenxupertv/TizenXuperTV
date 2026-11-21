@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/.env.pi"
 POOL_FILE="$SCRIPT_DIR/relay-worker/src/sessionPool.js"
 SESSION_COUNT="${SESSION_COUNT:-120}"
-now() { date -u +%FT%TZ; }
+now() { date '+%Y-%m-%d %H:%M:%S'; }
 
 # Asegurar Node en PATH
 export PATH="$HOME/.local/bin:$PATH"
