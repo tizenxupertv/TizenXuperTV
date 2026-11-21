@@ -6,8 +6,8 @@
 # Genera portal-catalog.json y live-channels.json desde la Pi
 # (IP residencial, no bloqueada) y hace push a la rama catalog-data.
 #
-# Cron (minuto 30, cuando la renovación del pool de las :00 ya terminó; la salida va al log desde el cron):
-# 30 * * * * /bin/bash ~/tizenxuper/update-catalog.sh >> ~/tizenxuper/catalog.log 2>&1
+# Cron (cada 3 horas en el minuto 30, cuando la renovación del pool de las :00 ya terminó; la salida va al log):
+# 30 */3 * * * /bin/bash ~/tizenxuper/update-catalog.sh >> ~/tizenxuper/catalog.log 2>&1
 # =============================================================================
 set -eo pipefail
 
@@ -94,7 +94,7 @@ else
   cp "$OUT_DIR/live-channels.json" "$OUT_DIR/portal-catalog.json" "$SCRIPT_DIR/site-data/"
 fi
 
-# See-all pages for Pages: only the ones that changed are rewritten, so an unchanged hour triggers no deployment
+# See-all pages for Pages: only the ones that changed are rewritten, so an unchanged run triggers no deployment
 mkdir -p "$SCRIPT_DIR/site-data/column"
 for f in "$OUT_DIR"/column/*.json; do
   [ -f "$f" ] || continue
@@ -102,6 +102,6 @@ for f in "$OUT_DIR"/column/*.json; do
   cmp -s "$f" "$dest" || cp "$f" "$dest"
 done
 
-# Images and catalog to Cloudflare Pages: at most one deployment every 3 h (300 a month), never fails the run
+# Images and catalog to Cloudflare Pages, only when something changed (see pages-site.mjs); never fails the run
 cd "$SCRIPT_DIR"
 node "$SCRIPT_DIR/pages-site.mjs" 2>&1
