@@ -1256,7 +1256,9 @@
           snToken: snToken,
           userId: uId,
           userToken: uTok,
-          portalCode: trim(aRes && aRes.portalCode) || 'masnew'
+          portalCode: trim(aRes && aRes.portalCode) || 'masnew',
+          // Made in this run, not one saved by an earlier run (see callDirect43404)
+          fresh: true
         };
         saveDirectSession();
         console.log('[MagisClient:session] Direct session established');
@@ -1285,6 +1287,16 @@
       }
       postDirectHttp(endpoint, fullPayload, function (err, res) {
         if (isSessionError(err) && !opts._directRetried) {
+          clearDirectSession();
+          opts._directRetried = true;
+          return callDirect43404(endpoint, payload, opts, callback);
+        }
+        // A session saved by an earlier run can be answered portal200001 ("version not supported") on every call
+        // and every host, while a new session works (seen on 2026-11-21: a TV with no series, no live, until
+        // reinstalled). Not a session code, so it was never renewed. Renewed once; a new session answered
+        // portal200001 is the endpoint's own refusal and goes on to the relay as before.
+        if (err && err.portalCode === 'portal200001' && !ds.fresh && !opts._directRetried) {
+          console.warn('[MagisClient:session] saved direct session answered portal200001: new session');
           clearDirectSession();
           opts._directRetried = true;
           return callDirect43404(endpoint, payload, opts, callback);
