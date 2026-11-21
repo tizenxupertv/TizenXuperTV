@@ -4,8 +4,9 @@
  * latest static catalog (site-data/*.json, served at /data/ with CORS), in one deployment so the catalog there never
  * points at an image that is not up yet. tizenxuper-tv.pages.dev/data/ redirects its catalog files here.
  *
- * Free Pages allows 500 deployments a month: at most one every 3 hours, only when something changed, and no more than
- * MONTH_BUDGET automatic ones in a calendar month.
+ * Free Pages allows 500 deployments a month. A change a TV would show (titles, rows, details) goes out at most every
+ * 3 hours; images alone wait up to 12 hours to ride along with one; and no more than MONTH_BUDGET automatic
+ * deployments go out in a calendar month.
  * Uses the direct-upload API (the calls wrangler makes; wrangler does not run on ARMv6).
  *
  * Usage: node pages-site.mjs [--force]
@@ -31,6 +32,9 @@ export const PUBLIC_BASE = `https://${PROJECT}.pages.dev`;
 const MIN_GAP_MS = 3 * 3600 * 1000;
 // Hard stop for automatic deployments in a calendar month, leaving the rest of the 500 for --force by hand
 const MONTH_BUDGET = 300;
+// New light copies, images to drop and addresses moved to a copy change nothing a TV shows: they wait this long
+// for a content change to go out with, and only then go out on their own
+const IMAGE_ONLY_GAP_MS = 12 * 3600 * 1000;
 const HEADERS = '/data/*\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n';
 
 const log = (msg) => console.log(`[pages-site] ${msg}`);
@@ -60,6 +64,33 @@ function splitStale(keys, dataFiles) {
     (now - next[k] > KEEP_UNSEEN_MS ? stale : live).push(k);
   }
   return { live, stale, seen: next };
+}
+
+/**
+ * A hash per data file of what a TV would show from it: the image addresses (portal original or light copy), the
+ * inline previews and generatedAt are left out, so a file that only moved to light copies counts as unchanged.
+ */
+const SKIP_KEYS = new Set(['posterThumb', 'backdropThumb', 'generatedAt']);
+const IMAGE_URL = /^https?:\/\/.*(?:\/public\/images\/|\.(?:jpe?g|png|webp)(?:\?.*)?$)/i;
+
+export function contentSigs(dataFiles) {
+  const sigs = {};
+  const strip = (v) => {
+    if (Array.isArray(v)) return v.map(strip);
+    if (v && typeof v === 'object') {
+      const o = {};
+      for (const [k, x] of Object.entries(v)) if (!SKIP_KEYS.has(k)) o[k] = strip(x);
+      return o;
+    }
+    return typeof v === 'string' && IMAGE_URL.test(v) ? 'IMG' : v;
+  };
+  // One file at a time: the catalog alone is a few MB
+  for (const f of dataFiles) {
+    let text;
+    try { text = JSON.stringify(strip(JSON.parse(fs.readFileSync(path.join(DATA, f), 'utf8')))); } catch { text = String(Math.random()); }
+    sigs[f] = crypto.createHash('sha1').update(text).digest('hex').slice(0, 16);
+  }
+  return sigs;
 }
 
 function loadEnv() {
@@ -146,11 +177,17 @@ async function main() {
   const published = publishedKeys();
   const newImages = keys.filter((k) => !published.has(k)).length;
   const goneImages = stale.filter((k) => published.has(k)).length;
-  const newData = dataFiles.some((f) => fs.statSync(path.join(DATA, f)).mtimeMs > (site.lastDeployAt || 0));
+  const newerFiles = dataFiles.some((f) => fs.statSync(path.join(DATA, f)).mtimeMs > (site.lastDeployAt || 0));
+  // What a TV would see differently: titles, rows, details. Compared with what the last deployment carried.
+  const sigs = contentSigs(dataFiles);
+  const before = site.sigs || {};
+  const changedFiles = dataFiles.filter((f) => before[f] !== sigs[f]).length + Object.keys(before).filter((f) => !(f in sigs)).length;
 
-  if (!newImages && !newData && !goneImages) return log('nothing new to publish');
-  const wait = (site.lastDeployAt || 0) + MIN_GAP_MS - Date.now();
-  if (wait > 0 && !force) return log(`changes waiting (${newImages} images${goneImages ? `, ${goneImages} to remove` : ''}${newData ? ', catalog' : ''}); next deployment allowed in ${Math.ceil(wait / 60000)} min`);
+  if (!changedFiles && !newImages && !goneImages && !newerFiles) return log('nothing new to publish');
+  const what = `${changedFiles} data files changed, ${newImages} new images${goneImages ? `, ${goneImages} to remove` : ''}`;
+  const gap = changedFiles ? MIN_GAP_MS : IMAGE_ONLY_GAP_MS;
+  const wait = (site.lastDeployAt || 0) + gap - Date.now();
+  if (wait > 0 && !force) return log(`changes waiting (${what}); next deployment allowed in ${Math.ceil(wait / 60000)} min`);
   const month = new Date().toISOString().slice(0, 7);
   const monthCount = site.month === month ? site.monthCount || 0 : 0;
   if (monthCount >= MONTH_BUDGET && !force) return log(`monthly budget used (${monthCount}/${MONTH_BUDGET} deployments in ${month}); waiting for next month or --force`);
@@ -161,7 +198,7 @@ async function main() {
   ];
   const { uploaded, id } = await deploy(loadEnv(), entries);
   fs.writeFileSync(STATE, JSON.stringify(keys));
-  fs.writeFileSync(SITE_STATE, JSON.stringify({ lastDeployAt: Date.now(), deployment: id, month, monthCount: monthCount + 1 }));
+  fs.writeFileSync(SITE_STATE, JSON.stringify({ lastDeployAt: Date.now(), deployment: id, month, monthCount: monthCount + 1, sigs }));
   // Off the site now: the local copies go too (optimize-images makes a new one if the image comes back)
   for (const k of stale) fs.rmSync(path.join(CACHE, `${k}.jpg`), { force: true });
   log(`deployed ${keys.length} images and ${dataFiles.length} data files (${uploaded} uploaded, ${stale.length} old images removed), ${id}`);
