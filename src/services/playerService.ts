@@ -9,6 +9,7 @@ import { unwrapPngTs } from '../lib/pngWrappedTs';
 import { isStaleLinkStatus } from '../lib/liveLink';
 import { directHlsPlayer, directStreamMeta } from '../lib/directLink';
 import { EPIC_AUTH_HEADERS } from './epicSportsService';
+import { createStallWatch, stallAction } from '../lib/liveStallWatch';
 
 const CLOUD_STREAM_PROXY = 'https://tizenxuper-tv.pages.dev/stream-proxy';
 
@@ -264,6 +265,7 @@ class PlayerService {
     }
     if (this.status.code === code && this.status.state === state && this.status.reason === reason) return;
     this.status = reason ? { code, state, reason } : { code, state };
+    if (state === 'playing' && code === this.activeChannelCode) this.startStallWatch(code);
     this.statusListeners.forEach(cb => {
       try { cb(this.status); } catch (e) {}
     });
@@ -274,6 +276,83 @@ class PlayerService {
     if (this.avPoll) clearInterval(this.avPoll);
     this.watchdog = null;
     this.avPoll = null;
+    this.stopStallWatch();
+  }
+
+  // ---------------------------------------------------------------------------
+  // A live channel that freezes while playing (lib/liveStallWatch): live edge, then a silent retune
+  // ---------------------------------------------------------------------------
+  private stallWatch: { stop: () => void } | null = null;
+  /** Recoveries of this channel, kept across retunes so a channel that is really down is not retuned forever */
+  private stallCode = '';
+  private stallTimes: number[] = [];
+
+  private stopStallWatch() {
+    if (this.stallWatch) this.stallWatch.stop();
+    this.stallWatch = null;
+  }
+
+  private startStallWatch(code: string) {
+    this.stopStallWatch();
+    if (this.stallCode !== code) {
+      this.stallCode = code;
+      this.stallTimes = [];
+    }
+    this.stallWatch = createStallWatch({ read: () => this.livePosition(code), onStall: () => this.recoverStall(code) });
+  }
+
+  /** Position of the live channel playing now; null when it must not count (offline, seeking, a replay) */
+  private livePosition(code: string): { t: number; paused: boolean } | null {
+    if (this.activeChannelCode !== code || this.replayTarget !== null) return null;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return null;
+    const v = this.currentVideoEl;
+    if (window.__xuperPreviewHls && v) {
+      // A replay has a length and its own pause and seek: it is not a live stream
+      return isFinite(v.duration) ? null : { t: v.currentTime, paused: v.paused };
+    }
+    const av = window.webapis && window.webapis.avplay;
+    const bridge = window.XuperAVPlay;
+    if (av && bridge && (this.usingAvPreview || bridge.isActive)) {
+      if (bridge.durationSec > 0) return null;
+      try {
+        const state = av.getState();
+        if (state !== 'PLAYING' && state !== 'PAUSED') return null;
+        return { t: av.getCurrentTime() / 1000, paused: state === 'PAUSED' };
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  private recoverStall(code: string) {
+    if (this.activeChannelCode !== code) return;
+    const hls = window.__xuperPreviewHls;
+    const v = this.currentVideoEl;
+    const edge = hls && typeof hls.liveSyncPosition === 'number' && isFinite(hls.liveSyncPosition) ? hls.liveSyncPosition : null;
+    const at = Date.now();
+    const action = stallAction(this.stallTimes, at, edge !== null && !!v);
+    if (action === 'giveup') {
+      logPlayback({ kind: 'stall', player: this.playerName(), detail: 'imagen congelada: sin recuperar tras 3 intentos' });
+      this.stopStallWatch();
+      return;
+    }
+    this.stallTimes.push(at);
+    logPlayback({ kind: 'stall', player: this.playerName(), detail: action === 'edge' ? 'imagen congelada: salto al directo' : 'imagen congelada: recarga del canal' });
+    if (action === 'edge' && v && edge !== null) {
+      try {
+        hls.startLoad();
+        v.currentTime = edge;
+        const p = v.play();
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) {}
+      return;
+    }
+    const channel = this.lastChannel;
+    if (!channel || !v) return;
+    // The same retune as coming back to the channel: a fresh link and player
+    this.activeChannelCode = '';
+    this.playLivePreview(channel, v);
   }
 
   /** Waits for the first picture of a channel; marks it down after START_TIMEOUT_MS */
